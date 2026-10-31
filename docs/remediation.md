@@ -561,7 +561,7 @@ The statuses that refuse to act, each with a reason, nothing changed and the led
 | `not_regular_file` | `/etc/login.defs` is a symbolic link or not a regular file; nothing is written through a link |
 | `overridden`, `not_directory` (apply) | Only `CREATE_HOME`, whose check also reads `/etc/login.defs.d`: a drop-in there sets the name, or the directory is a symbolic link or not a directory. The other rules ignore the directory, as their checks and the pinned shadow-utils do |
 | `duplicate_setting` (apply) | The name is set on more than one line, in any case (`pam_umask` reads the first, shadow-utils the last) |
-| `unreadable_value` (apply) | The value is in a form that shadow-utils or `pam_umask` may read but the family cannot compare (quoted, signed, longer, another base, such as `"30"`, `+30`, `00077` or `0x3f`), so a written value could be looser; the reason names the line |
+| `unreadable_value` (apply) | The value is in a form that shadow-utils or `pam_umask` may read but the family cannot compare (quoted, signed, longer, another base, such as `"30"`, `+30`, `00077` or `0x3f`, or a number line with a carriage return, vertical tab or form feed), so a written value could be looser; the reason names the line |
 | `method_changed` | The ledger entry records another method, or none |
 | `modified_since_apply` (cleanup) | The setting is not exactly the line the collection wrote any more (changed or removed by hand), or the file's mode or ownership changed; an administrator's later change is never overwritten |
 | `invalid_record`, `target_absent` (cleanup) | The record is malformed, or `/etc/login.defs` is gone |
