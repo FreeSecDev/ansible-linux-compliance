@@ -33,10 +33,11 @@ attributes:
     description: Only reads metadata, in check mode as otherwise.
   diff_mode:
     support: none
+    description: Reports no change, so there is no difference to show.
 notes:
   - Entries are listed as C(ansible.builtin.find) lists them with C(recurse), C(hidden) and
-    C(file_type=any): every entry below each directory, hidden ones too, across mount points,
-    without descending into a symbolic link.
+    C(file_type=any), that is every entry below each directory, hidden ones too, across mount
+    points, without descending into a symbolic link.
 seealso:
   - module: ansible.builtin.find
 """

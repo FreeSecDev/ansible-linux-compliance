@@ -88,8 +88,9 @@ def test_check_mode_lists_the_same_entries(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     top = tree(tmp_path)
-    _, plain = run(capsys, {"paths": [str(top)]})
+    plain_code, plain = run(capsys, {"paths": [str(top)]})
     code, checked = run(capsys, {"paths": [str(top)], "_ansible_check_mode": True})
+    assert plain_code == 0
     assert code == 0
     assert checked["listing"] == plain["listing"]
 
@@ -103,7 +104,8 @@ def test_several_paths_are_listed_in_their_order(
     second.mkdir()
     (first / "one").write_text("", encoding="utf-8")
     (second / "two").write_text("", encoding="utf-8")
-    _, result = run(capsys, {"paths": [str(second), str(first)]})
+    code, result = run(capsys, {"paths": [str(second), str(first)]})
+    assert code == 0
     assert [row[0] for row in rows(result["listing"])] == [str(second / "two"), str(first / "one")]
 
 
