@@ -14,6 +14,7 @@
   vars:
     snapshot_volatile_directories:
       - "{{ molecule_evidence_directory }}"
+    snapshot_watched_directories: "{{ lifecycle_watched_directories }}"
   tasks:
     - name: Discover the pinned datastream and the profile of this platform
       ansible.builtin.include_role:
@@ -112,6 +113,14 @@
         label: "{{ lifecycle_broad_selfcheck_case.name }}"
       when: >-
         molecule_target.driver in lifecycle_broad_selfcheck_case.drivers | default(lifecycle_unrestricted_drivers)
+
+    - name: Check on the instance that a kept record catches a later change and a checksum a same-size rewrite
+      ansible.builtin.include_tasks:
+        file: tasks/lifecycle_record_selfcheck.yml
+      vars:
+        lifecycle_items: "{{ lifecycle_record_selfcheck_items }}"
+        lifecycle_rewritten: "{{ lifecycle_record_selfcheck_declared }}"
+      when: molecule_target.driver in lifecycle_unrestricted_drivers
 
     - name: Run the toggle lifecycle of every selected native topic
       ansible.builtin.include_tasks:

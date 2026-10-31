@@ -28,5 +28,6 @@
 | [0024](0024-native-login-defs.md) | Native login.defs remediation, one recorded line per setting | proposed |
 | [0025](0025-own-ansible-remediation-only.md) | Remediation is our own Ansible only; scanner remediation content is never used | proposed |
 | [0028](0028-native-kernel-module-drop-ins.md) | Native kernel module remediation through modprobe drop-ins | proposed |
+| [0031](0031-fast-records-for-the-lifecycle-harness.md) | Fast records for the Molecule lifecycle harness | proposed |
 
 Proposed ADRs are accepted through the pull request that introduces their first implementation.

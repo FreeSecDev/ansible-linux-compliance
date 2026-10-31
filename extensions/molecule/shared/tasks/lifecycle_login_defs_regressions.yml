@@ -33,7 +33,7 @@
 
 - name: Login defaults regressions | Remember the state of the whole instance before the regressions
   ansible.builtin.set_fact:
-    ldr_broad_before: "{{ lifecycle_broad_lines }}"
+    ldr_broad_before: "{{ lifecycle_broad_record }}"
 
 - name: Login defaults regressions | Read login.defs as built
   ansible.builtin.slurp:

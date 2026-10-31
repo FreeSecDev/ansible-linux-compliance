@@ -1,0 +1,36 @@
+---
+- name: Render the recorded walks with the lifecycle_record filter, through the lazy containers of ansible-core
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Read the recorded walks of a container and the synthetic edge cases
+      ansible.builtin.set_fact:
+        record_input: "{{ lookup('ansible.builtin.file', playbook_dir ~ '/input.json') | from_json }}"
+
+    - name: Render every case with the filter, from the variables as the harness does
+      ansible.builtin.set_fact:
+        filter_output: >-
+          {{ filter_output | default({}) | combine({item.name: {
+               'snapshot_lines': filter_result.snapshot.lines,
+               'snapshot_count': filter_result.snapshot.count,
+               'instance_lines': filter_result.instance.lines.split('\n')}}) }}
+      vars:
+        filter_result: >-
+          {{ {'walk': record_input.raw.files, 'walk_excluded': '^$', 'extra': [], 'metadata': [],
+              'checksums': record_input.raw.checksums, 'sysctl': record_input.raw.sysctl,
+              'packages': record_input.raw.packages, 'users': record_input.raw.users,
+              'groups': record_input.raw.groups, 'services': item.services}
+             | freesecdev.linux_compliance.lifecycle_record({
+                 'snapshot': {'paths': none, 'volatile_directories': item.volatile_directories,
+                              'volatile_contents': item.instance.volatile_contents,
+                              'volatile_times': item.instance.volatile_times},
+                 'instance': item.instance}) }}
+      loop: "{{ record_input.cases }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: Write the rendered lines
+      ansible.builtin.copy:
+        content: "{{ filter_output | to_json(sort_keys=true) }}\n"
+        dest: "{{ record_output_path }}"
+        mode: "0644"

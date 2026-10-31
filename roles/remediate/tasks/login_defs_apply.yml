@@ -100,6 +100,14 @@
       {{ __linux_compliance_remediate_ld_one
          | regex_replace(__linux_compliance_remediate_ld_token_pattern ~ '.*$', '\1')
          if __linux_compliance_remediate_ld_one is match(__linux_compliance_remediate_ld_token_pattern) else '' }}
+    __linux_compliance_remediate_ld_quoted: "{{ __linux_compliance_remediate_ld_one is search('\"') }}"
+    __linux_compliance_remediate_ld_getdef: >-
+      {{ __linux_compliance_remediate_ld_one
+         | regex_replace('(?i)^[ \t]*' ~ __linux_compliance_remediate_rule.parameters.setting
+                         ~ '[ \t]+[ \t"]*([^ \t#"]*).*$', '\1')
+         if __linux_compliance_remediate_ld_one
+            is match('(?i)^[ \t]*' ~ __linux_compliance_remediate_rule.parameters.setting ~ '[ \t]+')
+         else '' }}
   tags:
     - always
 
@@ -158,7 +166,12 @@
                       is match(__linux_compliance_remediate_login_defs_base0_pattern)
                   and __linux_compliance_remediate_ld_token is not match('^"?-')
                   and not (__linux_compliance_remediate_ld_comparison == 'at_most'
-                           and __linux_compliance_remediate_ld_token is match('^[1-9][0-9]{6,}$')))) }}
+                           and __linux_compliance_remediate_ld_token is match('^[1-9][0-9]{6,}$')))
+              or (__linux_compliance_remediate_ld_comparison in ['at_most', 'at_least']
+                  and __linux_compliance_remediate_ld_readings | length == 0
+                  and __linux_compliance_remediate_ld_quoted
+                  and __linux_compliance_remediate_ld_getdef
+                      is match(__linux_compliance_remediate_login_defs_getdef_number_pattern))) }}
     __linux_compliance_remediate_ld_line: >-
       {{ __linux_compliance_remediate_rule.parameters.setting ~ ' '
          ~ (__linux_compliance_remediate_ld_bits.union if __linux_compliance_remediate_ld_comparison == 'umask'

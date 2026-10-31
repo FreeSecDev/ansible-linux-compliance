@@ -58,7 +58,7 @@
 
 - name: Kernel module regressions | Remember the state of the whole instance before the regressions
   ansible.builtin.set_fact:
-    regression_broad_before: "{{ lifecycle_broad_lines }}"
+    regression_broad_before: "{{ lifecycle_broad_record }}"
 
 - name: Kernel module regressions | Disable hfsplus and usb-storage in vendor files, as a package would
   ansible.builtin.copy:
