@@ -189,6 +189,9 @@
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_ld_found$') == [] or
         '__linux_compliance_remediate_ld_found' in (hostvars[inventory_hostname] | list)
       - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_ld_getdef$') == [] or
+        '__linux_compliance_remediate_ld_getdef' in (hostvars[inventory_hostname] | list)
+      - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_ld_line$') == [] or
         '__linux_compliance_remediate_ld_line' in (hostvars[inventory_hostname] | list)
       - >-
@@ -212,6 +215,9 @@
       - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_ld_prior$') == [] or
         '__linux_compliance_remediate_ld_prior' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_ld_quoted$') == [] or
+        '__linux_compliance_remediate_ld_quoted' in (hostvars[inventory_hostname] | list)
       - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_ld_read$') == [] or
         '__linux_compliance_remediate_ld_read' in (hostvars[inventory_hostname] | list)
@@ -886,12 +892,14 @@
     __linux_compliance_remediate_ld_entry_method: __linux_compliance_unset__
     __linux_compliance_remediate_ld_forget: __linux_compliance_unset__
     __linux_compliance_remediate_ld_found: __linux_compliance_unset__
+    __linux_compliance_remediate_ld_getdef: __linux_compliance_unset__
     __linux_compliance_remediate_ld_line: __linux_compliance_unset__
     __linux_compliance_remediate_ld_link_targets: __linux_compliance_unset__
     __linux_compliance_remediate_ld_links: __linux_compliance_unset__
     __linux_compliance_remediate_ld_not_directory: __linux_compliance_unset__
     __linux_compliance_remediate_ld_overriding: __linux_compliance_unset__
     __linux_compliance_remediate_ld_prior: __linux_compliance_unset__
+    __linux_compliance_remediate_ld_quoted: __linux_compliance_unset__
     __linux_compliance_remediate_ld_read: __linux_compliance_unset__
     __linux_compliance_remediate_ld_reason: __linux_compliance_unset__
     __linux_compliance_remediate_ld_record: __linux_compliance_unset__
@@ -1091,12 +1099,14 @@
       - __linux_compliance_remediate_ld_entry_method == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ld_forget == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ld_found == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_ld_getdef == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ld_line == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ld_link_targets == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ld_links == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ld_not_directory == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ld_overriding == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ld_prior == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_ld_quoted == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ld_read == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ld_reason == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ld_record == '__linux_compliance_unset__'
@@ -1343,6 +1353,10 @@
         __linux_compliance_remediate_login_defs_directory == (lookup('ansible.builtin.file', role_path ~
         '/vars/main.yml') | ansible.builtin.from_yaml)['__linux_compliance_remediate_login_defs_directory']
       - >-
+        __linux_compliance_remediate_login_defs_getdef_number_pattern is not defined or
+        __linux_compliance_remediate_login_defs_getdef_number_pattern == (lookup('ansible.builtin.file', role_path ~
+        '/vars/main.yml') | ansible.builtin.from_yaml)['__linux_compliance_remediate_login_defs_getdef_number_pattern']
+      - >-
         __linux_compliance_remediate_login_defs_number_pattern is not defined or
         __linux_compliance_remediate_login_defs_number_pattern == (lookup('ansible.builtin.file', role_path ~
         '/vars/main.yml') | ansible.builtin.from_yaml)['__linux_compliance_remediate_login_defs_number_pattern']
@@ -1570,12 +1584,14 @@
     __linux_compliance_remediate_ld_entry_method: __linux_compliance_unset_again__
     __linux_compliance_remediate_ld_forget: __linux_compliance_unset_again__
     __linux_compliance_remediate_ld_found: __linux_compliance_unset_again__
+    __linux_compliance_remediate_ld_getdef: __linux_compliance_unset_again__
     __linux_compliance_remediate_ld_line: __linux_compliance_unset_again__
     __linux_compliance_remediate_ld_link_targets: __linux_compliance_unset_again__
     __linux_compliance_remediate_ld_links: __linux_compliance_unset_again__
     __linux_compliance_remediate_ld_not_directory: __linux_compliance_unset_again__
     __linux_compliance_remediate_ld_overriding: __linux_compliance_unset_again__
     __linux_compliance_remediate_ld_prior: __linux_compliance_unset_again__
+    __linux_compliance_remediate_ld_quoted: __linux_compliance_unset_again__
     __linux_compliance_remediate_ld_read: __linux_compliance_unset_again__
     __linux_compliance_remediate_ld_reason: __linux_compliance_unset_again__
     __linux_compliance_remediate_ld_record: __linux_compliance_unset_again__
@@ -1775,12 +1791,14 @@
       - __linux_compliance_remediate_ld_entry_method == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ld_forget == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ld_found == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_ld_getdef == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ld_line == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ld_link_targets == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ld_links == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ld_not_directory == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ld_overriding == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ld_prior == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_ld_quoted == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ld_read == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ld_reason == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ld_record == '__linux_compliance_unset_again__'
@@ -2110,12 +2128,14 @@
     __linux_compliance_remediate_ld_entry_method: __linux_compliance_unset__
     __linux_compliance_remediate_ld_forget: __linux_compliance_unset__
     __linux_compliance_remediate_ld_found: __linux_compliance_unset__
+    __linux_compliance_remediate_ld_getdef: __linux_compliance_unset__
     __linux_compliance_remediate_ld_line: __linux_compliance_unset__
     __linux_compliance_remediate_ld_link_targets: __linux_compliance_unset__
     __linux_compliance_remediate_ld_links: __linux_compliance_unset__
     __linux_compliance_remediate_ld_not_directory: __linux_compliance_unset__
     __linux_compliance_remediate_ld_overriding: __linux_compliance_unset__
     __linux_compliance_remediate_ld_prior: __linux_compliance_unset__
+    __linux_compliance_remediate_ld_quoted: __linux_compliance_unset__
     __linux_compliance_remediate_ld_read: __linux_compliance_unset__
     __linux_compliance_remediate_ld_reason: __linux_compliance_unset__
     __linux_compliance_remediate_ld_record: __linux_compliance_unset__

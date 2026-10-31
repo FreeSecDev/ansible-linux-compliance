@@ -1,6 +1,8 @@
 ---
 bugfixes:
   - >-
-    remediate - ``login_defs`` refuses a number whose line holds a quote and that the family cannot read
-    (``unreadable_value``), such as ``PASS_MAX_DAYS " 30"`` or ``PASS_MAX_DAYS ""30``, which shadow-utils reads as 30;
-    before, the profile's looser value was written.
+    remediate - ``login_defs`` reads a quoted number line as shadow-utils' ``getdef`` does (blanks and quotes after
+    the name skipped, the value cut at the next quote) and refuses it as ``unreadable_value`` when that value is a
+    number the family has no reading for, such as ``PASS_MAX_DAYS " 30"`` or ``PASS_MAX_DAYS ""30``, which shadow-utils
+    reads as 30; before, the profile's looser value was written. An empty, negative or unparseable quoted value, such
+    as ``""`` or ``"-1"``, still takes the profile's value.
