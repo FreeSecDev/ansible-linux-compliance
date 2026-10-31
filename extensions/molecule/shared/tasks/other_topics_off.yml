@@ -1,0 +1,24 @@
+---
+- name: Other topics off | Switch off every native topic of the catalogue other than the reference topic
+  ansible.builtin.set_fact:
+    "{{ 'linux_compliance_' ~ other_topic ~ '_enabled' }}": false
+  loop: "{{ molecule_other_native_topics }}"
+  loop_control:
+    loop_var: other_topic
+
+- name: Other topics off | Check that every native topic other than the reference topic is switched off
+  ansible.builtin.assert:
+    that:
+      - >-
+        (lookup('ansible.builtin.file', molecule_repository ~ '/roles/remediate/vars/rules.yml') | from_yaml)
+        .__linux_compliance_remediate_rules | map(attribute='family') | unique
+        | reject('equalto', molecule_reference_family) | sort == molecule_other_native_topics | sort
+      - >-
+        lookup('ansible.builtin.vars', *(molecule_other_native_topics
+        | map('regex_replace', '^', 'linux_compliance_') | map('regex_replace', '$', '_enabled')),
+        wantlist=True) | unique == [false]
+    fail_msg: >-
+      The play '{{ ansible_play_name }}' proves the reference rule alone, so it switches off every other native
+      topic that roles/remediate/vars/rules.yml lists ({{ molecule_other_native_topics }}, derived as
+      molecule_other_native_topics in vars/target.yml); the lifecycle scenarios prove those topics.
+    quiet: true

@@ -148,9 +148,12 @@ Add `extensions/molecule/shared/vars/topics/<family>.yml` ([Molecule guide](mole
 - a disruptive topic needs `disruptive: true` and a `containment` note that says what it can break and why the harness
   still reaches the container.
 
-`make lint-lifecycle` refuses a native topic without a declaration and a malformed declaration. If converge or verify
-should not see the new topic, add it to `molecule_other_native_topics` in `shared/vars/target.yml` and to the play
-variables of `converge.yml` and `verify.yml`; their first task fails until both agree with the catalogue.
+`make lint-lifecycle` refuses a native topic without a declaration and a malformed declaration. Converge and verify
+switch the new topic off by themselves: `shared/tasks/other_topics_off.yml` derives the native topics other than the
+reference topic from the catalogue at run time (FREES-195), so a topic pull request does not edit `converge.yml`,
+`verify.yml`, their libvirt counterparts or `shared/vars/target.yml`. Keep the topic's changes to its own files, as
+[adding a topic](molecule.md#adding-a-topic-without-touching-shared-files) lists them, so that CI plans only the
+topic's own lifecycle legs.
 
 ## 6. Test
 
