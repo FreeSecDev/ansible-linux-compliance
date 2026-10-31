@@ -258,10 +258,12 @@ Jira: FREES-42 and FREES-43. Decision: [ADR 0015](adr/0015-content-acquisition-a
 
 ### Fetching content
 
-`uv run python tools/content/fetch_content.py` reads `content/manifest.yml`, downloads the pinned release zip over
-HTTPS (or reads `--from-file <zip>` without any network access), verifies the archive SHA-512, extracts only the
-datastreams the manifest lists (`--datastream <name>` narrows the choice) into `build/content` (or `--output-dir`) and
-verifies each SHA-256. It refuses members that are symlinks, directories, special files, encrypted, duplicated or of a
+`make content` (`PYTHONPATH=build/collections uv run python -m tools.content.fetch_content`) reads
+`content/manifest.yml`, downloads the pinned release zip over HTTPS (or reads `--from-file <zip>` without any network
+access), verifies the archive SHA-512, extracts only the datastreams the manifest lists (`--datastream <name>` narrows
+the choice) and verifies each against `source_sha256`. It then removes every Script Check Engine check and script and every XCCDF `fix`
+([ADR 0026](adr/0026-no-content-scripts-on-hosts.md)) and writes the result into `build/content` (or `--output-dir`)
+only when it has the pinned `sha256`. It refuses members that are symlinks, directories, special files, encrypted, duplicated or of a
 different size, never builds a path from an archive member name, and leaves no partial file on failure. The pinned
 content is `v0.1.82`, with `ssg-ubuntu2404-ds.xml` (5 profiles) and `ssg-rhel9-ds.xml` (20 profiles); the manifest lists
 each profile by identifier and title as read from the datastream.
@@ -279,7 +281,7 @@ only through it, so a failing close is a `CatalogError` or an `XccdfParseError`,
 expected_sha256)` (hash first, parse second, hash again during the parse), `locate_datastreams(directory)`,
 `resolve_content_path(path)`, `single_benchmark`, `find_profile`, `profile_rules` and the module reports
 `benchmark_report` and `profile_report`. A digest mismatch raises `DigestMismatchError` before any parsing. Errors map
-to the stable `error_type` values `digest_mismatch`, `profile_not_found`, `unsupported_content` (a profile with `extends`, or a selected rule below a deselected group) and `invalid_content`.
+to the stable `error_type` values `digest_mismatch`, `profile_not_found`, `unsupported_content` (a profile with `extends`, or a selected rule below a deselected group), `script_check_content` (a check or embedded script that would make the scanner run a script of the content, [ADR 0026](adr/0026-no-content-scripts-on-hosts.md)) and `invalid_content`.
 
 | Module | Options | Returns |
 |---|---|---|

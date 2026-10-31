@@ -256,6 +256,9 @@ def _measure(scan_name: str, sink: Sink, workspace: Workspace) -> dict[str, obje
     )
     report["negative_events"] = sink.since(mark)
     mark = len(sink.events())
+    report["direct"] = _exec(scan_name, "negative", "--content", installed)
+    report["direct_events"] = sink.since(mark)
+    mark = len(sink.events())
     report["control"] = _exec(scan_name, "positive", "--content", installed)
     report["control_events"] = sink.since(mark)
     return report
@@ -283,16 +286,30 @@ def egress(tmp_path_factory: pytest.TempPathFactory) -> dict[str, object]:
         harness.run(["network", "rm", network])
 
 
-def test_the_scan_with_downloads_off_completes_without_any_egress(
+def test_the_module_refuses_the_probe_stream_before_scc_runs(
     egress: dict[str, object],
 ) -> None:
     negative = cast("dict[str, object]", egress["negative"])
     events = cast("list[dict[str, object]]", egress["negative_events"])
-    harness.report_line("negative scan", {"run_status": negative.get("run_status")})
+    harness.report_line(
+        "negative scan", {"error_type": negative.get("error_type"), "msg": negative.get("msg")}
+    )
     harness.report_line("negative sink events", events)
-    assert negative["run_status"] == "completed", negative.get("msg")
-    run = cast("dict[str, object]", negative["scan_run"])
-    assert run["scanner"] == {"name": "scc", "version": harness.pin("SCC_VERSION")}
+    assert negative.get("failed") is True
+    assert negative.get("error_type") == "script_check_content"
+    assert "outside the datastream" in str(negative.get("msg"))
+    assert events == []
+
+
+def test_scc_with_the_backend_options_runs_without_any_egress(
+    egress: dict[str, object],
+) -> None:
+    direct = cast("dict[str, object]", egress["direct"])
+    events = cast("list[dict[str, object]]", egress["direct_events"])
+    harness.report_line("direct scan", direct)
+    harness.report_line("direct sink events", events)
+    assert direct["refusal"] == "", direct
+    assert direct["results"] == 1
     assert _violations(events) == []
     names = {event.get("name") for event in events if event.get("kind") == "dns"}
     assert not names & PROBE_HOSTS

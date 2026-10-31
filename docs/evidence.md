@@ -324,9 +324,10 @@ it is never parsed or filtered. Besides the rule results it carries:
 
 - the `target`, `target-address` and `target-facts` of the scanned host: host names, every IP address and every MAC
   address;
-- the standard output of the SCE check scripts, in `check-import import-name="stdout"`. Every SCE check of the pinned
-  datastreams imports its output, and the SCE-only rules (18 on Ubuntu 24.04, 4 on RHEL 9) print firewall rule
-  dumps, listening ports, and lists of world-writable, unowned or privileged files.
+- for content that still has SCE checks, the standard output of their scripts, in
+  `check-import import-name="stdout"` (firewall rule dumps, listening ports, lists of world-writable, unowned or
+  privileged files). The pinned content has none since FREES-191, and the audit refuses content that has them
+  ([ADR 0026](adr/0026-no-content-scripts-on-hosts.md)); the paragraph stays because `results.xml` is carried verbatim.
 
 That is sensitive host data, not credentials, but it maps the host's attack surface. The scan run carries rule
 results and identifiers, and with exceptions the exceptions file names owners, approvers and justifications. Share a

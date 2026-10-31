@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import dataclasses
 import hashlib
 import http.client
 import io
@@ -15,6 +16,7 @@ import pytest
 import yaml
 
 from tools.content import fetch_content as fetch
+from tools.content import script_checks
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -22,8 +24,8 @@ if TYPE_CHECKING:
 ROOT = "scap-security-guide-9.9.9"
 PATH_A = f"{ROOT}/ssg-alpha1-ds.xml"
 PATH_B = f"{ROOT}/ssg-beta2-ds.xml"
-DATA_A = b"<synthetic>alpha datastream</synthetic>\n" * 50
-DATA_B = b"<synthetic>beta datastream</synthetic>\n" * 20
+DATA_A = b"<synthetic>\n" + b"  <item>alpha datastream</item>\n" * 50 + b"</synthetic>\n"
+DATA_B = b"<synthetic>\n" + b"  <item>beta datastream</item>\n" * 20 + b"</synthetic>\n"
 PROFILE = "xccdf_org.example.synthetic_profile_baseline"
 BASE = "https://downloads.example.test/releases/download/v9.9.9"
 ARCHIVE_URL = f"{BASE}/scap-security-guide-9.9.9.zip"
@@ -51,6 +53,11 @@ def manifest_document(archive: bytes, **overrides: Any) -> dict[str, Any]:
             {
                 "name": name,
                 "path": path,
+                "source_sha256": hashlib.sha256(data).hexdigest(),
+                "source_size_bytes": len(data),
+                "removed_sce_checks": 0,
+                "removed_sce_scripts": 0,
+                "removed_fix_elements": 0,
                 "sha256": hashlib.sha256(data).hexdigest(),
                 "size_bytes": len(data),
                 "benchmark_id": "xccdf_org.example.synthetic_benchmark_demo",
@@ -819,9 +826,7 @@ class TestExtraction:
         self, tmp_path: Path, archive_file: Path, manifest: fetch.Manifest
     ) -> None:
         stream = manifest.datastreams[0]
-        wrong = fetch.Datastream(
-            stream.name, stream.path, stream.sha256, stream.size_bytes + 1, "b", stream.profiles
-        )
+        wrong = dataclasses.replace(stream, source_size_bytes=stream.source_size_bytes + 1)
         out = tmp_path / "out"
         out.mkdir()
         with pytest.raises(fetch.ContentError, match="the manifest records"):
@@ -830,10 +835,7 @@ class TestExtraction:
     def test_a_digest_mismatch_leaves_no_file(
         self, tmp_path: Path, archive_file: Path, manifest: fetch.Manifest
     ) -> None:
-        stream = manifest.datastreams[0]
-        wrong = fetch.Datastream(
-            stream.name, stream.path, "0" * 64, stream.size_bytes, "b", stream.profiles
-        )
+        wrong = dataclasses.replace(manifest.datastreams[0], source_sha256="0" * 64)
         out = tmp_path / "out"
         out.mkdir()
         with pytest.raises(fetch.ContentError, match="SHA-256"):
@@ -862,13 +864,10 @@ class TestExtraction:
         random_like = bytes((index * 37 + 11) % 251 for index in range(4096))
         with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as bundle:
             bundle.writestr(PATH_A, random_like)
-        stream = fetch.Datastream(
-            "alpha1",
-            PATH_A,
-            hashlib.sha256(random_like).hexdigest(),
-            len(random_like),
-            "b",
-            manifest.datastreams[0].profiles,
+        stream = dataclasses.replace(
+            manifest.datastreams[0],
+            source_sha256=hashlib.sha256(random_like).hexdigest(),
+            source_size_bytes=len(random_like),
         )
         data = bytearray(archive.read_bytes())
         for position in range(60, 120):
@@ -1050,3 +1049,144 @@ class TestCommandLine:
         with pytest.raises(SystemExit) as raised:
             runpy.run_path(fetch.__file__, run_name="__main__")
         assert raised.value.code == 1
+
+
+FIX_WORD = b"fix"
+SCE_MEMBER = (
+    b'<ds:data-stream-collection xmlns:ds="http://scap.nist.gov/schema/scap/source/1.2" '
+    b'xmlns:x="http://checklists.nist.gov/xccdf/1.2" '
+    b'xmlns:cat="urn:oasis:names:tc:entity:xmlns:xml:catalog" '
+    b'xmlns:sce="http://open-scap.org/page/SCE_xccdf_stream" '
+    b'xmlns:xlink="http://www.w3.org/1999/xlink">\n'
+    b"  <ds:data-stream>\n"
+    b"    <cat:catalog>\n"
+    b'      <cat:uri name="oval.xml" uri="#cref_oval"/>\n'
+    b'      <cat:uri name="s.sh" uri="#cref_s"/>\n'
+    b"    </cat:catalog>\n"
+    b"    <ds:checks>\n"
+    b'      <ds:component-ref id="cref_oval" xlink:href="#comp_oval"/>\n'
+    b'      <ds:component-ref id="cref_s" xlink:href="#ecomp_s"/>\n'
+    b"    </ds:checks>\n"
+    b"  </ds:data-stream>\n"
+    b'  <x:Rule id="r">\n'
+    b"    <x:"
+    + FIX_WORD
+    + b' id="f" system="urn:xccdf:'
+    + FIX_WORD
+    + b':script:sh">rm -rf /</x:'
+    + FIX_WORD
+    + b">\n"
+    b'    <x:check system="http://open-scap.org/page/SCE">\n'
+    b'      <x:check-content-ref href="s.sh"/>\n'
+    b"    </x:check>\n"
+    b'    <x:check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">\n'
+    b'      <x:check-content-ref href="oval.xml" name="o"/>\n'
+    b"    </x:check>\n"
+    b"  </x:Rule>\n"
+    b'  <ds:extended-component id="ecomp_s">\n'
+    b"    <sce:script>#!/bin/sh\ntouch /tmp/ran\n</sce:script>\n"
+    b"  </ds:extended-component>\n"
+    b"</ds:data-stream-collection>\n"
+)
+
+
+def sce_stream(manifest: fetch.Manifest, **changes: Any) -> fetch.Datastream:
+    stripped = script_checks.strip_script_checks(SCE_MEMBER).data
+    pinned: dict[str, Any] = {
+        "source_sha256": hashlib.sha256(SCE_MEMBER).hexdigest(),
+        "source_size_bytes": len(SCE_MEMBER),
+        "removed_sce_checks": 1,
+        "removed_sce_scripts": 1,
+        "removed_fix_elements": 1,
+        "sha256": hashlib.sha256(stripped).hexdigest(),
+        "size_bytes": len(stripped),
+    }
+    pinned.update(changes)
+    return dataclasses.replace(manifest.datastreams[0], **pinned)
+
+
+class TestScriptChecks:
+    """The written datastream never holds a script check (FREES-191)."""
+
+    def test_the_scripts_are_removed_before_the_datastream_is_written(
+        self, tmp_path: Path, manifest: fetch.Manifest
+    ) -> None:
+        archive = tmp_path / "sce.zip"
+        make_zip(archive, {PATH_A: SCE_MEMBER})
+        out = tmp_path / "out"
+        out.mkdir()
+        (written,) = fetch.extract_datastreams(archive, [sce_stream(manifest)], out)
+        data = written.read_bytes()
+        assert b'open-scap.org/page/SCE"' not in data
+        assert b"sce:script" not in data
+        assert b"extended-component" not in data
+        assert b"oval-definitions-5" in data
+        assert b"rm -rf" not in data
+        assert hashlib.sha256(data).hexdigest() == sce_stream(manifest).sha256
+        assert listing(out) == ["ssg-alpha1-ds.xml"]
+
+    @pytest.mark.parametrize(
+        ("changes", "message"),
+        [
+            (
+                {"removed_sce_checks": 2},
+                "removed 1 SCE checks, 1 scripts and 1 fix elements, the manifest records 2, 1",
+            ),
+            ({"removed_sce_scripts": 0}, "the manifest records 1, 0 and 1"),
+            ({"removed_fix_elements": 0}, "the manifest records 1, 1 and 0"),
+            ({"sha256": "0" * 64}, "without its script checks does not match the manifest"),
+            ({"size_bytes": 1}, "without its script checks does not match the manifest"),
+        ],
+    )
+    def test_a_result_that_differs_from_the_pins_leaves_no_file(
+        self, tmp_path: Path, manifest: fetch.Manifest, changes: dict[str, object], message: str
+    ) -> None:
+        archive = tmp_path / "sce.zip"
+        make_zip(archive, {PATH_A: SCE_MEMBER})
+        out = tmp_path / "out"
+        out.mkdir()
+        with pytest.raises(fetch.ContentError, match=message):
+            fetch.extract_datastreams(archive, [sce_stream(manifest, **changes)], out)
+        assert listing(out) == []
+
+    def test_a_script_that_cannot_be_removed_safely_leaves_no_file(
+        self, tmp_path: Path, manifest: fetch.Manifest
+    ) -> None:
+        member = SCE_MEMBER.replace(b'page/SCE"', b'page/SCE2"')
+        archive = tmp_path / "sce.zip"
+        make_zip(archive, {PATH_A: member})
+        stream = sce_stream(
+            manifest,
+            source_sha256=hashlib.sha256(member).hexdigest(),
+            source_size_bytes=len(member),
+        )
+        out = tmp_path / "out"
+        out.mkdir()
+        with pytest.raises(fetch.ContentError, match="which is not removed safely"):
+            fetch.extract_datastreams(archive, [stream], out)
+        assert listing(out) == []
+
+    @pytest.mark.parametrize(
+        ("key", "value"),
+        [
+            ("removed_sce_checks", -1),
+            ("removed_sce_scripts", True),
+            ("removed_sce_checks", "81"),
+            ("removed_sce_scripts", fetch.MAX_REMOVED + 1),
+            ("removed_fix_elements", None),
+        ],
+    )
+    def test_the_removal_counts_are_validated(
+        self, archive_file: Path, key: str, value: object
+    ) -> None:
+        document = manifest_document(archive_file.read_bytes())
+        document["datastreams"][0][key] = value
+        with pytest.raises(fetch.ContentError, match=f"{key} must be an integer from 0"):
+            fetch.parse_manifest(document)
+
+    @pytest.mark.parametrize("key", ["source_sha256", "source_size_bytes"])
+    def test_the_source_pins_are_required(self, archive_file: Path, key: str) -> None:
+        document = manifest_document(archive_file.read_bytes())
+        del document["datastreams"][0][key]
+        with pytest.raises(fetch.ContentError, match=key):
+            fetch.parse_manifest(document)

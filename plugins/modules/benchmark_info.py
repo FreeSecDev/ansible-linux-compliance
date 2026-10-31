@@ -63,7 +63,7 @@ EXAMPLES = r"""
 - name: Describe the pinned Ubuntu 24.04 datastream
   freesecdev.linux_compliance.benchmark_info:
     content_path: /opt/freesecdev/content/ssg-ubuntu2404-ds.xml
-    expected_sha256: e311189ac70ff73be54121311fca324d6188f8c12ab53416090f595ff00e070c
+    expected_sha256: c4da7bea2e285326d692ade7c06c9f87750c0d6bd0e850a74c78220b893cb393
   register: benchmark
 
 - name: Show the profile identifiers
@@ -81,7 +81,7 @@ content_sha256:
   description: The verified SHA-256 of the datastream file, in lower case.
   returned: success
   type: str
-  sample: e311189ac70ff73be54121311fca324d6188f8c12ab53416090f595ff00e070c
+  sample: c4da7bea2e285326d692ade7c06c9f87750c0d6bd0e850a74c78220b893cb393
 benchmark_id:
   description: Full XCCDF benchmark identifier.
   returned: success
@@ -118,8 +118,12 @@ profiles:
 error_type:
   description:
     - Stable identifier of the failure.
-    - One of C(digest_mismatch), C(unsupported_content), C(unsafe_content_dir) or
-      C(invalid_content).
+    - One of C(digest_mismatch), C(unsupported_content), C(unsafe_content_dir),
+      C(script_check_content) or C(invalid_content).
+    - C(script_check_content) means that the datastream holds a check or an embedded script
+      that would make the scanner run a script of the content (such as a Script Check Engine
+      check), or an XCCDF fix element (remediation code of the content); fetch the content
+      with C(make content), which removes them.
   returned: failure
   type: str
   sample: digest_mismatch
