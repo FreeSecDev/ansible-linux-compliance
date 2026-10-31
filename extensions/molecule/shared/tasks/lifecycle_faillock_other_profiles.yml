@@ -55,7 +55,7 @@
 
 - name: Faillock other profiles | Remember the state of the whole instance before these rules run
   ansible.builtin.set_fact:
-    fop_broad_before: "{{ lifecycle_broad_lines }}"
+    fop_broad_before: "{{ lifecycle_broad_record }}"
 
 - name: Faillock other profiles | Read faillock.conf as built
   ansible.builtin.slurp:

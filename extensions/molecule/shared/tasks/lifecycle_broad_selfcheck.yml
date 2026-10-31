@@ -5,12 +5,13 @@
   vars:
     lifecycle_broad_declared: "{{ lifecycle_broad_selfcheck_declared }}"
     lifecycle_broad_rewritten: "{{ lifecycle_broad_selfcheck_case.rewritten | default([]) }}"
-    lifecycle_broad_raw: >-
+    lifecycle_broad_selfcheck_state: >-
       {{ lifecycle_broad_selfcheck_raw | combine(lifecycle_broad_selfcheck_case.before | default({})) }}
+    lifecycle_broad_sources: "{{ lifecycle_broad_selfcheck_sources }}"
 
 - name: Lifecycle broad self-check | Remember the synthetic state before the case
   ansible.builtin.set_fact:
-    lifecycle_broad_selfcheck_before: "{{ lifecycle_broad_lines }}"
+    lifecycle_broad_selfcheck_before: "{{ lifecycle_broad_record }}"
 
 - name: Lifecycle broad self-check | Normalise the synthetic state after the case
   ansible.builtin.include_tasks:
@@ -18,16 +19,20 @@
   vars:
     lifecycle_broad_declared: "{{ lifecycle_broad_selfcheck_declared }}"
     lifecycle_broad_rewritten: "{{ lifecycle_broad_selfcheck_case.rewritten | default([]) }}"
-    lifecycle_broad_raw: "{{ lifecycle_broad_selfcheck_raw | combine(lifecycle_broad_selfcheck_case.after) }}"
+    lifecycle_broad_selfcheck_state: >-
+      {{ lifecycle_broad_selfcheck_raw | combine(lifecycle_broad_selfcheck_case.after) }}
+    lifecycle_broad_sources: "{{ lifecycle_broad_selfcheck_sources }}"
 
 - name: Lifecycle broad self-check | Assert that the comparison refuses exactly the differences it must
   ansible.builtin.assert:
     that:
-      - lifecycle_broad_selfcheck_before | length > 0
-      - (lifecycle_broad_lines != lifecycle_broad_selfcheck_before) is sameas lifecycle_broad_selfcheck_case.refused
+      - lifecycle_broad_selfcheck_before.count > 0
+      - (lifecycle_broad_record.digest != lifecycle_broad_selfcheck_before.digest)
+        is sameas lifecycle_broad_selfcheck_case.refused
     fail_msg: >-
       The whole-instance comparison is broken for the case '{{ lifecycle_broad_selfcheck_case.name }}': it
       {{ 'accepted' if lifecycle_broad_selfcheck_case.refused else 'refused' }} the state. Only before:
-      {{ lifecycle_broad_selfcheck_before | difference(lifecycle_broad_lines) }}. Only after:
-      {{ lifecycle_broad_lines | difference(lifecycle_broad_selfcheck_before) }}.
+      {{ lifecycle_broad_selfcheck_before.lines.split('\n') | difference(lifecycle_broad_record.lines.split('\n')) }}.
+      Only after:
+      {{ lifecycle_broad_record.lines.split('\n') | difference(lifecycle_broad_selfcheck_before.lines.split('\n')) }}.
     quiet: true

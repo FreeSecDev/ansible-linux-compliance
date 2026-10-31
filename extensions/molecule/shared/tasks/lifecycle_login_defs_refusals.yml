@@ -25,7 +25,7 @@
 
 - name: Login defaults refusals | Remember the state of the whole instance before the refusals
   ansible.builtin.set_fact:
-    ldf_broad_before: "{{ lifecycle_broad_lines }}"
+    ldf_broad_before: "{{ lifecycle_broad_record }}"
 
 - name: Login defaults refusals | Read login.defs as built
   ansible.builtin.slurp:

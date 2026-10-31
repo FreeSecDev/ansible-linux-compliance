@@ -50,7 +50,7 @@
 
 - name: Sudo states | Remember the state of the whole instance before the states
   ansible.builtin.set_fact:
-    states_broad_before: "{{ lifecycle_broad_lines }}"
+    states_broad_before: "{{ lifecycle_broad_record }}"
 
 - name: Sudo states | Switch every rule of the topic on
   ansible.builtin.set_fact:

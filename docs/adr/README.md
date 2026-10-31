@@ -28,5 +28,6 @@
 | [0024](0024-native-login-defs.md) | Native login.defs remediation, one recorded line per setting | proposed |
 | [0025](0025-own-ansible-remediation-only.md) | Remediation is our own Ansible only; scanner remediation content is never used | proposed |
 | [0027](0027-native-faillock-pwhistory.md) | Native account lock-out and password reuse, one recorded line per setting | proposed |
+| [0031](0031-fast-records-for-the-lifecycle-harness.md) | Fast records for the Molecule lifecycle harness | proposed |
 
 Proposed ADRs are accepted through the pull request that introduces their first implementation.

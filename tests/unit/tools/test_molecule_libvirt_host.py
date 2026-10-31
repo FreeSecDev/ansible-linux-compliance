@@ -57,6 +57,37 @@ cp "${source_file}" "${output}"
 """
 FAKE_SUDO = """#!/usr/bin/env bash
 printf '%s\\n' "$*" >> "${FAKE_LOG}/sudo"
+user="$(id -un)"
+case "$1" in
+  install)
+    shift
+    arguments=()
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        -o|-g) shift 2 ;;
+        *) arguments+=("$1"); shift ;;
+      esac
+    done
+    install "${arguments[@]}" || exit 1
+    target="${arguments[-1]}"
+    if [[ -n "${FAKE_SWAP:-}" && "$(basename "${target}")" == "${FAKE_SWAP}" ]]; then
+      printf 'swapped after the copy' > "${target}"
+    fi
+    exit 0
+    ;;
+  stat)
+    env "$@" | sed -e "s/:${user}\\$/:root/" -e "s/^${user}:/root:/"
+    exit "${PIPESTATUS[0]}"
+    ;;
+  mktemp)
+    directory="$(env "$@")" || exit 1
+    if [[ -n "${FAKE_OPEN_COPIES:-}" ]]; then
+      chmod 0755 "${directory}"
+    fi
+    printf '%s\\n' "${directory}"
+    exit 0
+    ;;
+esac
 exec env "$@"
 """
 FAKE_APT_GET = """#!/usr/bin/env bash
@@ -125,6 +156,8 @@ class Host:
             path.chmod(0o755)
         self.log = root / "log"
         self.log.mkdir()
+        self.temporary = root / "tmp"
+        self.temporary.mkdir()
         self.status = root / "status"
         self.status.write_text("pkg-config 1.8\n", encoding="utf-8")
         self.served = root / "served"
@@ -188,6 +221,7 @@ class Host:
             env={
                 "PATH": f"{self.bin}:/usr/bin:/bin",
                 "HOME": str(self.root),
+                "TMPDIR": str(self.temporary),
                 "FAKE_ROUTES": str(routes),
                 "FAKE_LOG": str(self.log),
                 "FAKE_STATUS": str(self.status),
@@ -279,6 +313,45 @@ def test_install_uses_only_the_verified_files_that_the_runner_lacks(host: Host) 
     second = host.run("install", environment=HOSTED)
     assert second.returncode == 0, second.stderr
     assert len(host.calls("apt-get")) == 1
+
+
+def test_install_verifies_root_owned_copies_as_root(host: Host) -> None:
+    assert host.run("fetch").returncode == 0
+    result = host.run("install", environment=HOSTED)
+    assert result.returncode == 0, result.stderr
+    calls = host.calls("sudo")
+    assert calls[0] == "mktemp -d"
+    assert any(call.startswith(f"stat -c %U:%a -- {host.temporary}/") for call in calls)
+    installs = [call for call in calls if call.startswith("install -o root -g root -m 0644 -- ")]
+    assert len(installs) == 2
+    checks = [call for call in calls if call.startswith("sha256sum --check --strict --quiet")]
+    assert len(checks) == 2
+    first_check = calls.index(checks[0])
+    assert calls.index(installs[0]) < first_check < calls.index(installs[1])
+    [apt_get] = host.calls("apt-get")
+    for name in ("qemu-utils_8.2_amd64.deb", "libfdt1_1.7_amd64.deb"):
+        assert f"/debs/{name}" in apt_get
+    assert "Dir::Etc::SourceParts=" + str(host.temporary) in apt_get
+    assert calls[-1].startswith("rm -rf -- " + str(host.temporary))
+    assert list(host.temporary.iterdir()) == []
+
+
+def test_install_refuses_a_copy_that_is_swapped_after_it_was_made(host: Host) -> None:
+    assert host.run("fetch").returncode == 0
+    result = host.run("install", environment={**HOSTED, "FAKE_SWAP": "libfdt1_1.7_amd64.deb"})
+    assert result.returncode == 1
+    assert "the root-owned copy of libfdt1 does not match its pin" in result.stderr
+    assert host.calls("apt-get") == []
+    assert list(host.temporary.iterdir()) == []
+
+
+def test_install_refuses_a_directory_for_the_copies_that_others_may_enter(host: Host) -> None:
+    assert host.run("fetch").returncode == 0
+    result = host.run("install", environment={**HOSTED, "FAKE_OPEN_COPIES": "1"})
+    assert result.returncode == 1
+    assert "is not a private directory of root; nothing was installed" in result.stderr
+    assert host.calls("apt-get") == []
+    assert [call for call in host.calls("sudo") if call.startswith("install")] == []
 
 
 def test_install_fails_when_a_required_version_is_not_installed(host: Host) -> None:

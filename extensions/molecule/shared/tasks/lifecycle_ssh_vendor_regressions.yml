@@ -54,7 +54,7 @@
 
 - name: SSH vendor regressions | Remember the state of the whole instance and the vendor file before the regressions
   ansible.builtin.set_fact:
-    vendor_broad_before: "{{ lifecycle_broad_lines }}"
+    vendor_broad_before: "{{ lifecycle_broad_record }}"
 
 - name: SSH vendor regressions | Read the vendor file as built
   ansible.builtin.slurp:

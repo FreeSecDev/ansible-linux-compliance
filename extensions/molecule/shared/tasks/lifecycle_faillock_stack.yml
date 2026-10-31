@@ -64,7 +64,7 @@
 
 - name: Faillock stack | Remember the state of the whole instance before the stack regressions
   ansible.builtin.set_fact:
-    stack_broad_before: "{{ lifecycle_broad_lines }}"
+    stack_broad_before: "{{ lifecycle_broad_record }}"
 
 - name: Faillock stack | Read faillock.conf and the PAM stack files as built
   ansible.builtin.slurp:

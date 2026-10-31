@@ -65,7 +65,7 @@
 
 - name: Pwhistory regressions | Remember the state of the whole instance before the regressions
   ansible.builtin.set_fact:
-    pwr_broad_before: "{{ lifecycle_broad_lines }}"
+    pwr_broad_before: "{{ lifecycle_broad_record }}"
 
 - name: Pwhistory regressions | Run each step of the regressions
   ansible.builtin.include_tasks:
