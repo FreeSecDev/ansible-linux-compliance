@@ -400,7 +400,8 @@ Configuration relaxations, each with its reason:
 | `typecheck` | `make typecheck` |
 | `test` | `make test-coverage` (on the four workers of the hosted runner) |
 | `test-suites` | `make test-audit-exceptions`, `make test-content-golden`, `make test-browser`, alongside `test` |
-| `test-playbooks` | `make test-evidence`, `make test-remediate-check`, `make test-role-guards`, `make test-verify` |
+| `test-playbooks-remediate` | `make test-remediate-check` (with `test-remediate-disruptive`) |
+| `test-playbooks-evidence` | `make test-evidence`, `make test-role-guards`, `make test-verify` |
 | `name-sets` | matrix over the pinned Python releases 3.9.25, 3.10.21, 3.11.16, 3.12.14, 3.13.15 and 3.14.6: `uv python install`, then `make test-name-sets` |
 | `security` | `make security` |
 | `collection` | `make test-sanity test-ansible-units package-check` |
