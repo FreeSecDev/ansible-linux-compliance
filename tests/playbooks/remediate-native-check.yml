@@ -566,6 +566,187 @@
                 is search('generated from the pinned content')
             quiet: true
 
+- name: Native families in check mode | The kernel parameter rules report every rule once and change nothing
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    linux_compliance_remediate_enabled: true
+    linux_compliance_remediate_allow_disruptive:
+      - ipv4_parameters
+      - ipv6_parameters
+    native_prefix: xccdf_org.ssgproject.content_rule_
+    native_sysctl_short_ids:
+      - sysctl_fs_suid_dumpable
+      - sysctl_kernel_randomize_va_space
+      - sysctl_kernel_yama_ptrace_scope
+      - sysctl_net_ipv4_conf_all_rp_filter
+      - sysctl_net_ipv4_ip_forward
+      - sysctl_net_ipv4_tcp_syncookies
+      - sysctl_net_ipv6_conf_all_accept_ra
+      - sysctl_net_ipv6_conf_default_accept_redirects
+    native_sysctl_keys:
+      - fs/suid_dumpable
+      - kernel/randomize_va_space
+      - net/ipv4/conf/all/rp_filter
+      - net/ipv4/ip_forward
+      - net/ipv4/tcp_syncookies
+    native_sysctl_statuses:
+      - applied
+      - compliant
+      - notapplicable
+      - not_directory
+      - not_regular_file
+      - not_owned
+      - duplicate_setting
+      - prior_too_large
+      - overridden
+      - conflicting_setting
+      - unparsed_configuration
+      - interface_override
+      - prior_unrestorable
+      - runtime_unavailable
+  tasks:
+    - name: Refuse to run outside check mode
+      ansible.builtin.assert:
+        that:
+          - ansible_check_mode
+        fail_msg: This test playbook only runs with --check; it must never change the host.
+        quiet: true
+
+    - name: Describe the Ubuntu 24.04 cis_level1_server profile with native rules of the three kernel parameter families
+      ansible.builtin.set_fact:
+        native_sysctl_rules: "{{ native_sysctl_short_ids | map('regex_replace', '^', native_prefix) | list }}"
+        native_sysctl_profile:
+          profile_id: xccdf_org.ssgproject.content_profile_cis_level1_server
+          benchmark_id: xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04
+          content_sha256: >-
+            {{ (lookup('ansible.builtin.file', playbook_dir ~ '/../../content/manifest.yml') | from_yaml).datastreams
+               | selectattr('name', 'equalto', 'ubuntu2404') | map(attribute='sha256') | first }}
+          rule_ids: "{{ native_sysctl_short_ids | map('regex_replace', '^', native_prefix) | list }}"
+
+    - name: Inspect the kernel parameter configuration before the role runs
+      ansible.builtin.find:
+        paths:
+          - /etc
+          - /etc/sysctl.d
+        patterns:
+          - "sysctl.conf"
+          - "*.conf"
+        file_type: any
+        hidden: true
+        follow: false
+      register: native_sysctl_before
+
+    - name: Read running kernel parameters before the role runs
+      ansible.builtin.slurp:
+        src: "/proc/sys/{{ item }}"
+      loop: "{{ native_sysctl_keys }}"
+      register: native_sysctl_running_before
+
+    - name: Run the remediate role with the kernel parameter rules in the profile and the running values on
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.remediate
+      vars:
+        linux_compliance_discovered: "{{ native_sysctl_profile }}"
+        linux_compliance_remediate_sysctl_runtime: true
+
+    - name: Inspect the kernel parameter configuration after the role ran
+      ansible.builtin.find:
+        paths:
+          - /etc
+          - /etc/sysctl.d
+        patterns:
+          - "sysctl.conf"
+          - "*.conf"
+        file_type: any
+        hidden: true
+        follow: false
+      register: native_sysctl_after
+
+    - name: Read running kernel parameters after the role ran
+      ansible.builtin.slurp:
+        src: "/proc/sys/{{ item }}"
+      loop: "{{ native_sysctl_keys }}"
+      register: native_sysctl_running_after
+
+    - name: Check that every kernel parameter rule was planned and reported once and that nothing changed
+      vars:
+        native_results: >-
+          {{ linux_compliance_remediated.results | selectattr('rule_id', 'in', native_sysctl_rules) | list }}
+        native_sysctl_listing_before: >-
+          {{ native_sysctl_before.files | sort(attribute='path') | map(attribute='path')
+             | zip(native_sysctl_before.files | sort(attribute='path') | map(attribute='mtime'),
+                   native_sysctl_before.files | sort(attribute='path') | map(attribute='size'))
+             | map('list') | list }}
+        native_sysctl_listing_after: >-
+          {{ native_sysctl_after.files | sort(attribute='path') | map(attribute='path')
+             | zip(native_sysctl_after.files | sort(attribute='path') | map(attribute='mtime'),
+                   native_sysctl_after.files | sort(attribute='path') | map(attribute='size'))
+             | map('list') | list }}
+      ansible.builtin.assert:
+        that:
+          - >-
+            __linux_compliance_remediate_plan.families | map(attribute='name') | list
+            == ['sysctl', 'ipv4_parameters', 'ipv6_parameters']
+          - native_results | map(attribute='rule_id') | sort == native_sysctl_rules | sort
+          - native_results | map(attribute='action') | unique | list == ['apply']
+          - native_results | map(attribute='status') | difference(native_sysctl_statuses) | list == []
+          - native_results | selectattr('status', 'equalto', 'applied') | rejectattr('changed') | list == []
+          - native_results | rejectattr('status', 'equalto', 'applied') | selectattr('changed') | list == []
+          - >-
+            native_results | rejectattr('status', 'in', ['applied', 'compliant'])
+            | selectattr('reason', 'none') | list == []
+          - native_sysctl_listing_before == native_sysctl_listing_after
+          - >-
+            native_sysctl_running_before.results | map(attribute='content') | list
+            == native_sysctl_running_after.results | map(attribute='content') | list
+        fail_msg: "{{ native_results | to_json }}"
+        quiet: true
+
+- name: Native families in check mode | A kernel parameter rule without its profile value fails before any change
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    linux_compliance_remediate_enabled: true
+    linux_compliance_remediate_allow_disruptive:
+      - ipv4_parameters
+    linux_compliance_discovered:
+      profile_id: xccdf_org.ssgproject.content_profile_cis_level1_server
+      benchmark_id: xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04
+      content_sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+      rule_ids:
+        - xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_all_rp_filter
+  tasks:
+    - name: Refuse to run outside check mode
+      ansible.builtin.assert:
+        that:
+          - ansible_check_mode
+        fail_msg: This test playbook only runs with --check; it must never change the host.
+        quiet: true
+
+    - name: Run the remediate role and expect the value check to stop it
+      block:
+        - name: Run the remediate role
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.remediate
+
+        - name: Fail because a kernel parameter rule without its profile value was not refused
+          ansible.builtin.fail:
+            msg: REMEDIATE-SYSCTL-PROFILE-VALUE-NOT-REFUSED
+      rescue:
+        - name: Check that the role stopped at the value check, before it read a configuration file
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name is search('Kernel parameters [|] Refuse a rule without a usable key')
+              - >-
+                ansible_failed_result.results | map(attribute='msg') | join(' ')
+                is search('The values come from the pinned content')
+            quiet: true
+
 - name: Native families in check mode | The family files and helpers refuse direct use
   hosts: localhost
   connection: local

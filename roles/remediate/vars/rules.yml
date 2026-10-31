@@ -2240,6 +2240,1569 @@ __linux_compliance_remediate_rules:
         - "Defaults !targetpw"
         - "Defaults !rootpw"
         - "Defaults !runaspw"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sysctl_fs_protected_fifos"
+    family: sysctl
+    disruptive: false
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sysctl_fs_protected_fifos_enabled
+    runbook: null
+    parameters:
+      key: "fs.protected_fifos"
+      path: "/etc/sysctl.d/999-freesecdev-sysctl-fs-protected-fifos.conf"
+      datatype: "int"
+      value: "2"
+      accepted:
+        "xccdf_org.ssgproject.content_benchmark_RHEL-9":
+          - "2"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sysctl_fs_protected_hardlinks"
+    family: sysctl
+    disruptive: false
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sysctl_fs_protected_hardlinks_enabled
+    runbook: null
+    parameters:
+      key: "fs.protected_hardlinks"
+      path: "/etc/sysctl.d/999-freesecdev-sysctl-fs-protected-hardlinks.conf"
+      datatype: "int"
+      value: "1"
+      accepted:
+        "xccdf_org.ssgproject.content_benchmark_RHEL-9":
+          - "1"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sysctl_fs_protected_regular"
+    family: sysctl
+    disruptive: false
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sysctl_fs_protected_regular_enabled
+    runbook: null
+    parameters:
+      key: "fs.protected_regular"
+      path: "/etc/sysctl.d/999-freesecdev-sysctl-fs-protected-regular.conf"
+      datatype: "int"
+      value: "2"
+      accepted:
+        "xccdf_org.ssgproject.content_benchmark_RHEL-9":
+          - "2"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sysctl_fs_protected_symlinks"
+    family: sysctl
+    disruptive: false
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sysctl_fs_protected_symlinks_enabled
+    runbook: null
+    parameters:
+      key: "fs.protected_symlinks"
+      path: "/etc/sysctl.d/999-freesecdev-sysctl-fs-protected-symlinks.conf"
+      datatype: "int"
+      value: "1"
+      accepted:
+        "xccdf_org.ssgproject.content_benchmark_RHEL-9":
+          - "1"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sysctl_fs_suid_dumpable"
+    family: sysctl
+    disruptive: false
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sysctl_fs_suid_dumpable_enabled
+    runbook: null
+    parameters:
+      key: "fs.suid_dumpable"
+      path: "/etc/sysctl.d/999-freesecdev-sysctl-fs-suid-dumpable.conf"
+      datatype: "int"
+      value: "0"
+      accepted:
+        "xccdf_org.ssgproject.content_benchmark_RHEL-9":
+          - "0"
+        "xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04":
+          - "0"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sysctl_kernel_core_pattern"
+    family: sysctl
+    disruptive: false
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sysctl_kernel_core_pattern_enabled
+    runbook: null
+    parameters:
+      key: "kernel.core_pattern"
+      path: "/etc/sysctl.d/999-freesecdev-sysctl-kernel-core-pattern.conf"
+      datatype: "string"
+      value: "|/bin/false"
+      accepted:
+        "xccdf_org.ssgproject.content_benchmark_RHEL-9":
+          - "|/bin/false"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sysctl_kernel_core_pattern_empty_string"
+    family: sysctl
+    disruptive: false
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sysctl_kernel_core_pattern_empty_string_enabled
+    runbook: null
+    parameters:
+      key: "kernel.core_pattern"
+      path: "/etc/sysctl.d/999-freesecdev-sysctl-kernel-core-pattern-empty-string.conf"
+      datatype: "string"
+      value: ""
+      accepted:
+        "xccdf_org.ssgproject.content_benchmark_RHEL-9":
+          - ""
+      empty_value: true
+  - rule_id: "xccdf_org.ssgproject.content_rule_sysctl_kernel_core_uses_pid"
+    family: sysctl
+    disruptive: false
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sysctl_kernel_core_uses_pid_enabled
+    runbook: null
+    parameters:
+      key: "kernel.core_uses_pid"
+      path: "/etc/sysctl.d/999-freesecdev-sysctl-kernel-core-uses-pid.conf"
+      datatype: "int"
+      value: "0"
+      accepted:
+        "xccdf_org.ssgproject.content_benchmark_RHEL-9":
+          - "0"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sysctl_kernel_dmesg_restrict"
+    family: sysctl
+    disruptive: false
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sysctl_kernel_dmesg_restrict_enabled
+    runbook: null
+    parameters:
+      key: "kernel.dmesg_restrict"
+      path: "/etc/sysctl.d/999-freesecdev-sysctl-kernel-dmesg-restrict.conf"
+      datatype: "int"
+      value: "1"
+      accepted:
+        "xccdf_org.ssgproject.content_benchmark_RHEL-9":
+          - "1"
+        "xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04":
+          - "1"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sysctl_kernel_kptr_restrict"
+    family: sysctl
+    disruptive: false
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sysctl_kernel_kptr_restrict_enabled
+    runbook: null
+    parameters:
+      key: "kernel.kptr_restrict"
+      path: "/etc/sysctl.d/999-freesecdev-sysctl-kernel-kptr-restrict.conf"
+      datatype: "int"
+      value: "1"
+      accepted:
+        "xccdf_org.ssgproject.content_benchmark_RHEL-9":
+          - "1"
+          - "2"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sysctl_kernel_panic_on_oops"
+    family: sysctl
+    disruptive: false
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sysctl_kernel_panic_on_oops_enabled
+    runbook: null
+    parameters:
+      key: "kernel.panic_on_oops"
+      path: "/etc/sysctl.d/999-freesecdev-sysctl-kernel-panic-on-oops.conf"
+      datatype: "int"
+      value: "1"
+      accepted:
+        "xccdf_org.ssgproject.content_benchmark_RHEL-9":
+          - "1"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sysctl_kernel_perf_cpu_time_max_percent"
+    family: sysctl
+    disruptive: false
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sysctl_kernel_perf_cpu_time_max_percent_enabled
+    runbook: null
+    parameters:
+      key: "kernel.perf_cpu_time_max_percent"
+      path: "/etc/sysctl.d/999-freesecdev-sysctl-kernel-perf-cpu-time-max-percent.conf"
+      datatype: "int"
+      value: "1"
+      accepted:
+        "xccdf_org.ssgproject.content_benchmark_RHEL-9":
+          - "1"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sysctl_kernel_perf_event_max_sample_rate"
+    family: sysctl
+    disruptive: false
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sysctl_kernel_perf_event_max_sample_rate_enabled
+    runbook: null
+    parameters:
+      key: "kernel.perf_event_max_sample_rate"
+      path: "/etc/sysctl.d/999-freesecdev-sysctl-kernel-perf-event-max-sample-rate.conf"
+      datatype: "int"
+      value: "1"
+      accepted:
+        "xccdf_org.ssgproject.content_benchmark_RHEL-9":
+          - "1"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sysctl_kernel_perf_event_paranoid"
+    family: sysctl
+    disruptive: false
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sysctl_kernel_perf_event_paranoid_enabled
+    runbook: null
+    parameters:
+      key: "kernel.perf_event_paranoid"
+      path: "/etc/sysctl.d/999-freesecdev-sysctl-kernel-perf-event-paranoid.conf"
+      datatype: "int"
+      value: "2"
+      accepted:
+        "xccdf_org.ssgproject.content_benchmark_RHEL-9":
+          - "2"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sysctl_kernel_randomize_va_space"
+    family: sysctl
+    disruptive: false
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sysctl_kernel_randomize_va_space_enabled
+    runbook: null
+    parameters:
+      key: "kernel.randomize_va_space"
+      path: "/etc/sysctl.d/999-freesecdev-sysctl-kernel-randomize-va-space.conf"
+      datatype: "int"
+      value: "2"
+      accepted:
+        "xccdf_org.ssgproject.content_benchmark_RHEL-9":
+          - "2"
+        "xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04":
+          - "2"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sysctl_kernel_sysrq"
+    family: sysctl
+    disruptive: false
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sysctl_kernel_sysrq_enabled
+    runbook: null
+    parameters:
+      key: "kernel.sysrq"
+      path: "/etc/sysctl.d/999-freesecdev-sysctl-kernel-sysrq.conf"
+      datatype: "int"
+      value: "0"
+      accepted:
+        "xccdf_org.ssgproject.content_benchmark_RHEL-9":
+          - "0"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sysctl_kernel_unprivileged_bpf_disabled_accept_default"
+    family: sysctl
+    disruptive: false
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sysctl_kernel_unprivileged_bpf_disabled_accept_default_enabled
+    runbook: null
+    parameters:
+      key: "kernel.unprivileged_bpf_disabled"
+      path: "/etc/sysctl.d/999-freesecdev-sysctl-kernel-unprivileged-bpf-disabled-accept-default.conf"
+      datatype: "int"
+      value: "2"
+      accepted:
+        "xccdf_org.ssgproject.content_benchmark_RHEL-9":
+          - "1"
+          - "2"
+      absent_accepted: true
+  - rule_id: "xccdf_org.ssgproject.content_rule_sysctl_kernel_yama_ptrace_scope"
+    family: sysctl
+    disruptive: false
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sysctl_kernel_yama_ptrace_scope_enabled
+    runbook: null
+    parameters:
+      key: "kernel.yama.ptrace_scope"
+      path: "/etc/sysctl.d/999-freesecdev-sysctl-kernel-yama-ptrace-scope.conf"
+      datatype: "int"
+      value: "1"
+      accepted:
+        "xccdf_org.ssgproject.content_benchmark_RHEL-9":
+          - "1"
+        "xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04":
+          - "1"
+          - "2"
+          - "3"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sysctl_net_core_bpf_jit_harden"
+    family: sysctl
+    disruptive: false
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sysctl_net_core_bpf_jit_harden_enabled
+    runbook: null
+    parameters:
+      key: "net.core.bpf_jit_harden"
+      path: "/etc/sysctl.d/999-freesecdev-sysctl-net-core-bpf-jit-harden.conf"
+      datatype: "int"
+      value: "2"
+      accepted:
+        "xccdf_org.ssgproject.content_benchmark_RHEL-9":
+          - "2"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_all_accept_local"
+    family: ipv4_parameters
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sysctl_net_ipv4_conf_all_accept_local_enabled
+    runbook: null
+    parameters:
+      key: "net.ipv4.conf.all.accept_local"
+      path: "/etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-accept-local.conf"
+      datatype: "int"
+      value: "0"
+      accepted:
+        "xccdf_org.ssgproject.content_benchmark_RHEL-9":
+          - "0"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_all_accept_redirects"
+    family: ipv4_parameters
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sysctl_net_ipv4_conf_all_accept_redirects_enabled
+    runbook: null
+    parameters:
+      key: "net.ipv4.conf.all.accept_redirects"
+      path: "/etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-accept-redirects.conf"
+      datatype: "int"
+      value_id: "sysctl_net_ipv4_conf_all_accept_redirects_value"
+      profile_values:
+        - datastream: "ubuntu2404"
+          content_sha256: "c4da7bea2e285326d692ade7c06c9f87750c0d6bd0e850a74c78220b893cb393"
+          profiles:
+            - cis_level1_server
+            - cis_level1_workstation
+            - cis_level2_server
+            - cis_level2_workstation
+          value:
+            - "0"
+        - datastream: "rhel9"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
+          profiles:
+            - anssi_bp28_enhanced
+            - anssi_bp28_high
+            - anssi_bp28_intermediary
+            - ccn_advanced
+            - ccn_basic
+            - ccn_intermediate
+            - cis
+            - cis_server_l1
+            - cis_workstation_l1
+            - cis_workstation_l2
+            - stig
+            - stig_gui
+          value:
+            - "0"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_all_accept_source_route"
+    family: ipv4_parameters
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sysctl_net_ipv4_conf_all_accept_source_route_enabled
+    runbook: null
+    parameters:
+      key: "net.ipv4.conf.all.accept_source_route"
+      path: "/etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-accept-source-route.conf"
+      datatype: "int"
+      value_id: "sysctl_net_ipv4_conf_all_accept_source_route_value"
+      profile_values:
+        - datastream: "ubuntu2404"
+          content_sha256: "c4da7bea2e285326d692ade7c06c9f87750c0d6bd0e850a74c78220b893cb393"
+          profiles:
+            - cis_level1_server
+            - cis_level1_workstation
+            - cis_level2_server
+            - cis_level2_workstation
+          value:
+            - "0"
+        - datastream: "rhel9"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
+          profiles:
+            - anssi_bp28_enhanced
+            - anssi_bp28_high
+            - anssi_bp28_intermediary
+            - ccn_advanced
+            - ccn_basic
+            - ccn_intermediate
+            - cis
+            - cis_server_l1
+            - cis_workstation_l1
+            - cis_workstation_l2
+            - stig
+            - stig_gui
+          value:
+            - "0"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_all_arp_filter"
+    family: ipv4_parameters
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sysctl_net_ipv4_conf_all_arp_filter_enabled
+    runbook: null
+    parameters:
+      key: "net.ipv4.conf.all.arp_filter"
+      path: "/etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-arp-filter.conf"
+      datatype: "int"
+      value_id: "sysctl_net_ipv4_conf_all_arp_filter_value"
+      profile_values:
+        - datastream: "rhel9"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
+          profiles:
+            - anssi_bp28_enhanced
+            - anssi_bp28_high
+            - anssi_bp28_intermediary
+          value:
+            - "0"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_all_arp_ignore"
+    family: ipv4_parameters
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sysctl_net_ipv4_conf_all_arp_ignore_enabled
+    runbook: null
+    parameters:
+      key: "net.ipv4.conf.all.arp_ignore"
+      path: "/etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-arp-ignore.conf"
+      datatype: "int"
+      value_id: "sysctl_net_ipv4_conf_all_arp_ignore_value"
+      profile_values:
+        - datastream: "rhel9"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
+          profiles:
+            - anssi_bp28_enhanced
+            - anssi_bp28_high
+            - anssi_bp28_intermediary
+          value:
+            - "2"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_all_drop_gratuitous_arp"
+    family: ipv4_parameters
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sysctl_net_ipv4_conf_all_drop_gratuitous_arp_enabled
+    runbook: null
+    parameters:
+      key: "net.ipv4.conf.all.drop_gratuitous_arp"
+      path: "/etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-drop-gratuitous-arp.conf"
+      datatype: "int"
+      value: "1"
+      accepted:
+        "xccdf_org.ssgproject.content_benchmark_RHEL-9":
+          - "1"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_all_forwarding"
+    family: ipv4_parameters
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sysctl_net_ipv4_conf_all_forwarding_enabled
+    runbook: null
+    parameters:
+      key: "net.ipv4.conf.all.forwarding"
+      path: "/etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-forwarding.conf"
+      datatype: "int"
+      value_id: "sysctl_net_ipv4_conf_all_forwarding_value"
+      profile_values:
+        - datastream: "rhel9"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
+          profiles:
+            - stig
+            - stig_gui
+          value:
+            - "0"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_all_log_martians"
+    family: ipv4_parameters
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sysctl_net_ipv4_conf_all_log_martians_enabled
+    runbook: null
+    parameters:
+      key: "net.ipv4.conf.all.log_martians"
+      path: "/etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-log-martians.conf"
+      datatype: "int"
+      value_id: "sysctl_net_ipv4_conf_all_log_martians_value"
+      profile_values:
+        - datastream: "ubuntu2404"
+          content_sha256: "c4da7bea2e285326d692ade7c06c9f87750c0d6bd0e850a74c78220b893cb393"
+          profiles:
+            - cis_level1_server
+            - cis_level1_workstation
+            - cis_level2_server
+            - cis_level2_workstation
+          value:
+            - "1"
+        - datastream: "rhel9"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
+          profiles:
+            - ccn_advanced
+            - ccn_basic
+            - ccn_intermediate
+            - cis
+            - cis_server_l1
+            - cis_workstation_l1
+            - cis_workstation_l2
+            - stig
+            - stig_gui
+          value:
+            - "1"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_all_route_localnet"
+    family: ipv4_parameters
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sysctl_net_ipv4_conf_all_route_localnet_enabled
+    runbook: null
+    parameters:
+      key: "net.ipv4.conf.all.route_localnet"
+      path: "/etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-route-localnet.conf"
+      datatype: "int"
+      value: "0"
+      accepted:
+        "xccdf_org.ssgproject.content_benchmark_RHEL-9":
+          - "0"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_all_rp_filter"
+    family: ipv4_parameters
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sysctl_net_ipv4_conf_all_rp_filter_enabled
+    runbook: null
+    parameters:
+      key: "net.ipv4.conf.all.rp_filter"
+      path: "/etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-rp-filter.conf"
+      datatype: "int"
+      value_id: "sysctl_net_ipv4_conf_all_rp_filter_value"
+      profile_values:
+        - datastream: "ubuntu2404"
+          content_sha256: "c4da7bea2e285326d692ade7c06c9f87750c0d6bd0e850a74c78220b893cb393"
+          profiles:
+            - cis_level1_server
+            - cis_level1_workstation
+            - cis_level2_server
+            - cis_level2_workstation
+          value:
+            - "1"
+        - datastream: "rhel9"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
+          profiles:
+            - anssi_bp28_enhanced
+            - anssi_bp28_high
+            - anssi_bp28_intermediary
+            - ccn_advanced
+            - ccn_basic
+            - ccn_intermediate
+            - cis
+            - cis_server_l1
+            - cis_workstation_l1
+            - cis_workstation_l2
+            - "pci-dss"
+            - stig
+            - stig_gui
+          value:
+            - "1"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_all_secure_redirects"
+    family: ipv4_parameters
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sysctl_net_ipv4_conf_all_secure_redirects_enabled
+    runbook: null
+    parameters:
+      key: "net.ipv4.conf.all.secure_redirects"
+      path: "/etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-secure-redirects.conf"
+      datatype: "int"
+      value_id: "sysctl_net_ipv4_conf_all_secure_redirects_value"
+      profile_values:
+        - datastream: "ubuntu2404"
+          content_sha256: "c4da7bea2e285326d692ade7c06c9f87750c0d6bd0e850a74c78220b893cb393"
+          profiles:
+            - cis_level1_server
+            - cis_level1_workstation
+            - cis_level2_server
+            - cis_level2_workstation
+          value:
+            - "0"
+        - datastream: "rhel9"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
+          profiles:
+            - anssi_bp28_enhanced
+            - anssi_bp28_high
+            - anssi_bp28_intermediary
+            - ccn_advanced
+            - ccn_basic
+            - ccn_intermediate
+            - cis
+            - cis_server_l1
+            - cis_workstation_l1
+            - cis_workstation_l2
+            - "pci-dss"
+          value:
+            - "0"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_all_send_redirects"
+    family: ipv4_parameters
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sysctl_net_ipv4_conf_all_send_redirects_enabled
+    runbook: null
+    parameters:
+      key: "net.ipv4.conf.all.send_redirects"
+      path: "/etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-send-redirects.conf"
+      datatype: "int"
+      value: "0"
+      accepted:
+        "xccdf_org.ssgproject.content_benchmark_RHEL-9":
+          - "0"
+        "xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04":
+          - "0"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_all_shared_media"
+    family: ipv4_parameters
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sysctl_net_ipv4_conf_all_shared_media_enabled
+    runbook: null
+    parameters:
+      key: "net.ipv4.conf.all.shared_media"
+      path: "/etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-shared-media.conf"
+      datatype: "int"
+      value_id: "sysctl_net_ipv4_conf_all_shared_media_value"
+      profile_values:
+        - datastream: "rhel9"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
+          profiles:
+            - anssi_bp28_enhanced
+            - anssi_bp28_high
+            - anssi_bp28_intermediary
+          value:
+            - "0"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_default_accept_redirects"
+    family: ipv4_parameters
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sysctl_net_ipv4_conf_default_accept_redirects_enabled
+    runbook: null
+    parameters:
+      key: "net.ipv4.conf.default.accept_redirects"
+      path: "/etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-default-accept-redirects.conf"
+      datatype: "int"
+      value_id: "sysctl_net_ipv4_conf_default_accept_redirects_value"
+      profile_values:
+        - datastream: "ubuntu2404"
+          content_sha256: "c4da7bea2e285326d692ade7c06c9f87750c0d6bd0e850a74c78220b893cb393"
+          profiles:
+            - cis_level1_server
+            - cis_level1_workstation
+            - cis_level2_server
+            - cis_level2_workstation
+          value:
+            - "0"
+        - datastream: "rhel9"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
+          profiles:
+            - anssi_bp28_enhanced
+            - anssi_bp28_high
+            - anssi_bp28_intermediary
+            - ccn_advanced
+            - ccn_basic
+            - ccn_intermediate
+            - cis
+            - cis_server_l1
+            - cis_workstation_l1
+            - cis_workstation_l2
+            - "pci-dss"
+            - stig
+            - stig_gui
+          value:
+            - "0"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_default_accept_source_route"
+    family: ipv4_parameters
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sysctl_net_ipv4_conf_default_accept_source_route_enabled
+    runbook: null
+    parameters:
+      key: "net.ipv4.conf.default.accept_source_route"
+      path: "/etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-default-accept-source-route.conf"
+      datatype: "int"
+      value_id: "sysctl_net_ipv4_conf_default_accept_source_route_value"
+      profile_values:
+        - datastream: "ubuntu2404"
+          content_sha256: "c4da7bea2e285326d692ade7c06c9f87750c0d6bd0e850a74c78220b893cb393"
+          profiles:
+            - cis_level1_server
+            - cis_level1_workstation
+            - cis_level2_server
+            - cis_level2_workstation
+          value:
+            - "0"
+        - datastream: "rhel9"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
+          profiles:
+            - anssi_bp28_enhanced
+            - anssi_bp28_high
+            - anssi_bp28_intermediary
+            - ccn_advanced
+            - ccn_basic
+            - ccn_intermediate
+            - cis
+            - cis_server_l1
+            - cis_workstation_l1
+            - cis_workstation_l2
+            - stig
+            - stig_gui
+          value:
+            - "0"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_default_log_martians"
+    family: ipv4_parameters
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sysctl_net_ipv4_conf_default_log_martians_enabled
+    runbook: null
+    parameters:
+      key: "net.ipv4.conf.default.log_martians"
+      path: "/etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-default-log-martians.conf"
+      datatype: "int"
+      value_id: "sysctl_net_ipv4_conf_default_log_martians_value"
+      profile_values:
+        - datastream: "ubuntu2404"
+          content_sha256: "c4da7bea2e285326d692ade7c06c9f87750c0d6bd0e850a74c78220b893cb393"
+          profiles:
+            - cis_level1_server
+            - cis_level1_workstation
+            - cis_level2_server
+            - cis_level2_workstation
+          value:
+            - "1"
+        - datastream: "rhel9"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
+          profiles:
+            - ccn_advanced
+            - ccn_basic
+            - ccn_intermediate
+            - cis
+            - cis_server_l1
+            - cis_workstation_l1
+            - cis_workstation_l2
+            - stig
+            - stig_gui
+          value:
+            - "1"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_default_rp_filter"
+    family: ipv4_parameters
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sysctl_net_ipv4_conf_default_rp_filter_enabled
+    runbook: null
+    parameters:
+      key: "net.ipv4.conf.default.rp_filter"
+      path: "/etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-default-rp-filter.conf"
+      datatype: "int"
+      value_id: "sysctl_net_ipv4_conf_default_rp_filter_value"
+      profile_values:
+        - datastream: "ubuntu2404"
+          content_sha256: "c4da7bea2e285326d692ade7c06c9f87750c0d6bd0e850a74c78220b893cb393"
+          profiles:
+            - cis_level1_server
+            - cis_level1_workstation
+            - cis_level2_server
+            - cis_level2_workstation
+          value:
+            - "1"
+        - datastream: "rhel9"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
+          profiles:
+            - anssi_bp28_enhanced
+            - anssi_bp28_high
+            - anssi_bp28_intermediary
+            - ccn_advanced
+            - ccn_basic
+            - ccn_intermediate
+            - cis
+            - cis_server_l1
+            - cis_workstation_l1
+            - cis_workstation_l2
+            - stig
+            - stig_gui
+          value:
+            - "1"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_default_secure_redirects"
+    family: ipv4_parameters
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sysctl_net_ipv4_conf_default_secure_redirects_enabled
+    runbook: null
+    parameters:
+      key: "net.ipv4.conf.default.secure_redirects"
+      path: "/etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-default-secure-redirects.conf"
+      datatype: "int"
+      value_id: "sysctl_net_ipv4_conf_default_secure_redirects_value"
+      profile_values:
+        - datastream: "ubuntu2404"
+          content_sha256: "c4da7bea2e285326d692ade7c06c9f87750c0d6bd0e850a74c78220b893cb393"
+          profiles:
+            - cis_level1_server
+            - cis_level1_workstation
+            - cis_level2_server
+            - cis_level2_workstation
+          value:
+            - "0"
+        - datastream: "rhel9"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
+          profiles:
+            - anssi_bp28_enhanced
+            - anssi_bp28_high
+            - anssi_bp28_intermediary
+            - ccn_advanced
+            - ccn_basic
+            - ccn_intermediate
+            - cis
+            - cis_server_l1
+            - cis_workstation_l1
+            - cis_workstation_l2
+          value:
+            - "0"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_default_send_redirects"
+    family: ipv4_parameters
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sysctl_net_ipv4_conf_default_send_redirects_enabled
+    runbook: null
+    parameters:
+      key: "net.ipv4.conf.default.send_redirects"
+      path: "/etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-default-send-redirects.conf"
+      datatype: "int"
+      value: "0"
+      accepted:
+        "xccdf_org.ssgproject.content_benchmark_RHEL-9":
+          - "0"
+        "xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04":
+          - "0"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_default_shared_media"
+    family: ipv4_parameters
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sysctl_net_ipv4_conf_default_shared_media_enabled
+    runbook: null
+    parameters:
+      key: "net.ipv4.conf.default.shared_media"
+      path: "/etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-default-shared-media.conf"
+      datatype: "int"
+      value_id: "sysctl_net_ipv4_conf_default_shared_media_value"
+      profile_values:
+        - datastream: "rhel9"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
+          profiles:
+            - anssi_bp28_enhanced
+            - anssi_bp28_high
+            - anssi_bp28_intermediary
+          value:
+            - "0"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_icmp_echo_ignore_broadcasts"
+    family: ipv4_parameters
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sysctl_net_ipv4_icmp_echo_ignore_broadcasts_enabled
+    runbook: null
+    parameters:
+      key: "net.ipv4.icmp_echo_ignore_broadcasts"
+      path: "/etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-icmp-echo-ignore-broadcasts.conf"
+      datatype: "int"
+      value_id: "sysctl_net_ipv4_icmp_echo_ignore_broadcasts_value"
+      profile_values:
+        - datastream: "ubuntu2404"
+          content_sha256: "c4da7bea2e285326d692ade7c06c9f87750c0d6bd0e850a74c78220b893cb393"
+          profiles:
+            - cis_level1_server
+            - cis_level1_workstation
+            - cis_level2_server
+            - cis_level2_workstation
+          value:
+            - "1"
+        - datastream: "rhel9"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
+          profiles:
+            - ccn_advanced
+            - ccn_basic
+            - ccn_intermediate
+            - cis
+            - cis_server_l1
+            - cis_workstation_l1
+            - cis_workstation_l2
+            - "pci-dss"
+            - stig
+            - stig_gui
+          value:
+            - "1"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_icmp_ignore_bogus_error_responses"
+    family: ipv4_parameters
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sysctl_net_ipv4_icmp_ignore_bogus_error_responses_enabled
+    runbook: null
+    parameters:
+      key: "net.ipv4.icmp_ignore_bogus_error_responses"
+      path: "/etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-icmp-ignore-bogus-error-responses.conf"
+      datatype: "int"
+      value_id: "sysctl_net_ipv4_icmp_ignore_bogus_error_responses_value"
+      profile_values:
+        - datastream: "ubuntu2404"
+          content_sha256: "c4da7bea2e285326d692ade7c06c9f87750c0d6bd0e850a74c78220b893cb393"
+          profiles:
+            - cis_level1_server
+            - cis_level1_workstation
+            - cis_level2_server
+            - cis_level2_workstation
+          value:
+            - "1"
+        - datastream: "rhel9"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
+          profiles:
+            - anssi_bp28_enhanced
+            - anssi_bp28_high
+            - anssi_bp28_intermediary
+            - ccn_advanced
+            - ccn_basic
+            - ccn_intermediate
+            - cis
+            - cis_server_l1
+            - cis_workstation_l1
+            - cis_workstation_l2
+            - "pci-dss"
+            - stig
+            - stig_gui
+          value:
+            - "1"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_ip_forward"
+    family: ipv4_parameters
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sysctl_net_ipv4_ip_forward_enabled
+    runbook: null
+    parameters:
+      key: "net.ipv4.ip_forward"
+      path: "/etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-ip-forward.conf"
+      datatype: "int"
+      value: "0"
+      accepted:
+        "xccdf_org.ssgproject.content_benchmark_RHEL-9":
+          - "0"
+        "xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04":
+          - "0"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_ip_local_port_range"
+    family: ipv4_parameters
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sysctl_net_ipv4_ip_local_port_range_enabled
+    runbook: null
+    parameters:
+      key: "net.ipv4.ip_local_port_range"
+      path: "/etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-ip-local-port-range.conf"
+      datatype: "string"
+      value: "32768 65535"
+      accepted_pattern: "32768\\s*65535"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_tcp_rfc1337"
+    family: ipv4_parameters
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sysctl_net_ipv4_tcp_rfc1337_enabled
+    runbook: null
+    parameters:
+      key: "net.ipv4.tcp_rfc1337"
+      path: "/etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-tcp-rfc1337.conf"
+      datatype: "int"
+      value_id: "sysctl_net_ipv4_tcp_rfc1337_value"
+      profile_values:
+        - datastream: "rhel9"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
+          profiles:
+            - anssi_bp28_enhanced
+            - anssi_bp28_high
+            - anssi_bp28_intermediary
+          value:
+            - "1"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_tcp_syncookies"
+    family: ipv4_parameters
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sysctl_net_ipv4_tcp_syncookies_enabled
+    runbook: null
+    parameters:
+      key: "net.ipv4.tcp_syncookies"
+      path: "/etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-tcp-syncookies.conf"
+      datatype: "int"
+      value_id: "sysctl_net_ipv4_tcp_syncookies_value"
+      profile_values:
+        - datastream: "ubuntu2404"
+          content_sha256: "c4da7bea2e285326d692ade7c06c9f87750c0d6bd0e850a74c78220b893cb393"
+          profiles:
+            - cis_level1_server
+            - cis_level1_workstation
+            - cis_level2_server
+            - cis_level2_workstation
+            - stig
+          value:
+            - "1"
+        - datastream: "rhel9"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
+          profiles:
+            - anssi_bp28_enhanced
+            - anssi_bp28_high
+            - anssi_bp28_intermediary
+            - ccn_advanced
+            - ccn_basic
+            - ccn_intermediate
+            - cis
+            - cis_server_l1
+            - cis_workstation_l1
+            - cis_workstation_l2
+            - "pci-dss"
+            - stig
+            - stig_gui
+          value:
+            - "1"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sysctl_net_ipv6_conf_all_accept_ra"
+    family: ipv6_parameters
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sysctl_net_ipv6_conf_all_accept_ra_enabled
+    runbook: null
+    parameters:
+      key: "net.ipv6.conf.all.accept_ra"
+      path: "/etc/sysctl.d/999-freesecdev-sysctl-net-ipv6-conf-all-accept-ra.conf"
+      datatype: "int"
+      value_id: "sysctl_net_ipv6_conf_all_accept_ra_value"
+      profile_values:
+        - datastream: "ubuntu2404"
+          content_sha256: "c4da7bea2e285326d692ade7c06c9f87750c0d6bd0e850a74c78220b893cb393"
+          profiles:
+            - cis_level1_server
+            - cis_level1_workstation
+            - cis_level2_server
+            - cis_level2_workstation
+          value:
+            - "0"
+        - datastream: "rhel9"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
+          profiles:
+            - ccn_advanced
+            - ccn_basic
+            - ccn_intermediate
+            - cis
+            - cis_server_l1
+            - cis_workstation_l1
+            - cis_workstation_l2
+            - stig
+            - stig_gui
+          value:
+            - "0"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sysctl_net_ipv6_conf_all_accept_ra_defrtr"
+    family: ipv6_parameters
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sysctl_net_ipv6_conf_all_accept_ra_defrtr_enabled
+    runbook: null
+    parameters:
+      key: "net.ipv6.conf.all.accept_ra_defrtr"
+      path: "/etc/sysctl.d/999-freesecdev-sysctl-net-ipv6-conf-all-accept-ra-defrtr.conf"
+      datatype: "int"
+      value_id: "sysctl_net_ipv6_conf_all_accept_ra_defrtr_value"
+      profile_values:
+        - datastream: "rhel9"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
+          profiles:
+            - anssi_bp28_enhanced
+            - anssi_bp28_high
+            - anssi_bp28_intermediary
+          value:
+            - "0"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sysctl_net_ipv6_conf_all_accept_ra_pinfo"
+    family: ipv6_parameters
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sysctl_net_ipv6_conf_all_accept_ra_pinfo_enabled
+    runbook: null
+    parameters:
+      key: "net.ipv6.conf.all.accept_ra_pinfo"
+      path: "/etc/sysctl.d/999-freesecdev-sysctl-net-ipv6-conf-all-accept-ra-pinfo.conf"
+      datatype: "int"
+      value_id: "sysctl_net_ipv6_conf_all_accept_ra_pinfo_value"
+      profile_values:
+        - datastream: "rhel9"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
+          profiles:
+            - anssi_bp28_enhanced
+            - anssi_bp28_high
+            - anssi_bp28_intermediary
+          value:
+            - "0"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sysctl_net_ipv6_conf_all_accept_ra_rtr_pref"
+    family: ipv6_parameters
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sysctl_net_ipv6_conf_all_accept_ra_rtr_pref_enabled
+    runbook: null
+    parameters:
+      key: "net.ipv6.conf.all.accept_ra_rtr_pref"
+      path: "/etc/sysctl.d/999-freesecdev-sysctl-net-ipv6-conf-all-accept-ra-rtr-pref.conf"
+      datatype: "int"
+      value_id: "sysctl_net_ipv6_conf_all_accept_ra_rtr_pref_value"
+      profile_values:
+        - datastream: "rhel9"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
+          profiles:
+            - anssi_bp28_enhanced
+            - anssi_bp28_high
+            - anssi_bp28_intermediary
+          value:
+            - "0"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sysctl_net_ipv6_conf_all_accept_redirects"
+    family: ipv6_parameters
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sysctl_net_ipv6_conf_all_accept_redirects_enabled
+    runbook: null
+    parameters:
+      key: "net.ipv6.conf.all.accept_redirects"
+      path: "/etc/sysctl.d/999-freesecdev-sysctl-net-ipv6-conf-all-accept-redirects.conf"
+      datatype: "int"
+      value_id: "sysctl_net_ipv6_conf_all_accept_redirects_value"
+      profile_values:
+        - datastream: "ubuntu2404"
+          content_sha256: "c4da7bea2e285326d692ade7c06c9f87750c0d6bd0e850a74c78220b893cb393"
+          profiles:
+            - cis_level1_server
+            - cis_level1_workstation
+            - cis_level2_server
+            - cis_level2_workstation
+          value:
+            - "0"
+        - datastream: "rhel9"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
+          profiles:
+            - anssi_bp28_enhanced
+            - anssi_bp28_high
+            - anssi_bp28_intermediary
+            - ccn_advanced
+            - ccn_basic
+            - ccn_intermediate
+            - cis
+            - cis_server_l1
+            - cis_workstation_l1
+            - cis_workstation_l2
+            - stig
+            - stig_gui
+          value:
+            - "0"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sysctl_net_ipv6_conf_all_accept_source_route"
+    family: ipv6_parameters
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sysctl_net_ipv6_conf_all_accept_source_route_enabled
+    runbook: null
+    parameters:
+      key: "net.ipv6.conf.all.accept_source_route"
+      path: "/etc/sysctl.d/999-freesecdev-sysctl-net-ipv6-conf-all-accept-source-route.conf"
+      datatype: "int"
+      value_id: "sysctl_net_ipv6_conf_all_accept_source_route_value"
+      profile_values:
+        - datastream: "ubuntu2404"
+          content_sha256: "c4da7bea2e285326d692ade7c06c9f87750c0d6bd0e850a74c78220b893cb393"
+          profiles:
+            - cis_level1_server
+            - cis_level1_workstation
+            - cis_level2_server
+            - cis_level2_workstation
+          value:
+            - "0"
+        - datastream: "rhel9"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
+          profiles:
+            - anssi_bp28_enhanced
+            - anssi_bp28_high
+            - anssi_bp28_intermediary
+            - ccn_advanced
+            - ccn_basic
+            - ccn_intermediate
+            - cis
+            - cis_server_l1
+            - cis_workstation_l1
+            - cis_workstation_l2
+            - stig
+            - stig_gui
+          value:
+            - "0"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sysctl_net_ipv6_conf_all_autoconf"
+    family: ipv6_parameters
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sysctl_net_ipv6_conf_all_autoconf_enabled
+    runbook: null
+    parameters:
+      key: "net.ipv6.conf.all.autoconf"
+      path: "/etc/sysctl.d/999-freesecdev-sysctl-net-ipv6-conf-all-autoconf.conf"
+      datatype: "int"
+      value_id: "sysctl_net_ipv6_conf_all_autoconf_value"
+      profile_values:
+        - datastream: "rhel9"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
+          profiles:
+            - anssi_bp28_enhanced
+            - anssi_bp28_high
+            - anssi_bp28_intermediary
+          value:
+            - "0"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sysctl_net_ipv6_conf_all_forwarding"
+    family: ipv6_parameters
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sysctl_net_ipv6_conf_all_forwarding_enabled
+    runbook: null
+    parameters:
+      key: "net.ipv6.conf.all.forwarding"
+      path: "/etc/sysctl.d/999-freesecdev-sysctl-net-ipv6-conf-all-forwarding.conf"
+      datatype: "int"
+      value_id: "sysctl_net_ipv6_conf_all_forwarding_value"
+      profile_values:
+        - datastream: "ubuntu2404"
+          content_sha256: "c4da7bea2e285326d692ade7c06c9f87750c0d6bd0e850a74c78220b893cb393"
+          profiles:
+            - cis_level1_server
+            - cis_level1_workstation
+            - cis_level2_server
+            - cis_level2_workstation
+          value:
+            - "0"
+        - datastream: "rhel9"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
+          profiles:
+            - cis
+            - cis_server_l1
+            - cis_workstation_l1
+            - cis_workstation_l2
+            - stig
+            - stig_gui
+          value:
+            - "0"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sysctl_net_ipv6_conf_all_max_addresses"
+    family: ipv6_parameters
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sysctl_net_ipv6_conf_all_max_addresses_enabled
+    runbook: null
+    parameters:
+      key: "net.ipv6.conf.all.max_addresses"
+      path: "/etc/sysctl.d/999-freesecdev-sysctl-net-ipv6-conf-all-max-addresses.conf"
+      datatype: "int"
+      value_id: "sysctl_net_ipv6_conf_all_max_addresses_value"
+      profile_values:
+        - datastream: "rhel9"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
+          profiles:
+            - anssi_bp28_enhanced
+            - anssi_bp28_high
+            - anssi_bp28_intermediary
+          value:
+            - "1"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sysctl_net_ipv6_conf_all_router_solicitations"
+    family: ipv6_parameters
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sysctl_net_ipv6_conf_all_router_solicitations_enabled
+    runbook: null
+    parameters:
+      key: "net.ipv6.conf.all.router_solicitations"
+      path: "/etc/sysctl.d/999-freesecdev-sysctl-net-ipv6-conf-all-router-solicitations.conf"
+      datatype: "int"
+      value_id: "sysctl_net_ipv6_conf_all_router_solicitations_value"
+      profile_values:
+        - datastream: "rhel9"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
+          profiles:
+            - anssi_bp28_enhanced
+            - anssi_bp28_high
+            - anssi_bp28_intermediary
+          value:
+            - "0"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sysctl_net_ipv6_conf_default_accept_ra"
+    family: ipv6_parameters
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sysctl_net_ipv6_conf_default_accept_ra_enabled
+    runbook: null
+    parameters:
+      key: "net.ipv6.conf.default.accept_ra"
+      path: "/etc/sysctl.d/999-freesecdev-sysctl-net-ipv6-conf-default-accept-ra.conf"
+      datatype: "int"
+      value_id: "sysctl_net_ipv6_conf_default_accept_ra_value"
+      profile_values:
+        - datastream: "ubuntu2404"
+          content_sha256: "c4da7bea2e285326d692ade7c06c9f87750c0d6bd0e850a74c78220b893cb393"
+          profiles:
+            - cis_level1_server
+            - cis_level1_workstation
+            - cis_level2_server
+            - cis_level2_workstation
+          value:
+            - "0"
+        - datastream: "rhel9"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
+          profiles:
+            - ccn_advanced
+            - ccn_basic
+            - ccn_intermediate
+            - cis
+            - cis_server_l1
+            - cis_workstation_l1
+            - cis_workstation_l2
+            - stig
+            - stig_gui
+          value:
+            - "0"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sysctl_net_ipv6_conf_default_accept_ra_defrtr"
+    family: ipv6_parameters
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sysctl_net_ipv6_conf_default_accept_ra_defrtr_enabled
+    runbook: null
+    parameters:
+      key: "net.ipv6.conf.default.accept_ra_defrtr"
+      path: "/etc/sysctl.d/999-freesecdev-sysctl-net-ipv6-conf-default-accept-ra-defrtr.conf"
+      datatype: "int"
+      value_id: "sysctl_net_ipv6_conf_default_accept_ra_defrtr_value"
+      profile_values:
+        - datastream: "rhel9"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
+          profiles:
+            - anssi_bp28_enhanced
+            - anssi_bp28_high
+            - anssi_bp28_intermediary
+          value:
+            - "0"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sysctl_net_ipv6_conf_default_accept_ra_pinfo"
+    family: ipv6_parameters
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sysctl_net_ipv6_conf_default_accept_ra_pinfo_enabled
+    runbook: null
+    parameters:
+      key: "net.ipv6.conf.default.accept_ra_pinfo"
+      path: "/etc/sysctl.d/999-freesecdev-sysctl-net-ipv6-conf-default-accept-ra-pinfo.conf"
+      datatype: "int"
+      value_id: "sysctl_net_ipv6_conf_default_accept_ra_pinfo_value"
+      profile_values:
+        - datastream: "rhel9"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
+          profiles:
+            - anssi_bp28_enhanced
+            - anssi_bp28_high
+            - anssi_bp28_intermediary
+          value:
+            - "0"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sysctl_net_ipv6_conf_default_accept_ra_rtr_pref"
+    family: ipv6_parameters
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sysctl_net_ipv6_conf_default_accept_ra_rtr_pref_enabled
+    runbook: null
+    parameters:
+      key: "net.ipv6.conf.default.accept_ra_rtr_pref"
+      path: "/etc/sysctl.d/999-freesecdev-sysctl-net-ipv6-conf-default-accept-ra-rtr-pref.conf"
+      datatype: "int"
+      value_id: "sysctl_net_ipv6_conf_default_accept_ra_rtr_pref_value"
+      profile_values:
+        - datastream: "rhel9"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
+          profiles:
+            - anssi_bp28_enhanced
+            - anssi_bp28_high
+            - anssi_bp28_intermediary
+          value:
+            - "0"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sysctl_net_ipv6_conf_default_accept_redirects"
+    family: ipv6_parameters
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sysctl_net_ipv6_conf_default_accept_redirects_enabled
+    runbook: null
+    parameters:
+      key: "net.ipv6.conf.default.accept_redirects"
+      path: "/etc/sysctl.d/999-freesecdev-sysctl-net-ipv6-conf-default-accept-redirects.conf"
+      datatype: "int"
+      value_id: "sysctl_net_ipv6_conf_default_accept_redirects_value"
+      profile_values:
+        - datastream: "ubuntu2404"
+          content_sha256: "c4da7bea2e285326d692ade7c06c9f87750c0d6bd0e850a74c78220b893cb393"
+          profiles:
+            - cis_level1_server
+            - cis_level1_workstation
+            - cis_level2_server
+            - cis_level2_workstation
+          value:
+            - "0"
+        - datastream: "rhel9"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
+          profiles:
+            - anssi_bp28_enhanced
+            - anssi_bp28_high
+            - anssi_bp28_intermediary
+            - ccn_advanced
+            - ccn_basic
+            - ccn_intermediate
+            - cis
+            - cis_server_l1
+            - cis_workstation_l1
+            - cis_workstation_l2
+            - stig
+            - stig_gui
+          value:
+            - "0"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sysctl_net_ipv6_conf_default_accept_source_route"
+    family: ipv6_parameters
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sysctl_net_ipv6_conf_default_accept_source_route_enabled
+    runbook: null
+    parameters:
+      key: "net.ipv6.conf.default.accept_source_route"
+      path: "/etc/sysctl.d/999-freesecdev-sysctl-net-ipv6-conf-default-accept-source-route.conf"
+      datatype: "int"
+      value_id: "sysctl_net_ipv6_conf_default_accept_source_route_value"
+      profile_values:
+        - datastream: "ubuntu2404"
+          content_sha256: "c4da7bea2e285326d692ade7c06c9f87750c0d6bd0e850a74c78220b893cb393"
+          profiles:
+            - cis_level1_server
+            - cis_level1_workstation
+            - cis_level2_server
+            - cis_level2_workstation
+          value:
+            - "0"
+        - datastream: "rhel9"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
+          profiles:
+            - anssi_bp28_enhanced
+            - anssi_bp28_high
+            - anssi_bp28_intermediary
+            - ccn_advanced
+            - ccn_basic
+            - ccn_intermediate
+            - cis
+            - cis_server_l1
+            - cis_workstation_l1
+            - cis_workstation_l2
+            - "pci-dss"
+            - stig
+            - stig_gui
+          value:
+            - "0"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sysctl_net_ipv6_conf_default_autoconf"
+    family: ipv6_parameters
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sysctl_net_ipv6_conf_default_autoconf_enabled
+    runbook: null
+    parameters:
+      key: "net.ipv6.conf.default.autoconf"
+      path: "/etc/sysctl.d/999-freesecdev-sysctl-net-ipv6-conf-default-autoconf.conf"
+      datatype: "int"
+      value_id: "sysctl_net_ipv6_conf_default_autoconf_value"
+      profile_values:
+        - datastream: "rhel9"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
+          profiles:
+            - anssi_bp28_enhanced
+            - anssi_bp28_high
+            - anssi_bp28_intermediary
+          value:
+            - "0"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sysctl_net_ipv6_conf_default_max_addresses"
+    family: ipv6_parameters
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sysctl_net_ipv6_conf_default_max_addresses_enabled
+    runbook: null
+    parameters:
+      key: "net.ipv6.conf.default.max_addresses"
+      path: "/etc/sysctl.d/999-freesecdev-sysctl-net-ipv6-conf-default-max-addresses.conf"
+      datatype: "int"
+      value_id: "sysctl_net_ipv6_conf_default_max_addresses_value"
+      profile_values:
+        - datastream: "rhel9"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
+          profiles:
+            - anssi_bp28_enhanced
+            - anssi_bp28_high
+            - anssi_bp28_intermediary
+          value:
+            - "1"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sysctl_net_ipv6_conf_default_router_solicitations"
+    family: ipv6_parameters
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sysctl_net_ipv6_conf_default_router_solicitations_enabled
+    runbook: null
+    parameters:
+      key: "net.ipv6.conf.default.router_solicitations"
+      path: "/etc/sysctl.d/999-freesecdev-sysctl-net-ipv6-conf-default-router-solicitations.conf"
+      datatype: "int"
+      value_id: "sysctl_net_ipv6_conf_default_router_solicitations_value"
+      profile_values:
+        - datastream: "rhel9"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
+          profiles:
+            - anssi_bp28_enhanced
+            - anssi_bp28_high
+            - anssi_bp28_intermediary
+          value:
+            - "0"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sysctl_vm_mmap_min_addr"
+    family: sysctl
+    disruptive: false
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sysctl_vm_mmap_min_addr_enabled
+    runbook: null
+    parameters:
+      key: "vm.mmap_min_addr"
+      path: "/etc/sysctl.d/999-freesecdev-sysctl-vm-mmap-min-addr.conf"
+      datatype: "int"
+      value: "65536"
+      accepted:
+        "xccdf_org.ssgproject.content_benchmark_RHEL-9":
+          - "65536"
 __linux_compliance_remediate_audit_only:
   file_permissions:
     - "xccdf_org.ssgproject.content_rule_dir_group_ownership_library_dirs"
@@ -2401,33 +3964,13 @@ __linux_compliance_remediate_audit_only:
     - "xccdf_org.ssgproject.content_rule_coredump_disable_storage"
     - "xccdf_org.ssgproject.content_rule_disable_users_coredumps"
     - "xccdf_org.ssgproject.content_rule_service_systemd-coredump_disabled"
-    - "xccdf_org.ssgproject.content_rule_sysctl_fs_protected_fifos"
-    - "xccdf_org.ssgproject.content_rule_sysctl_fs_protected_hardlinks"
-    - "xccdf_org.ssgproject.content_rule_sysctl_fs_protected_regular"
-    - "xccdf_org.ssgproject.content_rule_sysctl_fs_protected_symlinks"
-    - "xccdf_org.ssgproject.content_rule_sysctl_fs_suid_dumpable"
-    - "xccdf_org.ssgproject.content_rule_sysctl_kernel_core_pattern"
-    - "xccdf_org.ssgproject.content_rule_sysctl_kernel_core_pattern_empty_string"
-    - "xccdf_org.ssgproject.content_rule_sysctl_kernel_core_uses_pid"
-    - "xccdf_org.ssgproject.content_rule_sysctl_kernel_dmesg_restrict"
     - "xccdf_org.ssgproject.content_rule_sysctl_kernel_exec_shield"
     - "xccdf_org.ssgproject.content_rule_sysctl_kernel_kexec_load_disabled"
-    - "xccdf_org.ssgproject.content_rule_sysctl_kernel_kptr_restrict"
     - "xccdf_org.ssgproject.content_rule_sysctl_kernel_modules_disabled"
-    - "xccdf_org.ssgproject.content_rule_sysctl_kernel_panic_on_oops"
-    - "xccdf_org.ssgproject.content_rule_sysctl_kernel_perf_cpu_time_max_percent"
-    - "xccdf_org.ssgproject.content_rule_sysctl_kernel_perf_event_max_sample_rate"
-    - "xccdf_org.ssgproject.content_rule_sysctl_kernel_perf_event_paranoid"
     - "xccdf_org.ssgproject.content_rule_sysctl_kernel_pid_max"
-    - "xccdf_org.ssgproject.content_rule_sysctl_kernel_randomize_va_space"
-    - "xccdf_org.ssgproject.content_rule_sysctl_kernel_sysrq"
     - "xccdf_org.ssgproject.content_rule_sysctl_kernel_unprivileged_bpf_disabled"
-    - "xccdf_org.ssgproject.content_rule_sysctl_kernel_unprivileged_bpf_disabled_accept_default"
-    - "xccdf_org.ssgproject.content_rule_sysctl_kernel_yama_ptrace_scope"
-    - "xccdf_org.ssgproject.content_rule_sysctl_net_core_bpf_jit_harden"
     - "xccdf_org.ssgproject.content_rule_sysctl_user_max_user_namespaces"
     - "xccdf_org.ssgproject.content_rule_sysctl_user_max_user_namespaces_no_remediation"
-    - "xccdf_org.ssgproject.content_rule_sysctl_vm_mmap_min_addr"
   journald:
     - "xccdf_org.ssgproject.content_rule_dir_groupowner_system_journal"
     - "xccdf_org.ssgproject.content_rule_dir_owner_system_journal"
@@ -2951,53 +4494,8 @@ __linux_compliance_remediate_audit_only:
     - "xccdf_org.ssgproject.content_rule_gnome_gdm_disable_automatic_login"
     - "xccdf_org.ssgproject.content_rule_gnome_gdm_disable_xdmcp"
     - "xccdf_org.ssgproject.content_rule_package_gdm_removed"
-  ipv4_parameters:
-    - "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_all_accept_local"
-    - "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_all_accept_redirects"
-    - "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_all_accept_source_route"
-    - "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_all_arp_filter"
-    - "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_all_arp_ignore"
-    - "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_all_drop_gratuitous_arp"
-    - "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_all_forwarding"
-    - "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_all_log_martians"
-    - "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_all_route_localnet"
-    - "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_all_rp_filter"
-    - "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_all_secure_redirects"
-    - "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_all_send_redirects"
-    - "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_all_shared_media"
-    - "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_default_accept_redirects"
-    - "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_default_accept_source_route"
-    - "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_default_log_martians"
-    - "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_default_rp_filter"
-    - "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_default_secure_redirects"
-    - "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_default_send_redirects"
-    - "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_default_shared_media"
-    - "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_icmp_echo_ignore_broadcasts"
-    - "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_icmp_ignore_bogus_error_responses"
-    - "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_ip_forward"
-    - "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_ip_local_port_range"
-    - "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_tcp_rfc1337"
-    - "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_tcp_syncookies"
-  ipv6_parameters:
-    - "xccdf_org.ssgproject.content_rule_sysctl_net_ipv6_conf_all_accept_ra"
-    - "xccdf_org.ssgproject.content_rule_sysctl_net_ipv6_conf_all_accept_ra_defrtr"
-    - "xccdf_org.ssgproject.content_rule_sysctl_net_ipv6_conf_all_accept_ra_pinfo"
-    - "xccdf_org.ssgproject.content_rule_sysctl_net_ipv6_conf_all_accept_ra_rtr_pref"
-    - "xccdf_org.ssgproject.content_rule_sysctl_net_ipv6_conf_all_accept_redirects"
-    - "xccdf_org.ssgproject.content_rule_sysctl_net_ipv6_conf_all_accept_source_route"
-    - "xccdf_org.ssgproject.content_rule_sysctl_net_ipv6_conf_all_autoconf"
-    - "xccdf_org.ssgproject.content_rule_sysctl_net_ipv6_conf_all_forwarding"
-    - "xccdf_org.ssgproject.content_rule_sysctl_net_ipv6_conf_all_max_addresses"
-    - "xccdf_org.ssgproject.content_rule_sysctl_net_ipv6_conf_all_router_solicitations"
-    - "xccdf_org.ssgproject.content_rule_sysctl_net_ipv6_conf_default_accept_ra"
-    - "xccdf_org.ssgproject.content_rule_sysctl_net_ipv6_conf_default_accept_ra_defrtr"
-    - "xccdf_org.ssgproject.content_rule_sysctl_net_ipv6_conf_default_accept_ra_pinfo"
-    - "xccdf_org.ssgproject.content_rule_sysctl_net_ipv6_conf_default_accept_ra_rtr_pref"
-    - "xccdf_org.ssgproject.content_rule_sysctl_net_ipv6_conf_default_accept_redirects"
-    - "xccdf_org.ssgproject.content_rule_sysctl_net_ipv6_conf_default_accept_source_route"
-    - "xccdf_org.ssgproject.content_rule_sysctl_net_ipv6_conf_default_autoconf"
-    - "xccdf_org.ssgproject.content_rule_sysctl_net_ipv6_conf_default_max_addresses"
-    - "xccdf_org.ssgproject.content_rule_sysctl_net_ipv6_conf_default_router_solicitations"
+  ipv4_parameters: []
+  ipv6_parameters: []
   ipsec:
     - "xccdf_org.ssgproject.content_rule_directory_groupowner_etc_ipsecd"
     - "xccdf_org.ssgproject.content_rule_directory_owner_etc_ipsecd"

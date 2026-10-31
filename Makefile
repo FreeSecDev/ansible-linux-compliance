@@ -327,6 +327,7 @@ Tests
   molecule-libvirt-host-fetch Fetch the pinned QEMU and libvirt packages of the CI runner and check their SHA-256
   molecule-libvirt-host-install Install the verified QEMU and libvirt packages (GitHub-hosted runners only)
   molecule-libvirt-host-pins Print the QEMU and libvirt pins for this host from the signed snapshot index
+  sysctl-reader-verdicts Record what systemd-sysctl and procps set for the kernel parameter reader cases (FREES-107)
   molecule-task-timings Print the slowest Molecule tasks of a GitHub Actions job log (MOLECULE_TIMINGS_LOG=<file>)
   test-molecule-golden  [pending FREES-63] Molecule golden image scenarios
   test-idempotency      [pending FREES-60] Idempotency checks
@@ -374,7 +375,7 @@ export HELP_TEXT
 	molecule-affected molecule-plan molecule-collections-fetch molecule-collections-lock molecule-images-build molecule-images-plan molecule-images-ids \
 	test-molecule-docker test-molecule-docker-selftest test-molecule-libvirt \
 	test-molecule-libvirt-selftest molecule-libvirt-images molecule-libvirt-preflight \
-	molecule-libvirt-host-fetch molecule-libvirt-host-install molecule-libvirt-host-pins molecule-task-timings \
+	molecule-libvirt-host-fetch molecule-libvirt-host-install molecule-libvirt-host-pins molecule-task-timings sysctl-reader-verdicts \
 	test-molecule-golden test-idempotency test-compliance packer-validate packer-build \
 	aws-bootstrap image-build report report-serve docs package release-check clean ci \
 	require-uv ansible-home
@@ -841,6 +842,11 @@ molecule-images-build: require-uv
 
 molecule-images-ids:
 	@$(MOLECULE_INSTANCE_IMAGES) ids '$(FREESECDEV_MOLECULE_IMAGES)'
+
+sysctl-reader-verdicts: require-uv
+	$(call MOLECULE_IMAGES_READY,)
+	tools/molecule/sysctl-reader-verdicts.sh '$(FREESECDEV_MOLECULE_IMAGES)' tests/fixtures/sysctl_reader/cases.json \
+		tests/fixtures/sysctl_reader/verdicts.json build/sysctl-reader
 
 molecule-content: require-uv collection-link
 	$(FETCH_CONTENT) --output-dir build/content --datastream ubuntu2404 --datastream rhel9

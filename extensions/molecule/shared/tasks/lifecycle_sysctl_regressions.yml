@@ -1,0 +1,484 @@
+---
+- name: Kernel parameter regressions | Select four native IPv4 rules, which every regression needs
+  ansible.builtin.set_fact:
+    lifecycle_family: ipv4_parameters
+    lifecycle_topic: >-
+      {{ lookup('ansible.builtin.file', lifecycle_topics_directory ~ '/ipv4_parameters.yml') | from_yaml }}
+    lifecycle_rules: >-
+      {{ lifecycle_native_rules | selectattr('family', 'equalto', 'ipv4_parameters')
+      | selectattr('rule_id', 'in', linux_compliance_discovered.rule_ids)
+      | selectattr('rule_id', 'in', [regression_flip, regression_edit, regression_gone, regression_vendor])
+      | sort(attribute='rule_id') }}
+    lifecycle_allow_disruptive:
+      - ipv4_parameters
+    lifecycle_items: {}
+    regression_label: kernel parameter regressions
+  vars:
+    regression_flip: xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_all_accept_redirects
+    regression_edit: xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_all_send_redirects
+    regression_gone: xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_ip_forward
+    regression_vendor: xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_all_rp_filter
+
+- name: Kernel parameter regressions | Name the rules, their drop-ins and the files that the regressions write
+  ansible.builtin.set_fact:
+    regression_flip: xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_all_accept_redirects
+    regression_edit: xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_all_send_redirects
+    regression_gone: xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_ip_forward
+    regression_vendor: xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_all_rp_filter
+    regression_flip_dropin: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-accept-redirects.conf
+    regression_edit_dropin: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-send-redirects.conf
+    regression_gone_dropin: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-ip-forward.conf
+    regression_vendor_dropin: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-rp-filter.conf
+    regression_vendor_file: /etc/sysctl.d/10-network-security.conf
+    regression_directory: /etc/sysctl.d
+    regression_earlier: /etc/sysctl.d/50-freesecdev-regression-site.conf
+    regression_later: /etc/sysctl.d/zz-freesecdev-regression-site.conf
+    regression_has_vendor_file: "{{ lifecycle_platform == 'ubuntu' }}"
+
+- name: Kernel parameter regressions | Keep the declared items of every platform and of this one
+  ansible.builtin.set_fact:
+    lifecycle_items: >-
+      {{ lifecycle_items | combine({item: (lifecycle_declared_items | rejectattr('platforms', 'defined') | list)
+      + (lifecycle_declared_items | selectattr('platforms', 'defined')
+      | selectattr('platforms', 'contains', lifecycle_platform) | list)}) }}
+  vars:
+    lifecycle_declared_items: "{{ (lifecycle_topic.state | default({}, true))[item] | default([], true) }}"
+  loop: "{{ lifecycle_state_keys.keys() | list }}"
+
+- name: Kernel parameter regressions | Name the rule identifiers, toggles and the files whose content the topic rewrites
+  ansible.builtin.set_fact:
+    lifecycle_rule_ids: "{{ lifecycle_rules | map(attribute='rule_id') | list }}"
+    regression_toggles: "{{ lifecycle_rules | map(attribute='toggle') | list }}"
+    lifecycle_rewritten: >-
+      {{ lifecycle_items.files | selectattr('rewritten', 'defined') | selectattr('rewritten')
+      | map(attribute='path') | list }}
+
+- name: Kernel parameter regressions | Refuse to run without the four rules that the regressions change
+  ansible.builtin.assert:
+    that:
+      - lifecycle_rule_ids | length == 4
+    fail_msg: >-
+      {{ regression_label }} need the IPv4 rules accept_redirects, send_redirects, ip_forward and rp_filter of
+      net.ipv4.conf.all in the profile; the runs are narrowed to them so that each regression stays short.
+    quiet: true
+
+- name: Kernel parameter regressions | Take the state of the whole instance before the regressions
+  ansible.builtin.include_tasks:
+    file: lifecycle_broad.yml
+
+- name: Kernel parameter regressions | Remember the state of the whole instance before the regressions
+  ansible.builtin.set_fact:
+    regression_broad_before: "{{ lifecycle_broad_record }}"
+
+- name: Kernel parameter regressions | Remember the vendor file as built
+  ansible.builtin.slurp:
+    src: "{{ regression_vendor_file }}"
+  register: regression_vendor_built
+  when: regression_has_vendor_file | bool
+
+- name: Kernel parameter regressions | Inspect the drop-in directory as built
+  ansible.builtin.stat:
+    path: "{{ regression_directory }}"
+    follow: false
+  register: regression_directory_built
+
+- name: Kernel parameter regressions | Create the drop-in directory where the platform has none, as an administrator
+  ansible.builtin.file:
+    path: "{{ regression_directory }}"
+    state: directory
+    mode: "0755"
+    owner: root
+    group: root
+  when: not regression_directory_built.stat.exists
+
+- name: Kernel parameter regressions | Add an administrator's file before the drop-ins and one after them
+  ansible.builtin.copy:
+    content: "{{ item.content }}"
+    dest: "{{ item.path }}"
+    mode: "0644"
+    owner: root
+    group: root
+  loop:
+    - path: "{{ regression_earlier }}"
+      content: "net.ipv4.conf.all.send_redirects = 1\n"
+    - path: "{{ regression_later }}"
+      content: "net.ipv4.conf.all.accept_redirects=1\nnet.ipv4.conf.*.rp_filter = 0\n"
+  loop_control:
+    label: "{{ item.path }}"
+
+- name: Kernel parameter regressions | Switch every rule of the topic on
+  ansible.builtin.set_fact:
+    "{{ item }}": true
+  loop: "{{ regression_toggles }}"
+
+- name: Kernel parameter regressions | Apply the topic next to the administrator's files
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+
+- name: Kernel parameter regressions | Inspect the drop-ins of the refused rules
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+  loop:
+    - "{{ regression_flip_dropin }}"
+    - "{{ regression_edit_dropin }}"
+  register: regression_refused_dropins
+
+- name: Kernel parameter regressions | Read the ledger after the apply next to the administrator's files
+  freesecdev.linux_compliance.control_state:
+    action: list
+  register: regression_ledger_admin
+
+- name: Kernel parameter regressions | Check that the later file overrides, its glob does not, the earlier conflicts
+  ansible.builtin.assert:
+    that:
+      - >-
+        lifecycle_results | items2dict(key_name='rule_id', value_name='status')
+        == {regression_flip: 'overridden', regression_edit: 'conflicting_setting',
+            regression_gone: 'applied', regression_vendor: 'applied'}
+      - >-
+        lifecycle_results | selectattr('rule_id', 'equalto', regression_flip) | map(attribute='reason')
+        | select('search', 'zz-freesecdev-regression-site.conf') | list | length == 1
+      - >-
+        lifecycle_results | selectattr('rule_id', 'equalto', regression_edit) | map(attribute='reason')
+        | select('search', '50-freesecdev-regression-site.conf') | list | length == 1
+      - >-
+        lifecycle_results | selectattr('rule_id', 'in', [regression_flip, regression_edit])
+        | selectattr('changed') | list == []
+      - regression_refused_dropins.results | map(attribute='stat.exists') | list == [false, false]
+      - >-
+        lifecycle_results | selectattr('rule_id', 'in', [regression_gone, regression_vendor])
+        | map(attribute='reason') | unique | list == ['running_value_not_read']
+      - >-
+        regression_ledger_admin.entries | map(attribute='rule_id') | select('in', lifecycle_rule_ids) | sort
+        == [regression_vendor, regression_gone] | sort
+    fail_msg: "{{ regression_label }}, administrator's files: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Kernel parameter regressions | Remove the administrator's files
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "{{ regression_earlier }}"
+    - "{{ regression_later }}"
+
+- name: Kernel parameter regressions | Record a ledger entry of another method for one rule, as a content update would
+  freesecdev.linux_compliance.control_state:
+    action: record
+    rule_id: "{{ regression_flip }}"
+    family: ipv4_parameters
+    revert_strategy: recorded_value
+    prior_values:
+      - name: method
+        value: main_file
+      - name: written_line
+        value: net.ipv4.conf.all.accept_redirects = 0
+    collection_version: "0.1.0"
+
+- name: Kernel parameter regressions | Apply the topic over the entry of the other method
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+
+- name: Kernel parameter regressions | Inspect the drop-in of the rule with the entry of the other method
+  ansible.builtin.stat:
+    path: "{{ regression_flip_dropin }}"
+    follow: false
+  register: regression_flip_stat
+
+- name: Kernel parameter regressions | Check that the rule is refused as method_changed, the others applied or compliant
+  ansible.builtin.assert:
+    that:
+      - >-
+        lifecycle_results | items2dict(key_name='rule_id', value_name='status')
+        == {regression_flip: 'method_changed', regression_edit: 'applied',
+            regression_gone: 'compliant', regression_vendor: 'compliant'}
+      - >-
+        lifecycle_results | selectattr('rule_id', 'equalto', regression_flip) | map(attribute='reason')
+        | select('search', 'main_file') | list | length == 1
+      - lifecycle_results | selectattr('rule_id', 'equalto', regression_flip) | selectattr('changed') | list == []
+      - not regression_flip_stat.stat.exists
+    fail_msg: "{{ regression_label }}, apply after a change of method: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Kernel parameter regressions | Change send_redirects in its drop-in by hand, as an administrator would
+  ansible.builtin.lineinfile:
+    path: "{{ regression_edit_dropin }}"
+    regexp: '^net\.ipv4\.conf\.all\.send_redirects = '
+    line: net.ipv4.conf.all.send_redirects = 1
+
+- name: Kernel parameter regressions | Remove the drop-in of ip_forward by hand
+  ansible.builtin.file:
+    path: "{{ regression_gone_dropin }}"
+    state: absent
+
+- name: Kernel parameter regressions | Change the vendor line that the collection set, by hand
+  ansible.builtin.lineinfile:
+    path: "{{ regression_vendor_file }}"
+    regexp: '^net\.ipv4\.conf\.all\.rp_filter='
+    line: net.ipv4.conf.all.rp_filter=0
+  when: regression_has_vendor_file | bool
+
+- name: Kernel parameter regressions | Switch every rule of the topic off
+  ansible.builtin.set_fact:
+    "{{ item }}": false
+  loop: "{{ regression_toggles }}"
+
+- name: Kernel parameter regressions | Clean up with the entry of the other method and the changes by hand
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+
+- name: Kernel parameter regressions | Read the drop-in and the vendor file that the administrator changed
+  ansible.builtin.slurp:
+    src: "{{ item }}"
+  loop: "{{ [regression_edit_dropin] + ([regression_vendor_file] if regression_has_vendor_file | bool else []) }}"
+  register: regression_changed_files
+
+- name: Kernel parameter regressions | Read the ledger after the refused cleanup
+  freesecdev.linux_compliance.control_state:
+    action: list
+  register: regression_ledger_refused
+
+- name: Kernel parameter regressions | Check the refusals, the kept change by hand and the removed drop-in restored
+  ansible.builtin.assert:
+    that:
+      - >-
+        lifecycle_results | items2dict(key_name='rule_id', value_name='reason')
+        == {regression_flip: 'method_changed', regression_edit: 'modified_since_apply', regression_gone: none,
+            regression_vendor: ('modified_since_apply' if regression_has_vendor_file | bool else none)}
+      - >-
+        lifecycle_results | selectattr('rule_id', 'equalto', regression_gone) | map(attribute='message')
+        | select('search', 'nothing was written') | list | length == 1
+      - lifecycle_results | rejectattr('reason', 'none') | selectattr('changed') | list == []
+      - regression_changed_files.results[0].content | b64decode is search('(?m)^net.ipv4.conf.all.send_redirects = 1$')
+      - >-
+        not regression_has_vendor_file | bool
+        or regression_changed_files.results[1].content | b64decode is search('(?m)^net.ipv4.conf.all.rp_filter=0$')
+      - >-
+        regression_ledger_refused.entries | map(attribute='rule_id') | select('in', lifecycle_rule_ids) | sort
+        == ([regression_flip, regression_edit] + ([regression_vendor] if regression_has_vendor_file | bool else []))
+           | sort
+    fail_msg: "{{ regression_label }}, cleanup after a change of method and by hand: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Kernel parameter regressions | Remove the entry of the other method, as an operator would after the review
+  freesecdev.linux_compliance.control_state:
+    action: remove
+    rule_id: "{{ regression_flip }}"
+
+- name: Kernel parameter regressions | Put back the line that the collection wrote in the drop-in
+  ansible.builtin.lineinfile:
+    path: "{{ regression_edit_dropin }}"
+    regexp: '^net\.ipv4\.conf\.all\.send_redirects = '
+    line: net.ipv4.conf.all.send_redirects = 0
+
+- name: Kernel parameter regressions | Put back the vendor line that the collection wrote
+  ansible.builtin.lineinfile:
+    path: "{{ regression_vendor_file }}"
+    regexp: '^net\.ipv4\.conf\.all\.rp_filter='
+    line: net.ipv4.conf.all.rp_filter=1
+  when: regression_has_vendor_file | bool
+
+- name: Kernel parameter regressions | Clean up the rules whose content is back
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+
+- name: Kernel parameter regressions | Read the vendor file after the cleanup
+  ansible.builtin.slurp:
+    src: "{{ regression_vendor_file }}"
+  register: regression_vendor_restored
+  when: regression_has_vendor_file | bool
+
+- name: Kernel parameter regressions | Check that the drop-in is removed and the vendor file holds its original line
+  ansible.builtin.assert:
+    that:
+      - >-
+        lifecycle_results | map(attribute='rule_id') | sort
+        == ([regression_edit] + ([regression_vendor] if regression_has_vendor_file | bool else [])) | sort
+      - lifecycle_results | map(attribute='status') | unique | list == ['restored']
+      - >-
+        not regression_has_vendor_file | bool
+        or regression_vendor_restored.content == regression_vendor_built.content
+    fail_msg: "{{ regression_label }}, cleanup after the content is back: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Kernel parameter regressions | Occupy the drop-in path of ip_forward with a file without the header
+  ansible.builtin.copy:
+    content: "net.ipv4.ip_forward = 0\n"
+    dest: "{{ regression_gone_dropin }}"
+    mode: "0644"
+    owner: root
+    group: root
+  register: regression_foreign
+
+- name: Kernel parameter regressions | Switch every rule on for the refusals of the running kernel and a foreign file
+  ansible.builtin.set_fact:
+    "{{ item }}": true
+  loop: "{{ regression_toggles }}"
+
+- name: Kernel parameter regressions | Apply the topic with the running values, which the container cannot set
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+    lifecycle_sysctl_runtime: true
+
+- name: Kernel parameter regressions | Look for the drop-ins after the apply with the running values
+  ansible.builtin.stat:
+    path: "{{ item.parameters.path }}"
+    follow: false
+  loop: "{{ lifecycle_rules }}"
+  loop_control:
+    label: "{{ item.rule_id }}"
+  register: regression_runtime_dropins
+
+- name: Kernel parameter regressions | Read the foreign file and the ledger after the apply with the running values
+  ansible.builtin.slurp:
+    src: "{{ regression_gone_dropin }}"
+  register: regression_foreign_after
+
+- name: Kernel parameter regressions | Read the ledger after the apply with the running values
+  freesecdev.linux_compliance.control_state:
+    action: list
+  register: regression_ledger_runtime
+
+- name: Kernel parameter regressions | Check the refusals of running values that cannot be set and of the foreign file
+  vars:
+    regression_unavailable: >-
+      {{ lifecycle_results | selectattr('status', 'equalto', 'runtime_unavailable') | map(attribute='rule_id') | list }}
+    regression_written: >-
+      {{ regression_runtime_dropins.results | selectattr('stat.exists') | map(attribute='item.rule_id') | list }}
+  ansible.builtin.assert:
+    that:
+      - >-
+        lifecycle_results | selectattr('rule_id', 'equalto', regression_gone) | map(attribute='status') | list
+        == ['not_owned']
+      - regression_foreign_after.content | b64decode == 'net.ipv4.ip_forward = 0\n'
+      - regression_unavailable | length > 0
+      - >-
+        lifecycle_results | map(attribute='status') | unique
+        | difference(['runtime_unavailable', 'applied', 'not_owned'])
+        | list == []
+      - >-
+        lifecycle_results | selectattr('status', 'equalto', 'runtime_unavailable') | map(attribute='reason')
+        | reject('search', 'cannot be set here') | list == []
+      - lifecycle_results | rejectattr('status', 'equalto', 'applied') | selectattr('changed') | list == []
+      - regression_unavailable | intersect(regression_written) | list == []
+      - >-
+        regression_ledger_runtime.entries | map(attribute='rule_id')
+        | select('in', regression_unavailable + [regression_gone])
+        | list == []
+    fail_msg: "{{ regression_label }}, running values that cannot be set: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Kernel parameter regressions | Remove the foreign file
+  ansible.builtin.file:
+    path: "{{ regression_gone_dropin }}"
+    state: absent
+
+- name: Kernel parameter regressions | Switch every rule off after the refusals
+  ansible.builtin.set_fact:
+    "{{ item }}": false
+  loop: "{{ regression_toggles }}"
+
+- name: Kernel parameter regressions | Clean up the rules that the apply with the running values wrote
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+
+- name: Kernel parameter regressions | Check that the rules that were applied are restored
+  ansible.builtin.assert:
+    that:
+      - lifecycle_results | map(attribute='status') | unique | list in [['restored'], []]
+    fail_msg: "{{ regression_label }}, cleanup after the refusals: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Kernel parameter regressions | Remove the drop-in directory that the regressions created
+  ansible.builtin.file:
+    path: "{{ regression_directory }}"
+    state: absent
+  when: not regression_directory_built.stat.exists
+
+- name: Kernel parameter regressions | Run the directory regression where the platform has no drop-in directory as built
+  when: not regression_directory_built.stat.exists
+  block:
+    - name: Kernel parameter regressions | Put a symbolic link in place of the drop-in directory
+      ansible.builtin.file:
+        path: "{{ regression_directory }}"
+        src: /tmp
+        state: link
+
+    - name: Kernel parameter regressions | Switch every rule on with the symbolic link in place
+      ansible.builtin.set_fact:
+        "{{ item }}": true
+      loop: "{{ regression_toggles }}"
+
+    - name: Kernel parameter regressions | Apply the topic through the symbolic link
+      ansible.builtin.include_tasks:
+        file: lifecycle_remediate.yml
+      vars:
+        lifecycle_check_mode: false
+
+    - name: Kernel parameter regressions | Look for anything written through the symbolic link
+      ansible.builtin.find:
+        paths: /tmp
+        patterns:
+          - "999-freesecdev-*"
+          - ".freesecdev-created"
+        hidden: true
+      register: regression_through_link
+
+    - name: Kernel parameter regressions | Check that every rule refused the symbolic link and nothing was written
+      ansible.builtin.assert:
+        that:
+          - lifecycle_results | map(attribute='status') | unique | list == ['not_directory']
+          - lifecycle_results | selectattr('changed') | list == []
+          - lifecycle_results | map(attribute='reason') | select('none') | list == []
+          - regression_through_link.files == []
+        fail_msg: "{{ regression_label }}, symbolic link: {{ lifecycle_results }}"
+        quiet: true
+  always:
+    - name: Kernel parameter regressions | Remove the symbolic link
+      ansible.builtin.file:
+        path: "{{ regression_directory }}"
+        state: absent
+      when: not regression_directory_built.stat.exists
+
+    - name: Kernel parameter regressions | Switch every rule off after the directory regression
+      ansible.builtin.set_fact:
+        "{{ item }}": false
+      loop: "{{ regression_toggles }}"
+
+- name: Kernel parameter regressions | Read the ledger after the regressions
+  freesecdev.linux_compliance.control_state:
+    action: list
+  register: regression_ledger_after
+
+- name: Kernel parameter regressions | Check that the ledger records no rule of the topic any more
+  ansible.builtin.assert:
+    that:
+      - regression_ledger_after.entries | selectattr('rule_id', 'in', lifecycle_rule_ids) | list == []
+    fail_msg: "{{ regression_label }}: the ledger still holds {{ regression_ledger_after.entries }}"
+    quiet: true
+
+- name: Kernel parameter regressions | Assert that the whole instance is back to its state before the regressions
+  ansible.builtin.include_tasks:
+    file: lifecycle_broad_compare.yml
+  vars:
+    lifecycle_label: kernel parameter regressions
+    lifecycle_broad_step: the regressions
+    lifecycle_broad_reference: "{{ regression_broad_before }}"
+
+- name: Kernel parameter regressions | Record that this regression file ran to its end
+  ansible.builtin.set_fact:
+    lifecycle_regression_files_run: >-
+      {{ lifecycle_regression_files_run + ['lifecycle_sysctl_regressions.yml'] }}

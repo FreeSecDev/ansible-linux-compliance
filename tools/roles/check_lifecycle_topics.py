@@ -15,7 +15,8 @@ a disruptive topic without a containment note, a declaration without an ``applie
 expectation, an expectation or a pre-state for an item that is not declared, an unknown
 attribute or platform, a malformed mode, a ``rewritten`` flag that is not a boolean, a
 pre-state that leaves a rule ``unchanged`` that is not a native rule of the topic or with a
-status other than ``compliant``, ``notapplicable`` or ``overridden``, a pre-state file whose
+status other than ``compliant``, ``notapplicable``, ``overridden`` or ``interface_override``
+(FREES-107), a pre-state file whose
 ``content`` is not a non-empty text or that also sets an owner or group, pre-state ``lines``
 (``regexp`` and ``line`` on one line each) of a file that ``state.files`` does not declare
 ``rewritten`` or of an entry that also sets ``content`` (FREES-185), a pre-state ``applied``
@@ -41,6 +42,13 @@ static dispatch ``lifecycle_regressions.yml`` includes, so no variable chooses a
 Each include must run exactly when its own file is in the selected group (no other condition, no
 tags), every dispatched file must be named by some group, and every dispatched file must end by
 recording that it ran, which the harness checks for every file of the group of a leg (FREES-175).
+``regression_platforms`` returns, per topic and group, the platforms whose lifecycle scenario of a
+driver runs it; ``make molecule-matrix`` plans one leg per group, driver and platform, with the mode
+``regressions-<group>``, so that the regressions do not lengthen the cycle legs. A group runs in the
+Docker scenarios unless it ``requires`` other drivers (FREES-107): a regression that needs a running
+kernel, such as a running value changed by hand, requires libvirt, and then runs only on platforms
+where a libvirt cycle of its topic runs.
+
 ``regression_platforms`` returns, per topic and group, the platforms whose Docker lifecycle scenario
 runs it; ``make molecule-matrix`` plans one leg per group and platform, with the mode
 ``regressions-<group>``, so that the regressions do not lengthen the cycle legs.
@@ -80,7 +88,7 @@ REQUIRES_KEY: Final[str] = "requires"
 IMAGES_KEY: Final[str] = "molecule_images"
 LIFECYCLE_PLAYBOOK: Final[str] = "../shared/lifecycle.yml"
 REGRESSIONS_KEY: Final[str] = "regressions"
-REGRESSION_KEYS: Final[frozenset[str]] = frozenset({"name", "files", "platforms"})
+REGRESSION_KEYS: Final[frozenset[str]] = frozenset({"name", "files", "platforms", "requires"})
 REGRESSION_DRIVER: Final[str] = "docker"
 REGRESSION_DISPATCH: Final[Path] = Path(
     "extensions/molecule/shared/tasks/lifecycle_regressions.yml"
@@ -151,7 +159,9 @@ PRE_STATE_KEYS: Final[frozenset[str]] = frozenset(
 )
 TOGGLE_MODES: Final[frozenset[str]] = frozenset({"topic", "rule"})
 UNCHANGED_KEYS: Final[frozenset[str]] = frozenset({"rule", "status", "platforms"})
-UNCHANGED_STATUSES: Final[frozenset[str]] = frozenset({"compliant", "notapplicable", "overridden"})
+UNCHANGED_STATUSES: Final[frozenset[str]] = frozenset(
+    {"compliant", "notapplicable", "overridden", "interface_override"}
+)
 REWRITTEN_KEY: Final[str] = "rewritten"
 PRE_STATE_FILE_KEYS: Final[frozenset[str]] = frozenset(
     {"path", "mode", "owner", "group", "content", "lines"}
@@ -221,6 +231,7 @@ class Declaration:
         self.dispatched = context.dispatched
         self.known_profiles = context.profiles
         self.regressions: dict[str, frozenset[str]] = {}
+        self.regression_drivers: dict[str, frozenset[str]] = {}
         self.regression_files: set[str] = set()
         self.errors: list[str] = []
         self.items: dict[str, set[str]] = {category: set() for category in CATEGORY_KEYS}
@@ -554,7 +565,10 @@ class Declaration:
             else:
                 seen.add(rule)
             if item.get("status") not in UNCHANGED_STATUSES:
-                self.error(f"{where} needs the status compliant, notapplicable or overridden")
+                self.error(
+                    f"{where} needs the status compliant, notapplicable, overridden or"
+                    " interface_override"
+                )
 
     def _pre_state_requires(self, item: dict[str, object], what: str) -> None:
         """Record the drivers of a pre-state, which must be drivers of its topic."""
@@ -695,24 +709,54 @@ def _regression_groups(declaration: Declaration, value: object) -> None:
                 )
         chosen = _strings(item.get(PLATFORMS_KEY)) or sorted(declaration.platforms)
         declaration.regressions[name] = frozenset(chosen) & declaration.platforms
+        declaration.regression_drivers[name] = _regression_drivers(declaration, item, what)
 
 
-def _regression_platforms(declaration: Declaration) -> dict[str, frozenset[str]]:
-    """Return, per regression group, the platforms whose Docker scenario runs it."""
+def _regression_drivers(
+    declaration: Declaration, item: dict[str, object], what: str
+) -> frozenset[str]:
+    """Return the drivers whose scenarios run a regression group: Docker, unless it requires."""
+    if REQUIRES_KEY not in item:
+        return frozenset({REGRESSION_DRIVER})
+    drivers = declaration.driver_list(item[REQUIRES_KEY], f"{what}.requires")
+    if drivers is None:
+        return frozenset({REGRESSION_DRIVER})
+    for driver in sorted(drivers - declaration.drivers):
+        declaration.error(f"{what} requires {driver}, which the topic does not require")
+    return drivers
+
+
+def _regression_platforms(
+    declaration: Declaration, driver: str = REGRESSION_DRIVER
+) -> dict[str, frozenset[str]]:
+    """Return, per regression group of ``driver``, the platforms whose scenario of it runs it.
+
+    A group runs with the drivers it ``requires``, Docker without it. A group of the libvirt
+    driver runs only where a libvirt cycle of the topic runs, because a regression leg runs the
+    topic's setup, which needs a pre-state of its driver.
+    """
     running = (declaration.platforms - declaration.skipped_platforms) & declaration.coverage.get(
-        REGRESSION_DRIVER, frozenset()
+        driver, frozenset()
     )
-    return {name: chosen & running for name, chosen in sorted(declaration.regressions.items())}
+    if driver != REGRESSION_DRIVER and driver not in declaration.cycle_drivers():
+        running = frozenset[str]()
+    return {
+        name: chosen & running
+        for name, chosen in sorted(declaration.regressions.items())
+        if driver in declaration.regression_drivers.get(name, frozenset({REGRESSION_DRIVER}))
+    }
 
 
 def _regressions_run(declaration: Declaration) -> None:
-    """Check that every regression group runs on at least one platform."""
-    for name, chosen in _regression_platforms(declaration).items():
-        if not chosen:
-            declaration.error(
-                f"{REGRESSIONS_KEY} {name} runs on no platform with a {REGRESSION_DRIVER} "
-                "lifecycle scenario that unselected_platforms does not list"
-            )
+    """Check that every regression group runs on at least one platform with each of its drivers."""
+    for driver in DRIVERS:
+        for name, chosen in _regression_platforms(declaration, driver).items():
+            if not chosen:
+                declaration.error(
+                    f"{REGRESSIONS_KEY} {name} runs on no platform with a {driver} lifecycle "
+                    "scenario that runs a cycle of the topic and that unselected_platforms does "
+                    "not list"
+                )
 
 
 def _identity(
@@ -988,8 +1032,10 @@ def cycle_platforms(root: Path) -> dict[str, dict[str, frozenset[str]]]:
     }
 
 
-def regression_platforms(root: Path) -> dict[str, dict[str, frozenset[str]]]:
-    """Return, per native topic and regression group, the platforms of its Docker legs.
+def regression_platforms(
+    root: Path, driver: str = REGRESSION_DRIVER
+) -> dict[str, dict[str, frozenset[str]]]:
+    """Return, per native topic and regression group of ``driver``, the platforms of its legs.
 
     Raises:
         GenerationError: When ``make lint-lifecycle`` would report a finding.
@@ -1009,7 +1055,8 @@ def regression_platforms(root: Path) -> dict[str, dict[str, frozenset[str]]]:
                 known,
                 disruptive=catalogue.families[family],
                 context=Context(coverage, native_rules(catalogue, family)),
-            )
+            ),
+            driver,
         )
         for family in native
     }

@@ -469,6 +469,7 @@ def test_the_seam_owners_are_pinned() -> None:
             "limits",
             "install_root",
         },
+        Path("plugins/module_utils/compliance/sysctl.py"): {"proc_root"},
     }
     for seams in rules.SEAM_OWNERS.values():
         assert seams <= rules.BANNED_KEYWORDS

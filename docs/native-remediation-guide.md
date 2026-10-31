@@ -6,11 +6,12 @@ lifecycle in Molecule. Audience: family authors and reviewers. Jira: FREES-53 (n
 [ADR 0011](adr/0011-control-toggles-and-cleanup.md) (toggles, cleanup, ledger),
 [ADR 0021](adr/0021-native-banners-pwquality-and-profile-values.md) (profile values, banners, password quality),
 [ADR 0023](adr/0023-native-ssh-server-configuration.md) (SSH server),
-[ADR 0025](adr/0025-own-ansible-remediation-only.md) (our own Ansible only).
+[ADR 0025](adr/0025-own-ansible-remediation-only.md) (our own Ansible only) and
+[ADR 0029](adr/0029-native-kernel-parameters.md) (kernel parameters).
 The contract of a family file is in [remediation.md](remediation.md#family-file-contract); this guide is the
 procedure. `file_permissions`, `banners`, `pwquality`, `ssh`, `sudo`
-([ADR 0022](adr/0022-native-sudo-drop-ins.md)) and `login_defs` ([ADR 0024](adr/0024-native-login-defs.md)) are the
-worked examples.
+([ADR 0022](adr/0022-native-sudo-drop-ins.md)), `login_defs` ([ADR 0024](adr/0024-native-login-defs.md)) and the
+kernel parameter topics `sysctl`, `ipv4_parameters` and `ipv6_parameters` are the worked examples.
 
 ## The rule: our own Ansible, never theirs
 
@@ -144,7 +145,10 @@ Add `extensions/molecule/shared/vars/topics/<family>.yml` ([Molecule guide](mole
 - `audit.applied_outcomes` adds `notapplicable` with the reason when the content's platform excludes containers;
 - regressions that the cycles cannot show (a change of method, a change by hand, a refusal) go into task files of
   `shared/tasks`, included by the static dispatch `shared/tasks/lifecycle_regressions.yml`, and are declared as named
-  groups under `regressions`; each group gets its own CI leg, so the cycle legs stay short;
+  groups under `regressions`; each group gets its own CI leg, so the cycle legs stay short; a group that needs what
+  only a virtual machine has (a running value changed by hand) names `requires: [libvirt]`;
+- what a container cannot prove (a running kernel parameter, an ownership change) goes into a pre-state that
+  `requires: [libvirt]`, next to the container pre-state that proves the files (the kernel parameter topics);
 - a disruptive topic needs `disruptive: true` and a `containment` note that says what it can break and why the harness
   still reaches the container.
 
@@ -186,3 +190,4 @@ role README and add a changelog fragment.
 | `sudo` | `use_pty`, `logfile`, `timestamp_timeout`, `!targetpw`/`!rootpw`/`!runaspw` (STIG); mode, owner and group of `/etc/sudoers` and `/etc/sudoers.d` (ANSSI) | `recorded_value`: one drop-in per rule below `/etc/sudoers.d` with its SHA-256, or the prior attribute and the one written | Every write is checked by `visudo` through `copy` `validate` (the one reviewed exception of the repository guard); `timestamp_timeout` comes from the profile through the pinned `profile_value_id`; `conflicting_setting`, `not_included` and `invalid_sudoers` refuse to claim a change that would not take effect; rules that remove other people's `NOPASSWD`, `!authenticate` or user specifications stay `audit_only` |
 | `login_defs` | `PASS_MAX_DAYS`, `PASS_MIN_DAYS`, `PASS_WARN_AGE`, `PASS_MIN_LEN`, `UMASK`, `FAIL_DELAY`, `CREATE_HOME` in `/etc/login.defs` | `recorded_value`: one line per setting, the prior line (or `null`) and the line written | A new family whose rules came from three others, which keep their toggles as subsystem tags; the strict form that both the check and shadow-utils read decides `compliant`, a stricter value is kept, and `duplicate_setting`, `overridden` (a libeconf drop-in) and symbolic links refuse; a pre-state sets an administrator's `lines` |
 | `filesystem_modules`, `protocol_modules`, `wireless_modules` | 21 `kernel_module_<module>_disabled` rules, usb-storage included | `recorded_value`: one drop-in per rule, `/etc/modprobe.d/freesecdev-<module>.conf`, with the `install <module> /bin/false` and `blacklist <module>` lines that both contents require ([ADR 0028](adr/0028-native-kernel-module-drop-ins.md)) | Three families share the umbrella's helpers (`kernel_modules_*.yml`); the family reads every file that `modprobe` reads in its order, so a site file that already disables the module is `compliant` and one read first that lets it load is `overridden`; no module is unloaded and no initramfs rebuilt; the lifecycle runs them with the profiles that select them (`profiles` in the declaration) |
+| `sysctl`, `ipv4_parameters`, `ipv6_parameters` | 65 kernel parameter rules (`kernel.dmesg_restrict`, `fs.protected_*`, `net.ipv4.conf.*.rp_filter`, `net.ipv4.ip_forward`, `net.ipv6.conf.*.accept_ra` and the others) | `recorded_value`: one drop-in per rule, `/etc/sysctl.d/999-freesecdev-<rule>.conf`, sorting after the distributions' files; the running value through the collection's `sysctl_runtime` module where the check needs it, with the value before (and every interface's forwarding flag) recorded; on Ubuntu the one conflicting line of a procps vendor file set in place | One helper for three topics; both contents read every `sysctl.conf` and `sysctl.d` file and the running value (golden test); values from the profile or the check, never from a fix; `overridden` and `conflicting_setting` for an administrator's file after or before the drop-in; `runtime_unavailable` where `/proc/sys` is read-only, and `linux_compliance_remediate_sysctl_runtime: false` for files only, as in the containers; the running half is proven in the libvirt cycles and a libvirt regression group; 11 rules `audit_only` with the reasons in ADR 0029 |

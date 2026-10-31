@@ -249,7 +249,7 @@
     lifecycle_proven_families: "{{ lifecycle_proven_families | default([]) + [lifecycle_family] }}"
   when: lifecycle_runs | bool
 
-- name: Lifecycle topic | Run the regression groups of the topic that this run selects, in the Docker scenarios
+- name: Lifecycle topic | Run the regression groups of the topic that this run selects, with the drivers they require
   ansible.builtin.include_tasks:
     file: lifecycle_regressions.yml
   loop: >-
@@ -263,7 +263,7 @@
     label: "{{ lifecycle_regression.name }}"
   when:
     - lifecycle_runs | bool
-    - molecule_target.driver == 'docker'
+    - molecule_target.driver in lifecycle_regression.requires | default(['docker'])
     - >-
       lifecycle_regression.platforms is not defined
       or lifecycle_platform in lifecycle_regression.platforms

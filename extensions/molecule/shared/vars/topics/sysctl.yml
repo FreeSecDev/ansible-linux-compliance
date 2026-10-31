@@ -1,0 +1,168 @@
+---
+family: sysctl
+disruptive: false
+audit:
+  applied_outcomes:
+    - notapplicable
+  reason: >-
+    ComplianceAsCode limits the kernel parameter rules to system_with_kernel, which excludes containers, and the
+    RHEL 9 datastream does not recognise Rocky Linux, so the container audits and every Rocky Linux audit report
+    them notapplicable. The drop-ins with their checksums under applied are the evidence in the containers, the
+    running values under the libvirt pre-state the evidence on the virtual machines, where the Ubuntu audit must
+    report every rule pass. Both pinned datastreams read /etc/sysctl.conf and every *.conf of /etc/sysctl.d,
+    /run/sysctl.d and /usr/local/lib/sysctl.d (Ubuntu also /etc/ufw/sysctl.conf), require every occurrence to comply
+    and check the running value (tests/unit/tools/test_content_golden_sysctl.py checks this against the OVAL of both
+    datastreams).
+state:
+  files:
+    - path: /etc/sysctl.d
+      rewritten: true
+    - path: /etc/sysctl.d/.freesecdev-created
+      rewritten: true
+    - path: /etc/sysctl.d/999-freesecdev-sysctl-fs-suid-dumpable.conf
+      rewritten: true
+      platforms:
+        - ubuntu
+    - path: /etc/sysctl.d/999-freesecdev-sysctl-kernel-randomize-va-space.conf
+      rewritten: true
+    - path: /etc/sysctl.d/999-freesecdev-sysctl-kernel-yama-ptrace-scope.conf
+      rewritten: true
+  sysctl:
+    - name: fs.suid_dumpable
+      platforms:
+        - ubuntu
+    - name: kernel.randomize_va_space
+    - name: kernel.yama.ptrace_scope
+applied:
+  files:
+    - path: /etc/sysctl.d
+      exists: true
+      type: directory
+      attributes: []
+      mode: "0755"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      platforms:
+        - rhel_compatible
+    - path: /etc/sysctl.d/.freesecdev-created
+      exists: true
+      type: file
+      attributes: []
+      mode: "0600"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+      platforms:
+        - rhel_compatible
+    - path: /etc/sysctl.d/999-freesecdev-sysctl-fs-suid-dumpable.conf
+      exists: true
+      type: file
+      attributes: []
+      mode: "0644"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: 1404aaa3870dc47e48078ff008d97cfac8875eb49c0f0db0e8b12545bd4a9dd0
+      platforms:
+        - ubuntu
+    - path: /etc/sysctl.d/999-freesecdev-sysctl-kernel-randomize-va-space.conf
+      exists: true
+      type: file
+      attributes: []
+      mode: "0644"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: b15372eb76ca4b46e9d140e2b92f69f11733702d16739c530ceeeb584d845407
+    - path: /etc/sysctl.d/999-freesecdev-sysctl-kernel-yama-ptrace-scope.conf
+      exists: true
+      type: file
+      attributes: []
+      mode: "0644"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: d8b8c93ae72a0d39b1c1526898f3ffdb3e273a1a53b24bf071327ba9da83b2fb
+      platforms:
+        - rhel_compatible
+pre_states:
+  - name: as built
+    audit: true
+    unchanged:
+      - rule: sysctl_kernel_yama_ptrace_scope
+        status: compliant
+        platforms:
+          - ubuntu
+  - name: as built, with the running kernel
+    modes:
+      - rule
+    audit:
+      - ubuntu
+    requires:
+      - libvirt
+    unchanged: &running_kernel_unchanged
+      - rule: sysctl_kernel_yama_ptrace_scope
+        status: compliant
+        platforms:
+          - ubuntu
+    applied: &running_kernel_applied
+      files:
+        - path: /etc/sysctl.d
+          exists: true
+          platforms:
+            - rhel_compatible
+        - path: /etc/sysctl.d/.freesecdev-created
+          exists: false
+          platforms:
+            - rhel_compatible
+        - path: /etc/sysctl.d/999-freesecdev-sysctl-fs-suid-dumpable.conf
+          exists: true
+          type: file
+          attributes:
+            - extents
+          mode: "0644"
+          owner: root
+          group: root
+          uid: 0
+          gid: 0
+          checksum: 1404aaa3870dc47e48078ff008d97cfac8875eb49c0f0db0e8b12545bd4a9dd0
+          platforms:
+            - ubuntu
+        - path: /etc/sysctl.d/999-freesecdev-sysctl-kernel-randomize-va-space.conf
+          exists: true
+          type: file
+          attributes:
+            - extents
+          mode: "0644"
+          owner: root
+          group: root
+          uid: 0
+          gid: 0
+          checksum: b15372eb76ca4b46e9d140e2b92f69f11733702d16739c530ceeeb584d845407
+          platforms:
+            - ubuntu
+      sysctl:
+        - name: fs.suid_dumpable
+          value: "0"
+          platforms:
+            - ubuntu
+        - name: kernel.randomize_va_space
+          value: "2"
+        - name: kernel.yama.ptrace_scope
+          value: "1"
+          platforms:
+            - rhel_compatible
+  - name: as built, with the running kernel, topic toggle
+    modes:
+      - topic
+    requires:
+      - libvirt
+    unchanged: *running_kernel_unchanged
+    applied: *running_kernel_applied
