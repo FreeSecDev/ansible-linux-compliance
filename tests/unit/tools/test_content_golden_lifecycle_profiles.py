@@ -38,14 +38,13 @@ def topic_rules() -> dict[str, set[str]]:
     return rules
 
 
-def test_a_declared_profile_never_narrows_and_together_covers_every_rule_of_its_topic() -> None:
-    own = own_profiles()
-    rules = topic_rules()
+def declared_profiles() -> dict[str, dict[str, str]]:
+    """Return, per topic with a ``profiles`` entry, the profile it runs with on each platform."""
     declarations = {
         path.stem: cast("dict[str, object]", yaml.safe_load(path.read_text(encoding="utf-8")))
         for path in sorted(TOPICS.glob("*.yml"))
     }
-    with_profiles = {
+    return {
         family: {
             str(item["platform"]): str(item["profile"])
             for item in cast("list[dict[str, object]]", data["profiles"])
@@ -53,19 +52,35 @@ def test_a_declared_profile_never_narrows_and_together_covers_every_rule_of_its_
         for family, data in declarations.items()
         if "profiles" in data
     }
-    assert set(with_profiles) == {"filesystem_modules", "protocol_modules", "wireless_modules"}
-    cycles: dict[str, set[str]] = {family: set() for family in with_profiles}
-    selectable: dict[str, set[str]] = {family: set() for family in with_profiles}
+
+
+def check_platform(
+    profiles: dict[str, set[str]],
+    platform: str,
+    cycles: dict[str, set[str]],
+    selectable: dict[str, set[str]],
+) -> None:
+    """Check one platform's profiles and add what its cycles run and what any profile selects."""
+    own = own_profiles()[platform]
+    rules = topic_rules()
+    for family, chosen in declared_profiles().items():
+        native = rules[family]
+        for selected in profiles.values():
+            selectable[family] |= selected & native
+        own_rules = profiles[PROFILE + own] & native
+        chosen_rules = profiles[PROFILE + chosen.get(platform, own)] & native
+        assert chosen_rules >= own_rules, (family, platform, sorted(own_rules - chosen_rules))
+        cycles[family] |= chosen_rules
+
+
+def test_a_declared_profile_never_narrows_and_together_covers_every_rule_of_its_topic() -> None:
+    families = set(declared_profiles())
+    assert families == {"filesystem_modules", "protocol_modules", "wireless_modules"}
+    cycles: dict[str, set[str]] = {family: set() for family in families}
+    selectable: dict[str, set[str]] = {family: set() for family in families}
     for path, sha256, benchmark in pinned_benchmarks():
-        content = read(path, sha256)
-        platform = PLATFORM_OF_BENCHMARK[benchmark]
-        for family, chosen in with_profiles.items():
-            native = rules[family]
-            for selected in content.profiles.values():
-                selectable[family] |= selected & native
-            own_rules = content.profiles[PROFILE + own[platform]] & native
-            chosen_rules = content.profiles[PROFILE + chosen.get(platform, own[platform])] & native
-            assert chosen_rules >= own_rules, (family, platform, sorted(own_rules - chosen_rules))
-            cycles[family] |= chosen_rules
+        check_platform(
+            read(path, sha256).profiles, PLATFORM_OF_BENCHMARK[benchmark], cycles, selectable
+        )
     for family, covered in cycles.items():
         assert covered == selectable[family], (family, sorted(selectable[family] - covered))
