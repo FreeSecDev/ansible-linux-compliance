@@ -65,7 +65,9 @@
   vars:
     __linux_compliance_remediate_sc_text: >-
       {{ __linux_compliance_remediate_sc_pending_text
-         if ansible_check_mode and __linux_compliance_remediate_sc_pending_text is not none
+         if __linux_compliance_remediate_sc_pending_text is not none
+            and __linux_compliance_remediate_sc_stat.stat.checksum | default('')
+                == __linux_compliance_remediate_sc_pending_read
          else __linux_compliance_remediate_sc_current.content | b64decode }}
   ansible.builtin.set_fact:
     __linux_compliance_remediate_sc_restore: >-
@@ -181,6 +183,7 @@
     __linux_compliance_remediate_sc_baseline: >-
       {{ none if __linux_compliance_remediate_sc_last else __linux_compliance_remediate_sc_baseline }}
     __linux_compliance_remediate_sc_pending_text: "{{ __linux_compliance_remediate_sc_restore.new_text }}"
+    __linux_compliance_remediate_sc_pending_read: "{{ __linux_compliance_remediate_sc_stat.stat.checksum }}"
   when: __linux_compliance_remediate_sc_reason is none
   tags:
     - always
