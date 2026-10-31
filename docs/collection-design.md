@@ -297,7 +297,7 @@ Unit tests use the synthetic datastream `tests/fixtures/catalog/synthetic-ds.xml
 selects an undefined rule); oversized, missing-profile and tampered-digest cases are built in the tests. The tests for
 the fetch tool build tiny synthetic zips and mock the network. A golden file, `tests/fixtures/catalog/golden-rules.yml`, records the rule count and the SHA-256 of the sorted rule list of
 every profile of the two pinned datastreams (25 profiles). `make test-content-golden` fetches the pinned content with
-`fetch_content.py` and compares the catalog with it; the CI `test` job runs it and fails when the fetch fails. Without
+`fetch_content.py` and compares the catalog with it; the CI `test-suites` job runs it and fails when the fetch fails. Without
 fetched content the comparison is skipped locally. The same target regenerates the rule catalogue
 `roles/remediate/vars/rules.yml` and `docs/control-families.md` from the fetched content
 (`tools/roles/generate_catalogue.py --check`) and fails on any difference, and checks that every rule of every pinned

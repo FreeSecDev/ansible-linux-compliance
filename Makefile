@@ -87,6 +87,8 @@ BOOTSTRAP_RENDER_SED := -e 's|@@AWS_ACCOUNT_ID@@|$(AWS_ACCOUNT_ID)|g' -e 's|@@AW
 MANAGED_NODE_PYTHONS := 3.9 3.10 3.11 3.13 3.14
 UNIT_PYTHONS := 3.9 3.12 3.14
 BROWSER_TEST_DIR := build/browser-test
+PYTEST_WORKERS ?= auto
+PYTEST_PARALLEL := -n $(PYTEST_WORKERS) --dist worksteal
 NAME_SET_PYTHONS := 3.9 3.10 3.11 3.12 3.13 3.14 3.15
 NAME_SET_PYTHON ?=
 NAME_SET_DIRECTORY := build/name-sets
@@ -292,10 +294,10 @@ Security and types
 
 Tests
   test                  Alias for test-unit
-  test-unit             Unit tests, including the collection plugin tests
+  test-unit             Unit tests, including the collection plugin tests, on PYTEST_WORKERS workers (auto; 0 is serial)
   test-sanity           ansible-test sanity on a temporary collection tree, no Docker
   test-ansible-units    ansible-test units on the temporary collection tree, no Docker
-  test-coverage         Unit tests with branch coverage thresholds
+  test-coverage         Unit tests with branch coverage thresholds, on PYTEST_WORKERS workers (auto; 0 is serial)
   test-content-golden   Fetch the pinned content, compare the catalog with the recorded rule lists and check the catalogue and STIG mapping for drift
   test-oscap-integration Fetch the pinned Ubuntu 24.04 content and scan the host with a real oscap, also through the audit role
   test-browser          Dashboard browser and accessibility tests in the pinned headless Chromium
@@ -515,10 +517,10 @@ typecheck: require-uv collection-link
 test: test-unit
 
 test-unit: require-uv collection-link
-	$(RUN) pytest tests/unit
+	$(RUN) pytest tests/unit $(PYTEST_PARALLEL)
 
 test-coverage: require-uv collection-link
-	$(RUN) pytest tests/unit --cov --cov-report=term-missing --cov-report=xml
+	$(RUN) pytest tests/unit $(PYTEST_PARALLEL) --cov --cov-report=term-missing --cov-report=xml
 	$(RUN) coverage report --include='tools/*' --fail-under=100
 	$(RUN) coverage report --include='plugins/*' --fail-under=100
 

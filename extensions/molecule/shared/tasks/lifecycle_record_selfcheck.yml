@@ -12,6 +12,17 @@
   ansible.builtin.include_tasks:
     file: lifecycle_broad.yml
 
+- name: Lifecycle record self-check | Assert that the filter read every find entry as ansible-core stores it
+  ansible.builtin.assert:
+    that:
+      - lifecycle_broad_result.entries.listed > 0
+      - lifecycle_broad_result.entries.stored == lifecycle_broad_result.entries.listed
+    fail_msg: >-
+      The lifecycle_record filter read only {{ lifecycle_broad_result.entries.stored }} of
+      {{ lifecycle_broad_result.entries.listed }} find entries as stored, so this ansible-core renders them one by one
+      and every record is several seconds slower (ADR 0031). The lines are still right; update the adapter.
+    quiet: true
+
 - name: Lifecycle record self-check | Keep the record, as the next cycle does instead of taking its own
   ansible.builtin.set_fact:
     lifecycle_record_selfcheck_kept:

@@ -743,7 +743,7 @@ skipping when `oscap` or the content is missing. Locally they skip only when `/u
 as the unprivileged runner user (the tests pass the expected owner explicitly), so rules that need root may report
 other results than on a managed host; the assertions are about the protocol, not about the host's compliance.
 
-`make test-audit-exceptions` (CI job `test`, part of `make ci`) runs the exceptions path of the role without
+`make test-audit-exceptions` (CI job `test-suites`, part of `make ci`) runs the exceptions path of the role without
 `oscap`. It uses the `evaluate` and `stale` entry points against two local inventory hosts (`web01` in group `web`,
 `db01` in group `db`, both `ansible_connection: local`) with synthetic scan runs whose start time is the current time,
 and exceptions files written at run time with dates relative to today, so the test never ages out. It uses the

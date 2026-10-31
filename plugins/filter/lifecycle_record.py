@@ -19,7 +19,7 @@ short_description: Normalise the walks of a Molecule instance into the harness r
 version_added: "0.1.0"
 description:
   - Used by the Molecule harness of this collection and by nothing else
-    (C(extensions/molecule/shared/tasks/snapshot.yml) and C(lifecycle_broad_lines.yml),
+    (C(extensions/molecule/shared/tasks/snapshot.yml) and C(lifecycle_broad_record.yml),
     FREES-180). It takes the C(ansible.builtin.find) results of an instance and returns the
     lines that the harness built with Jinja before, byte for byte, because templating the
     100,000 entries of a virtual machine took up to half a minute per record.
@@ -61,8 +61,12 @@ options:
         C(volatile_times), regular expressions.
       - C(instance) is null for a snapshot alone. Otherwise it holds C(declared),
         C(rewritten), C(ignored_paths), C(ignored_trees), C(volatile_sysctl) and
-        C(volatile_sysctl_trees), lists of paths, and C(volatile_contents) and
-        C(volatile_times), regular expressions.
+        C(volatile_sysctl_trees), lists of paths, C(volatile_contents) and
+        C(volatile_times), regular expressions, and C(declared_times).
+      - C(declared_times) C(masked) leaves out the mtime and ctime of every declared entry, as the
+        harness did before FREES-180 part 3. C(ctime) leaves out only the ctime of a declared
+        regular file that is not rewritten, because a change of mode or owner updates it but only
+        a write of content updates the mtime; the times of other declared entries stay left out.
     type: dict
     required: true
 """
@@ -84,6 +88,8 @@ _value:
       and C(count), its number of entries.
     - C(instance), only for a whole-instance record, with C(lines), the sorted lines joined
       by the same two characters, C(digest), their SHA-256, and C(count), their number.
+    - C(entries) with C(listed), the number of entries that came as lists, and C(stored), how
+      many of them were read as ansible-core stores them (ADR 0031).
   type: dict
 """
 
@@ -100,8 +106,10 @@ INSTANCE_KEYS: Final[frozenset[str]] = frozenset(
         "volatile_sysctl_trees",
         "volatile_contents",
         "volatile_times",
+        "declared_times",
     }
 )
+DECLARED_TIMES: Final[frozenset[str]] = frozenset({"masked", "ctime"})
 SOURCE_KEYS: Final[frozenset[str]] = frozenset(
     {"walk", "walk_excluded", "extra", "metadata", "checksums"}
 )
@@ -179,6 +187,16 @@ class InstanceOptions:
     volatile_sysctl_trees: str
     volatile_contents: str
     volatile_times: str
+    declared_mtime: bool
+
+
+@dataclass(frozen=True, slots=True)
+class Walked:
+    """The entries of the sources, and how many of the listed ones were read as stored."""
+
+    entries: list[Entry]
+    listed: int
+    stored: int
 
 
 def _fail(message: str) -> NoReturn:
@@ -280,7 +298,15 @@ def _instance_options(value: object) -> InstanceOptions:
         ),
         volatile_contents=_pattern(options["volatile_contents"], "volatile_contents"),
         volatile_times=_pattern(options["volatile_times"], "volatile_times"),
+        declared_mtime=_choice(options["declared_times"], DECLARED_TIMES, "declared_times")
+        == "ctime",
     )
+
+
+def _choice(value: object, choices: frozenset[str], what: str) -> str:
+    if not isinstance(value, str) or value not in choices:
+        _fail(f"{what} must be one of {sorted(choices)}")
+    return str(value)
 
 
 def _is_plain_entry(value: object) -> bool:
@@ -297,7 +323,7 @@ def _is_plain_entry(value: object) -> bool:
     )
 
 
-def stored_items(value: object, what: str) -> list[object]:
+def stored_items(value: object, what: str) -> tuple[list[object], int]:
     """Return the items of the list ``value``, read as stored when that is the same as rendered.
 
     This is the one adapter of ADR 0031 to the lazy containers of ansible-core. A filter gets a
@@ -308,18 +334,24 @@ def stored_items(value: object, what: str) -> list[object]:
     entry of a ``find`` result is, is used as stored; every other item, including one stored
     without that wrapper, is read through the container and so rendered. If ansible-core
     stores items differently, every item is read through the container: slower, the same lines.
+    Returns the items and how many of them were read as stored.
     """
     items = _list(value, what)
     if not isinstance(items, list):
-        return list(items)
+        return list(items), 0
     found: list[object] = []
+    stored_count = 0
     for index, stored in enumerate(list[object].copy(items)):
         if type(stored).__name__ == STORED_WRAPPER:
             candidate = cast("_Wrapped", stored).value
         else:
             candidate = stored
-        found.append(candidate if _is_plain_entry(candidate) else items[index])
-    return found
+        if _is_plain_entry(candidate):
+            found.append(candidate)
+            stored_count += 1
+        else:
+            found.append(items[index])
+    return found, stored_count
 
 
 def _kind(entry: Mapping[str, object]) -> str:
@@ -354,23 +386,32 @@ def _entry(raw: object, checksums: Mapping[str, object]) -> Entry:
         raise RecordError(message) from error
 
 
-def entries(sources: Mapping[str, object]) -> list[Entry]:
+def entries(sources: Mapping[str, object]) -> Walked:
     """Return the entries of the walk, the further walks and the metadata walk, in that order."""
     excluded = _pattern(sources["walk_excluded"], "walk_excluded")
     checksums = _mapping(sources["checksums"], "the checksums")
-    walked = [_entry(raw, checksums) for raw in stored_items(sources["walk"], "the walk")]
-    found = [entry for entry in walked if not re.match(excluded, entry.path)]
-    found.extend(
-        _entry(raw, checksums) for raw in stored_items(sources["extra"], "the extra entries")
-    )
-    found.extend(_metadata_entries(sources["metadata"], checksums))
-    return found
+    listed = 0
+    stored = 0
+    found: list[Entry] = []
+    for key, what in (("walk", "the walk"), ("extra", "the extra entries")):
+        items, read = stored_items(sources[key], what)
+        listed += len(items)
+        stored += read
+        part = [_entry(raw, checksums) for raw in items]
+        found.extend(entry for entry in part if key != "walk" or not re.match(excluded, entry.path))
+    raw_metadata = sources["metadata"]
+    if isinstance(raw_metadata, str):
+        found.extend(_listed_entries(raw_metadata, checksums))
+    else:
+        items, read = stored_items(raw_metadata, "the metadata walk")
+        listed += len(items)
+        stored += read
+        found.extend(_entry(raw, checksums) for raw in items)
+    return Walked(found, listed, stored)
 
 
-def _metadata_entries(raw: object, checksums: Mapping[str, object]) -> list[Entry]:
-    """Return the entries of a ``tree_info`` listing, or of a list of ``find`` entries."""
-    if not isinstance(raw, str):
-        return [_entry(item, checksums) for item in stored_items(raw, "the metadata walk")]
+def _listed_entries(raw: str, checksums: Mapping[str, object]) -> list[Entry]:
+    """Return the entries of a ``tree_info`` listing."""
     values = raw.split(LISTING_SEPARATOR)
     width = len(LISTING_FIELDS)
     if values[-1] or (len(values) - 1) % width:
@@ -420,11 +461,19 @@ def _file_line(entry: Entry, options: InstanceOptions) -> str:
     volatile = re.match(options.volatile_contents, entry.path) is not None
     masked_times = (
         volatile
-        or entry.path in options.declared
         or entry.path in options.parents
         or re.match(options.volatile_times, entry.path) is not None
     )
-    times = f"{MASKED}|{MASKED}" if masked_times else f"{entry.mtime}|{entry.ctime}"
+    declared = entry.path in options.declared
+    mtime_counts = (
+        options.declared_mtime and entry.kind == "file" and entry.path not in options.rewritten
+    )
+    if masked_times or (declared and not mtime_counts):
+        times = f"{MASKED}|{MASKED}"
+    elif declared:
+        times = f"{entry.mtime}|{MASKED}"
+    else:
+        times = f"{entry.mtime}|{entry.ctime}"
     size = MASKED if volatile else entry.size
     inode = MASKED if volatile or entry.path in options.rewritten else entry.inode
     checksum = MASKED if volatile else entry.checksum
@@ -437,7 +486,7 @@ def _file_line(entry: Entry, options: InstanceOptions) -> str:
 def _sysctl_lines(
     raw: object, checksums: Mapping[str, object], options: InstanceOptions
 ) -> Iterable[str]:
-    parameters = [_mapping(item, "a kernel parameter") for item in stored_items(raw, "sysctl")]
+    parameters = [_mapping(item, "a kernel parameter") for item in stored_items(raw, "sysctl")[0]]
     for parameter in sorted(parameters, key=lambda item: _text(item["path"]).lower()):
         path = _text(parameter["path"])
         if path in options.volatile_sysctl or re.match(options.volatile_sysctl_trees, path):
@@ -520,13 +569,14 @@ def lifecycle_record(sources: object, options: object) -> dict[str, object]:
     _keys(
         given, SOURCE_KEYS | (INSTANCE_SOURCE_KEYS if instance else frozenset[str]()), "the sources"
     )
-    found = entries(given)
-    text, count = snapshot_text(found, _snapshot_options(chosen["snapshot"]))
+    walked = entries(given)
+    text, count = snapshot_text(walked.entries, _snapshot_options(chosen["snapshot"]))
     record: dict[str, object] = {
-        "snapshot": {"lines": text, "digest": digest(text), "count": count}
+        "snapshot": {"lines": text, "digest": digest(text), "count": count},
+        "entries": {"listed": walked.listed, "stored": walked.stored},
     }
     if instance is not None:
-        lines = instance_lines(found, given, instance)
+        lines = instance_lines(walked.entries, given, instance)
         joined = LINE_END.join(lines)
         record["instance"] = {"lines": joined, "digest": digest(joined), "count": len(lines)}
     return record

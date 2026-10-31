@@ -79,8 +79,8 @@ overriding them.
 | `aws-bootstrap` | implemented | Renders and runs the one-time interactive AWS account bootstrap ([docs/aws/bootstrap.md](aws/bootstrap.md)); never run by CI |
 | `typecheck` | implemented | mypy strict, Pyright strict |
 | `test` | implemented | Alias for `test-unit` |
-| `test-unit` | implemented | `pytest tests/unit`, including the collection plugin tests |
-| `test-coverage` | implemented | Unit tests with branch coverage, 95% overall, 100% on `tools/` and on `plugins/` |
+| `test-unit` | implemented | `pytest tests/unit`, including the collection plugin tests, on `PYTEST_WORKERS` pytest-xdist workers (default `auto`, one per CPU; `PYTEST_WORKERS=0` runs serially) |
+| `test-coverage` | implemented | Unit tests with branch coverage, 95% overall, 100% on `tools/` and on `plugins/`, on `PYTEST_WORKERS` workers like `test-unit`; pytest-cov combines the data of the workers before both 100% gates run |
 | `test-name-sets` | implemented | `NAME_SET_PYTHON=<version>`: probes that interpreter with `python -I -S` and checks the guard name sets against it (subset, and equality with the recorded snapshot of the same release); run by the `name-sets` CI matrix |
 | `name-sets` | implemented | Probes Python 3.9 to 3.15 (`uv python find`) and regenerates `tools/lint/name_sets.json` and the name-set constants of the guard |
 | `test-sanity` | implemented | `ansible-test sanity --local` on the temporary collection tree, no Docker; installs Python 3.9 to 3.14 with `uv python install` |
@@ -398,7 +398,8 @@ Configuration relaxations, each with its reason:
 |---|---|
 | `lint` | `make lint` |
 | `typecheck` | `make typecheck` |
-| `test` | `make test-coverage`, `make test-audit-exceptions`, `make test-content-golden`, `make test-browser` |
+| `test` | `make test-coverage` (on the four workers of the hosted runner) |
+| `test-suites` | `make test-audit-exceptions`, `make test-content-golden`, `make test-browser`, alongside `test` |
 | `test-playbooks` | `make test-evidence`, `make test-remediate-check`, `make test-role-guards`, `make test-verify` |
 | `name-sets` | matrix over the pinned Python releases 3.9.25, 3.10.21, 3.11.16, 3.12.14, 3.13.15 and 3.14.6: `uv python install`, then `make test-name-sets` |
 | `security` | `make security` |

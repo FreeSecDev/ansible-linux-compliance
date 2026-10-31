@@ -43,6 +43,7 @@ INSTANCE: dict[str, object] = {
     "volatile_sysctl_trees": ["/proc/sys/fs/quota"],
     "volatile_contents": "^$",
     "volatile_times": TIMES,
+    "declared_times": "masked",
 }
 SNAPSHOT: dict[str, object] = {
     "paths": None,
@@ -132,7 +133,7 @@ def test_the_lines_are_byte_identical_to_the_jinja_templates(case_name: str) -> 
         for case in cast("list[dict[str, object]]", given["cases"])
         if case["name"] == case_name
     ]
-    options = cast("dict[str, object]", case["instance"])
+    options = {**cast("dict[str, object]", case["instance"]), "declared_times": "masked"}
     walk: dict[str, object] = {
         "walk": raw["files"],
         "walk_excluded": "^$",
@@ -163,7 +164,9 @@ def test_the_lines_are_byte_identical_to_the_jinja_templates(case_name: str) -> 
     assert lines(whole_instance["lines"]) == want["instance_lines"]
     assert whole_instance["count"] == len(cast("list[str]", want["instance_lines"]))
     only_snapshot = record.lifecycle_record(walk, {**chosen, "instance": None})
-    assert only_snapshot == {"snapshot": found}
+    assert only_snapshot["snapshot"] == found
+    listed = len(cast("list[object]", raw["files"]))
+    assert only_snapshot["entries"] == {"listed": listed, "stored": listed}
 
 
 @pytest.mark.parametrize("playbook", ["record.yml", "filter.yml"])
@@ -197,7 +200,12 @@ def test_ansible_core_renders_the_expected_lines(tmp_path: Path, playbook: str) 
         },
     )
     assert result.returncode == 0, result.stdout + result.stderr
-    assert json.loads(output.read_text(encoding="utf-8")) == recorded()[1]
+    rendered = cast("dict[str, dict[str, object]]", json.loads(output.read_text(encoding="utf-8")))
+    if playbook == "filter.yml":
+        files = len(cast("list[object]", cast("dict[str, object]", recorded()[0]["raw"])["files"]))
+        for case in rendered.values():
+            assert case.pop("entries") == {"listed": files, "stored": files}
+    assert rendered == recorded()[1]
 
 
 class _LazyValue:
@@ -238,7 +246,7 @@ def test_items_stored_as_plain_entries_are_used_without_rendering() -> None:
     plain = entry("/etc/hosts")
     stored: list[object] = [_LazyValue(plain), plain]
     lazy = Lazy(stored, [{"rendered": 1}, {"rendered": 2}])
-    assert record.stored_items(lazy, "the walk") == [plain, plain]
+    assert record.stored_items(lazy, "the walk") == ([plain, plain], 2)
     assert lazy.reads == []
 
 
@@ -254,13 +262,13 @@ def test_items_that_rendering_could_change_are_rendered() -> None:
     ]
     rendered: list[object] = [{"index": index} for index in range(len(stored))]
     lazy = Lazy(stored, rendered)
-    assert record.stored_items(lazy, "the walk") == rendered
+    assert record.stored_items(lazy, "the walk") == (rendered, 0)
     assert lazy.reads == [0, 1, 2, 3, 4]
 
 
 def test_a_tuple_of_items_is_read_as_it_is() -> None:
     plain = entry("/etc/hosts")
-    assert record.stored_items((plain,), "the walk") == [plain]
+    assert record.stored_items((plain,), "the walk") == ([plain], 0)
 
 
 def test_a_same_size_change_of_a_declared_file_in_etc_is_caught_by_its_checksum() -> None:
@@ -531,3 +539,45 @@ def test_a_listing_records_the_same_lines_as_find_entries() -> None:
 def test_an_incomplete_listing_is_refused(text: str, message: str) -> None:
     with pytest.raises(record.RecordError, match=message):
         snapshot(sources(metadata=text))
+
+
+def test_with_declared_ctime_the_mtime_of_a_declared_file_counts_unless_it_is_rewritten() -> None:
+    before = sources(walk=[entry("/etc/crontab"), entry("/etc/hosts", inode=101)])
+    touched = sources(
+        walk=[entry("/etc/crontab", mtime=2.0, ctime=2.0), entry("/etc/hosts", inode=101)]
+    )
+    chmodded = sources(walk=[entry("/etc/crontab", ctime=2.0), entry("/etc/hosts", inode=101)])
+    assert "file|/etc/crontab|file|0644|0|0|10|100|1.0|-|a" in lines(
+        instance(before, declared_times="ctime")["lines"]
+    )
+    assert instance(chmodded, declared_times="ctime") == instance(before, declared_times="ctime")
+    assert instance(touched, declared_times="ctime") != instance(before, declared_times="ctime")
+    assert instance(touched, declared_times="ctime", rewritten=["/etc/crontab"]) == instance(
+        before, declared_times="ctime", rewritten=["/etc/crontab"]
+    )
+    assert instance(touched) == instance(before)
+
+
+def test_with_declared_ctime_a_declared_directory_keeps_both_times_left_out() -> None:
+    directory = entry("/etc/cron.d", isreg=False, isdir=True, checksum=None)
+    before = sources(walk=[directory], metadata=[])
+    after = sources(walk=[{**directory, "mtime": 2.0, "ctime": 2.0}], metadata=[])
+    declared = ["/etc/cron.d"]
+    assert instance(after, declared=declared, declared_times="ctime") == instance(
+        before, declared=declared, declared_times="ctime"
+    )
+
+
+def test_declared_times_must_be_a_known_choice() -> None:
+    with pytest.raises(record.RecordError, match="declared_times must be one of"):
+        instance(sources(), declared_times="mtime")
+
+
+def test_the_record_counts_the_entries_read_as_stored() -> None:
+    plain = entry("/etc/hosts")
+    lazy = Lazy([_LazyValue(plain), _LazyValue("{{ x }}")], [plain, entry("/etc/x")])
+    result = record.lifecycle_record(
+        snapshot_only(sources(walk=lazy, metadata=listing(entry("/usr/lib/x", checksum=None)))),
+        {"snapshot": SNAPSHOT, "instance": None},
+    )
+    assert result["entries"] == {"listed": 2, "stored": 1}

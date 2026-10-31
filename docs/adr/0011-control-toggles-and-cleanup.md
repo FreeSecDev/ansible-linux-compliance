@@ -365,7 +365,7 @@ how many have a native remediation. These refinements apply.
   `content/manifest.yml` through `catalog.read_benchmarks`, which verifies the pinned SHA-256 before it parses a byte,
   and writes `roles/remediate/vars/rules.yml` and `docs/control-families.md`. All 25 pinned profiles are covered: the 5
   Ubuntu 24.04 and the 20 RHEL 9 profiles of ComplianceAsCode 0.1.82, 1203 distinct rules. A rule that several
-  profiles or datastreams select is one entry with one toggle. The CI job `test` fetches the content
+  profiles or datastreams select is one entry with one toggle. The CI job `test-suites` fetches the content
   (`make test-content-golden`), regenerates the catalogue in memory and fails on any difference, so the catalogue cannot
   drift from the pinned content. Only rule, group and profile identifiers of the BSD-3-Clause content are used; no
   benchmark prose and no rule titles are written.
@@ -634,7 +634,7 @@ gains secondary subsystem tags. These refinements apply.
 - **Derived from the content.** `content/catalogue.yml` declares, per tag, `rule_patterns` (a pattern tags every
   catalogued rule whose short identifier, in lower case, contains it), `groups` (every rule below the group in any
   pinned datastream) and `exclusions` (rules that a pattern or group finds but that are not about the subsystem, each
-  group of them with a reason). The generator derives the tags and writes them into the catalogue; the CI job `test`
+  group of them with a reason). The generator derives the tags and writes them into the catalogue; the CI job `test-suites`
   regenerates them from the pinned content. A rule of the tag's own family is never tagged.
 - **Drift check.** `untagged_families` lists families whose rules are never tagged, with a reason. Generation fails when
   a pattern or group finds a rule of such a family that no exclusion lists, when a pattern or group finds no catalogued
@@ -793,7 +793,7 @@ refinements apply ([Molecule guide](../molecule.md#affected-legs-on-pull-request
   `roles/remediate/vars/rules.yml` is compared per family (registry entry, rules, `audit_only` list, subsystem tags and
   the families of the rules a tag gains or loses), and a changed key of `roles/remediate/vars/main.yml` affects the
   topics of the files that use it. Generated files (the role guards, the family dispatch, `playbooks/run_start.yml`)
-  and generator inputs (`content/catalogue.yml`) have no effect of their own: the required `lint` and `test` jobs
+  and generator inputs (`content/catalogue.yml`) have no effect of their own: the required `lint` and `test-suites` jobs
   check them against their generators, and their effect is classified through the files they are generated from. An
   argument-spec change that only rewrites descriptions has no effect. Documentation, changelog fragments, unit tests,
   check-mode playbooks and the reporting, lint, docs and IaC tools, the SCC and OpenSCAP image definitions have no lifecycle effect. Everything else plans
@@ -836,5 +836,5 @@ Residual risk, accepted for the throughput it buys:
   variable uses plans the full matrix. The family dispatch and the
   regression dispatch name their files literally, and `make lint-lifecycle` and `make lint-role-guards` keep them so.
 - **Generated files rely on their drift checks.** A generated file whose sources did not change in the same way is
-  refused by the required `lint` or `test` job of the same run, so such a pull request cannot merge; the plan of that
+  refused by the required `lint` or `test-suites` job of the same run, so such a pull request cannot merge; the plan of that
   run may have been too small.
