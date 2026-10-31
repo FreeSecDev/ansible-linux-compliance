@@ -380,7 +380,7 @@ def _registry_topics(base: Catalogue, head: Catalogue) -> set[str]:
     found: set[str] = set()
     for name in sorted(before.keys() | after.keys()):
         if name in before and name in after:
-            if before[name] == after[name]:
+            if _same(before[name], after[name]):
                 continue
         elif name in heads:
             message = f"the family registry gained or lost {name}, which heads an umbrella"
