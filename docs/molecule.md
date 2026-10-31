@@ -724,13 +724,14 @@ up into the container's writable layer, which gives the directory a new ctime, a
 whole-instance comparison of the first topic with a real scan refused it (as it did in the first local run of the
 `banners` topic leg). A new native topic gets its two legs per platform without a change to the
 workflow, and the tool fails when a platform has no lifecycle scenario. `ci-gate` needs `molecule-plan` and
-`molecule-lifecycle`, so every leg is required, on `pull_request` and `merge_group` alike, and a plan that fails or
-lists no leg fails the gate.
+`molecule-lifecycle`, so every planned leg is required, on `pull_request` and `merge_group` alike, and a plan that
+fails fails the gate. Since FREES-189 a pull request or merge group plans only the legs of the topics that it affects
+([below](#affected-legs-on-pull-requests)).
 
 On GitHub's runners at b1630d8 the twelve legs took 5.5 to 11.6 minutes (the longest is `ubuntu`, `pwquality`,
 `rule`, which includes the regressions), the standard scenarios 4.0 and 4.6 and the self-test 2.9; the run took
 12 minutes from the first job to `ci-gate`. Each job's `timeout-minutes` is about one and a half times its longest
-duration: 18 for `molecule-lifecycle`, 18 for `molecule-docker`, 17 for `test` (11.2) and 16 for `test-playbooks`
+duration: 18 for `molecule-lifecycle`, 18 for `molecule-docker`, 20 for `test` (11.2 then; 15 on `main` by 2026-10-30, so FREES-189 raised it from 17) and 16 for `test-playbooks`
 (10.8). One [scanner timeout](#scanner-hangs) and its retry add three minutes. `molecule-docker` was raised from 8
 on 2026-10-30: over the 15 latest CI runs its successful jobs took 3 to 7.9 minutes, but 7 of 42 were cancelled, and
 in job 124055287121 building the Rocky Linux instance image alone took 9 minutes because the package mirror was slow.
@@ -748,6 +749,51 @@ modes of the topic, so 20 cycle legs and 11 regression legs (`pwquality` `change
 gets its legs and no libvirt leg, `make lint-lifecycle` checks the groups, and the harness fails a regression leg whose
 group did not run. Before the split the `sudo` cycle legs carried up to four minutes of regressions each and took 14 to
 19 minutes on slow runners.
+
+### Affected legs on pull requests
+
+With five native topics the full plan has 31 Docker lifecycle legs and 7 libvirt legs, and a run about 60 jobs, which
+is all that the organisation runs at a time. Every new topic adds four to nine legs. On `pull_request` and
+`merge_group`, `molecule-plan` therefore keeps only the lifecycle legs of the topics that the change can affect, and
+always the legs without a topic: the libvirt base scenarios `libvirt-<platform>` and `libvirt-selftest`. The standard
+scenarios of `molecule-docker` run as before. A push to `main`, the nightly schedule and `workflow_dispatch` always run
+the full matrix ([ADR 0011](adr/0011-control-toggles-and-cleanup.md#amendment-2026-10-30-only-the-affected-lifecycle-legs-on-pull-requests-frees-189)).
+
+`tools/roles/affected_topics.py` classifies every path of `git diff --no-renames <base> <head>`; a rename counts as a
+deletion and an addition. Nothing is listed per topic by hand:
+
+| Changed path | Topics it affects |
+|---|---|
+| `roles/remediate/tasks/<family>.yml`, `<family>_*.yml` | that family, and the topics of every file that includes it; a shared includer plans the full matrix |
+| `extensions/molecule/shared/vars/topics/<topic>.yml` | that topic |
+| a file of `extensions/molecule/shared/tasks` | the topics whose regression groups name it, and the topics of every file that includes it; a file that no topic owns and no topic file includes plans the full matrix |
+| `extensions/molecule/shared/tasks/lifecycle_regressions.yml` | the topics of each include that was added, removed or changed; any other change plans the full matrix |
+| `roles/remediate/vars/rules.yml` | the families whose registry entry, rules or `audit_only` list changed, a changed subsystem tag and the families of the rules it gains or loses; a change to the set or order of families, to the order of unchanged families' entries or to another key plans the full matrix |
+| `roles/remediate/vars/main.yml` | the topics of the files that use each changed key; a key that no file or a shared file uses plans the full matrix |
+| `roles/{audit,remediate}/meta/argument_specs.yml` | none when only descriptions changed, else the full matrix |
+| the role guards, `roles/remediate/tasks/dispatch.yml`, `playbooks/run_start.yml`, `content/catalogue.yml` | none: they are generated or a generator's input, checked for drift by the required `lint` and `test` jobs, and their effect is classified through their sources |
+| documentation, changelog fragments, unit tests and fixtures, check-mode playbooks, the reporting, lint, docs and IaC tools, the SCC and OpenSCAP image definitions, linter and bot configuration | none |
+| anything else: the shared harness and tasks, images and pins, scenarios, plugins and `module_utils`, role defaults and entry points, content pins, `tools/roles`, `tools/molecule`, `ci.yml`, the `Makefile`, the Python lock, a symbolic link, an unknown path | the full matrix |
+
+The base revision decides, as for the [SCC smoke test](adr/0019-scc-scanner-backend-and-ci-image.md):
+`molecule-plan` reads `tools/molecule/plan-lifecycle.sh` from the base revision with `git show`, and the script runs the
+base revision's `make molecule-affected` in a `git archive` export of that revision, with its own lock file, over the
+head checkout. A pull request that edits the planner or the mapping therefore still runs with the base's, and plans the
+full matrix because it changed `tools/roles` or `tools/molecule`. The step accepts the answer only when every leg comes
+from the full matrices of `make molecule-matrix` and every leg without a topic is kept; otherwise, on a failure, and in
+the pull request that introduced the planner, the full matrix runs. The job log lists the scope, the topics and the
+reason for every path.
+
+`ci-gate` stays the only required check. It accepts the scope `affected` only for `pull_request` and `merge_group`, and
+a skipped `molecule-lifecycle` only when such a plan has exactly zero lifecycle legs, as for a pull request that
+touches no topic. Measured examples are in the pull request of FREES-189: one topic's task file plans that topic's
+legs on both platforms (four for `banners`, nine for `sudo`), and a documentation change plans none.
+
+Cross-topic interactions are caught only on `main` and nightly: a change that the mapping confines to one topic can
+still break another topic's legs, through state on the instance that both inspect or the order in which topics run,
+and only the full matrix shows it, after the merge. The other residual risks are in the ADR amendment. To see what a
+branch would plan, run `make molecule-plan` (`MOLECULE_PLAN_BASE` defaults to `origin/main`); it changes nothing and
+needs the base revision's planner.
 
 ### Declaring a topic
 

@@ -9,6 +9,7 @@ on:
   merge_group:
   schedule:
     - cron: '17 5 * * *'
+  workflow_dispatch:
 
 permissions: {}
 
@@ -64,7 +65,7 @@ jobs:
   test:
     name: test
     runs-on: ubuntu-24.04
-    timeout-minutes: 17
+    timeout-minutes: 20
     permissions:
       contents: read
     steps:
@@ -480,27 +481,62 @@ jobs:
     outputs:
       matrix: ${{ steps.plan.outputs.matrix }}
       libvirt: ${{ steps.plan.outputs.libvirt }}
+      scope: ${{ steps.plan.outputs.scope }}
+      lifecycle_legs: ${{ steps.plan.outputs.lifecycle_legs }}
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
       - name: Install uv
         uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884  # v10.3.0
         with:
           version: 0.13.1
           enable-cache: false
-      - name: Plan one lifecycle leg per platform, native topic and toggle mode, and the libvirt legs
-        id: plan
+      - name: Plan the full matrix, one lifecycle leg per platform, native topic and toggle mode, and the libvirt legs
         run: |
-          matrix="$(make -s molecule-matrix)"
-          printf 'matrix=%s\n' "$matrix" >> "$GITHUB_OUTPUT"
-          libvirt="$(make -s molecule-matrix MOLECULE_MATRIX_DRIVER=libvirt)"
-          printf 'libvirt=%s\n' "$libvirt" >> "$GITHUB_OUTPUT"
+          make -s molecule-matrix > "$RUNNER_TEMP/docker.json"
+          make -s molecule-matrix MOLECULE_MATRIX_DRIVER=libvirt > "$RUNNER_TEMP/libvirt.json"
+      - name: Keep only the legs of the affected topics, as the base revision's planner decides
+        id: plan
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+          HEAD_SHA: ${{ github.event.merge_group.head_sha }}
+          BASE_REF: ${{ github.event.merge_group.base_ref }}
+        run: |
+          if [[ "$EVENT_NAME" == merge_group ]]; then
+            BASE_SHA="$(git merge-base HEAD "refs/remotes/origin/${BASE_REF#refs/heads/}" 2>/dev/null)" || BASE_SHA=""
+          fi
+          docker="$RUNNER_TEMP/docker.json"
+          libvirt="$RUNNER_TEMP/libvirt.json"
+          plan="$(jq -c -n --slurpfile d "$docker" --slurpfile l "$libvirt" \
+            '{scope: "full", topics: [], reasons: ["the full matrix runs"], docker: $d[0], libvirt: $l[0]}')"
+          planner="$(mktemp)"
+          if [[ "$EVENT_NAME" =~ ^(pull_request|merge_group)$ && "$BASE_SHA" =~ ^[0-9a-f]{40}$ ]] \
+            && git show "$BASE_SHA:tools/molecule/plan-lifecycle.sh" > "$planner" \
+            && decided="$(bash "$planner" "$EVENT_NAME" "$BASE_SHA" "$HEAD_SHA" "$docker" "$libvirt")" \
+            && jq -e --slurpfile d "$docker" --slurpfile l "$libvirt" '. as $p
+              | ($p.scope | IN("full", "affected")) and ($p.topics | type == "array")
+              and ($p.reasons | type == "array")
+              and ($p.docker.include | type == "array") and ($p.libvirt.include | type == "array")
+              and all($p.docker.include[]; IN($d[0].include[])) and all($p.libvirt.include[]; IN($l[0].include[]))
+              and all($d[0].include[] | select(.topic == ""); IN($p.docker.include[]))
+              and all($l[0].include[] | select(.topic == ""); IN($p.libvirt.include[]))
+              and ($p.scope == "affected" or ($p.docker == $d[0] and $p.libvirt == $l[0]))
+            ' <<<"$decided" >/dev/null; then
+            plan="$decided"
+          fi
+          rm -f "$planner"
+          jq -r '"scope: \(.scope | tojson)", "topics: \(.topics | tojson)", (.reasons[] | "  \(tojson)")' <<<"$plan"
+          jq -r '"matrix=\(.docker | tojson)", "libvirt=\(.libvirt | tojson)", "scope=\(.scope)",
+            "lifecycle_legs=\(.docker.include | length)"' <<<"$plan" >> "$GITHUB_OUTPUT"
 
   molecule-lifecycle:
     name: molecule-lifecycle (${{ matrix.platform }}, ${{ matrix.topic }}, ${{ matrix.mode }})
     needs: [molecule-plan, molecule-collections, molecule-images]
+    if: needs.molecule-plan.outputs.lifecycle_legs != '0'
     runs-on: ubuntu-24.04
     timeout-minutes: 18
     permissions:
@@ -674,12 +710,22 @@ jobs:
             (.["scc-changes"].result == "success")
             and (.["scc-changes"].outputs.scc | IN("true", "false"))
             and (.["scc-changes"].outputs.expiry | IN("current", "expired"))
-            and all(to_entries[] | select(.key != "scc-smoke"); .value.result == "success")
+            and all(to_entries[] | select(.key | IN("scc-smoke", "molecule-lifecycle") | not);
+              .value.result == "success")
             and (.["scc-smoke"].result == "success"
               or (.["scc-smoke"].result == "skipped"
                 and (.["scc-changes"].outputs.scc == "false" or .["scc-changes"].outputs.expiry == "expired")
                 and ($event | IN("pull_request", "merge_group"))))
+            and (.["molecule-plan"].outputs.scope == "full"
+              or (.["molecule-plan"].outputs.scope == "affected" and ($event | IN("pull_request", "merge_group"))))
+            and (.["molecule-plan"].outputs.lifecycle_legs | test("^(0|[1-9][0-9]*)$"))
+            and (.["molecule-lifecycle"].result == "success"
+              or (.["molecule-lifecycle"].result == "skipped"
+                and .["molecule-plan"].outputs.lifecycle_legs == "0"
+                and .["molecule-plan"].outputs.scope == "affected"
+                and ($event | IN("pull_request", "merge_group"))))
           ' <<<"$NEEDS" >/dev/null
+          jq -r '.["molecule-plan"].outputs | "molecule plan: \(.scope), \(.lifecycle_legs) lifecycle legs"' <<<"$NEEDS"
           if jq -e '.["scc-smoke"].result == "skipped" and .["scc-changes"].outputs.scc == "true"
             and .["scc-changes"].outputs.expiry == "expired"' <<<"$NEEDS" >/dev/null; then
             printf '::warning title=SCC not built or run::%s %s\n' \
