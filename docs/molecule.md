@@ -110,8 +110,8 @@ own job, and every leg verifies what it receives ([ADR 0009](adr/0009-molecule-l
 
 | Step | Where | What it does |
 |---|---|---|
-| Plan | `molecule-images`, `make -s molecule-images-plan` | Prints `<image>=<tag>` for every image of `shared/vars/versions.yml` |
-| Cache | `molecule-images`, one `actions/cache` per image | Restores `build/molecule-images/<image>/image.tar.zst` under the key `molecule-image-<image>-<tag>`, except in a pull request from a fork |
+| Plan | `molecule-images`, `make -s molecule-images-plan` | Prints `<image>=<tag>` for every image of `shared/vars/versions.yml`, and `week=<YYYY-Www>` |
+| Cache | `molecule-images`, `actions/cache/restore` and `actions/cache/save` per image | Restores `build/molecule-images/<image>/image.tar.zst` under the key `molecule-image-<image>-<tag>-<ISO week>`, except in a pull request from a fork; saves it on a miss, except in a scheduled run |
 | Build | `molecule-images`, `make molecule-images-build` | Both images in parallel, see below |
 | Share | `molecule-images` | The job output `ids` (`<image>=<image ID>` pairs) and the artifact `molecule-images` (retention one day) |
 | Load | each `molecule-docker` and `molecule-lifecycle` leg | Downloads the artifact; `make test-molecule-docker` loads only the images its scenarios use and verifies each |
@@ -125,7 +125,8 @@ attempt; a build takes about 25 seconds on a normal mirror), so three slow attem
 15-minute limit of the job. Both images are prepared in parallel and their output is prefixed with the image key. The
 package managers themselves move on from a slow mirror: the Rocky Linux Dockerfile gives `dnf` a minimum rate, a
 per-mirror timeout and retries, so that a mirror slower than 256 KiB/s for 20 seconds is left for the next one of the
-mirror list, and the Ubuntu Dockerfile gives `apt-get` retries and a timeout. With `save`, the job writes the archive with `docker save` and `zstd`, and records the tag and image ID of
+mirror list, and the Ubuntu Dockerfile gives `apt-get` retries and a timeout. With `save`, the job always writes the archive with `docker save` and `zstd` from the verified image, also when
+the image came from the cache, so the legs never receive the cache's bytes, and records the tag and image ID of
 each image in `build/molecule-images.verified.yml`, from which `make -s molecule-images-ids` prints the job output.
 On an unchanged image the cache hit means no package mirror is contacted at all, so a slow mirror matters only in the
 first run after a Dockerfile or base digest changes.
@@ -136,9 +137,15 @@ one of the job output and the inputs label with the tag, removes a mismatched im
 record that `create.yml` checks. `make` decides between the two with `MOLECULE_OFFLINE`, which is `true` in GitHub
 Actions (`GITHUB_ACTIONS=true`) and `false` elsewhere, so a CI leg cannot fall back to building.
 
-A cache entry is written only by this repository's own runs, from an image that the same job built and verified. The
-label and the base layers are checked again on every restore; a forged archive would need write access to the
-repository's cache. Images are never pushed: `freesecdev-molecule/*` exists only in the runner's local daemon and in
+`docker load` must report only the target: an archive that also loads another name or an untagged image is refused,
+in the job (the image is then built) and in a leg (the leg fails).
+
+The label, the base layers and the collection pins catch a corrupt or stale cache entry, not a crafted one:
+`actions/cache` restores with `tar -P`, so whoever can write an entry in a scope that a run restores can rewrite the
+checking scripts before they run. That boundary, write access to the `main` cache scope, and why the image cache has
+no content pin are in T-MOLECULE-1 of the [threat model](security/threat-model.md). The image cache key carries the
+ISO week of the run, so a planted entry lasts at most until the week ends and every image is rebuilt at least once a
+week, and a scheduled run never saves an image entry. Images are never pushed: `freesecdev-molecule/*` exists only in the runner's local daemon and in
 the run's artifact, and no workflow, Makefile line or script runs `docker push`, `docker login` or `docker tag`
 (`tests/unit/tools/test_instance_images_script.py`).
 

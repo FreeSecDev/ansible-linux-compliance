@@ -807,6 +807,7 @@ molecule-dependencies: require-uv collection-link $(if $(filter true,$(MOLECULE_
 
 molecule-images-plan: require-uv
 	@$(MOLECULE_IMAGE_PLANNER) --output github
+	@printf 'week=%s\n' "$$(date -u +%G-W%V)"
 
 molecule-images-build: require-uv
 	mkdir -p build

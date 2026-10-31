@@ -103,6 +103,11 @@ load_archive() {
   zstd --decompress --stdout --quiet -- "${archive}" | timeout "${transfer_timeout}" docker load > "${output}" \
     || return 1
   cat "${output}"
+  # The archive must hold the target and nothing else: any other loaded name or untagged image is refused.
+  if grep -E '^Loaded image' "${output}" | grep -Evqx "Loaded image: (docker\.io/)?$(target "${index}")"; then
+    printf 'error: the archive loads more than %s\n' "$(target "${index}")" >&2
+    return 1
+  fi
   grep -Eqx "Loaded image: (docker\.io/)?$(target "${index}")" "${output}"
 }
 
@@ -141,7 +146,7 @@ prepare_one() {
     fi
     printf 'built %s\n' "${image}"
   fi
-  if [[ "${save}" == save && "${reused}" != cache ]]; then
+  if [[ "${save}" == save ]]; then
     mkdir -p "${cache}"
     docker save "${image}" | zstd --quiet --threads=0 -3 --force -o "${cache}/image.tar.zst.partial"
     mv -- "${cache}/image.tar.zst.partial" "${cache}/image.tar.zst"

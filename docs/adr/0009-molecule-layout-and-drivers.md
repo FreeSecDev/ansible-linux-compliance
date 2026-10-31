@@ -107,8 +107,11 @@ On slow runs the snapshot answered at 128 to 239 kB/s, and installing QEMU and l
   file, `tools/molecule/libvirt-host-packages.sh fetch` checks each one and downloads only what is missing or wrong,
   `actions/cache/save` stores them on a miss, and `install` checks them again and installs them with `apt-get`
   configured with no package source, so that `apt` can neither download nor install a file that was not verified. A
-  cache entry is therefore only a speed-up: its content is never trusted. As for the cloud images, a pull request from
-  a fork neither restores nor saves it.
+  corrupt or stale cache entry therefore costs only a download. A crafted one is not stopped by these checks, because
+  `actions/cache` restores with `tar -P` and can rewrite the checker before it runs; the boundary is write access to
+  the cache scope (amended by FREES-182, T-MOLECULE-1 and T-LIBVIRT-1 in the
+  [threat model](../security/threat-model.md)). As for the cloud images, a pull request from a fork neither restores
+  nor saves it.
 - **Timings from the job log.** A timing callback such as `ansible.posix.profile_tasks` is code that Ansible loads,
   and the repository rules refuse `callbacks_enabled` and `ANSIBLE_CALLBACKS_ENABLED` (ADR 0004). The per-task times
   come instead from the timestamps that GitHub Actions puts on every log line: `make molecule-task-timings` reads a
@@ -141,11 +144,26 @@ Galaxy answered HTTP 500, cut downloads short, failed TLS or left its cache inco
   install checks every file again and runs `ansible-galaxy collection install --offline` on verified copies, with an
   unresolvable Galaxy server. No step after the fetch contacts Galaxy.
 - **Trust in caches.** As for the libvirt host packages, a pull request from a fork neither restores nor saves these
-  caches. A collection cache entry is only a speed-up: every file is checked against its pin. An image cannot be
-  checked against a pin, because builds are not reproducible; an image cache entry is written only by this
-  repository's own runs from an image the job built and verified, and its label and base layers are checked again on
-  every restore. Within a run the artifact's digest is checked by `actions/download-artifact` and the image ID by the
-  leg.
+  caches. Every collection file is checked against its pin, and a restored image against its inputs label and the
+  pinned base layers. These checks catch a corrupt or stale entry. They are no boundary against whoever can write an
+  entry in a restored scope: `actions/cache` restores with `tar -xf … -P`, so a crafted entry can rewrite any file
+  the runner user can write, the checking scripts included, before they run. The boundary is write access to the
+  `main` cache scope, which any code running in a workflow run on `main` has (T-MOLECULE-1 in the
+  [threat model](../security/threat-model.md)). The image cache, unlike the others, has no content pin, because
+  builds are not reproducible. It stays, because a hit keeps a slow mirror out of the run, under two limits: its key
+  carries the ISO week of the run (`make -s molecule-images-plan` prints `week=<YYYY-Www>`), so a planted entry is
+  restored at most until the week ends and every image is rebuilt at least once a week; and a scheduled run never
+  saves an entry (`actions/cache/save` runs only on a miss and not on `schedule`). The job always re-saves the verified
+  image with `docker save`, so the legs never receive the cache's bytes, and both the job and the legs refuse an
+  archive that loads any image other than the target. Within a run the artifact's digest is checked by
+  `actions/download-artifact` and the image ID by the leg.
+- **Copies of the collections.** `install` verifies the copies in a `mktemp -d` directory with mode `0700` that the
+  invoking user owns, and `ansible-galaxy` runs as that user into a path it owns. A process of the same user could
+  swap a copy after its check, but it could as well edit the installed collection afterwards; no privilege boundary is
+  crossed, and the copy still protects against a change through the downloaded file's path.
+- **Dependencies are matched by name.** `make molecule-collections-lock` refuses a dependency that
+  `requirements.yml` does not pin, but compares names only, not the dependency's version range. A pinned version
+  outside the range passes the lock and then fails the `--offline` install, so it fails closed, only later.
 - **Shell scripts, not Ansible.** The image and collection steps are `tools/molecule/instance-images.sh` and
   `tools/molecule/galaxy-collections.sh`, called by `make`, for the same reason as the cloud image fetch: tools and
   plugins stay free of `subprocess` outside the audited process helper, and playbooks use no `shell` or `command`.

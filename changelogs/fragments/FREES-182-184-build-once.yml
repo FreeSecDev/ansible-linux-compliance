@@ -5,7 +5,9 @@ trivial:
     with each pull and build attempt bounded in time and retried, reuses an image cached under a key of its tag only
     after it carries the inputs label of that tag on exactly the layers of the pinned base, and shares it as a run
     artifact with its image ID. Every Docker Molecule leg loads that archive and refuses an image whose ID differs;
-    create.yml no longer builds an image and fails when the verified image is missing. Images are never pushed.
+    create.yml no longer builds an image and fails when the verified image is missing. Images are never pushed. The
+    image cache key carries the ISO week, a scheduled run never saves it, the shared archive is always re-saved from
+    the verified image, and an archive that loads any other image is refused.
   - >-
     CI: the molecule-collections job fetches the Galaxy collections of extensions/molecule/collections.pins once per
     run (make molecule-collections-fetch), with bounded retries, and keeps a file only after its SHA-256 and size match

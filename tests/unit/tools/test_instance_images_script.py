@@ -107,6 +107,8 @@ case "$1" in
     name="$(awk '$1 == "name" { print $2 }' <<< "${data}")"
     printf '%s\n' "${data}" > "$(record "${name}")"
     printf 'Loaded image: %s\n' "${name}"
+    awk '$1 == "extra" { print "Loaded image: " $2 }
+      $1 == "untagged" { print "Loaded image ID: " $2 }' <<< "${data}"
     ;;
   *) exit 2 ;;
 esac
@@ -262,8 +264,42 @@ def test_a_cached_archive_is_reused_only_after_it_verifies(host: Host) -> None:
     result = host.build("save")
     assert result.returncode == 0, result.stderr
     assert "reusing the cached " + IMAGE in result.stdout
-    assert not any(call.startswith(("build ", "save ")) for call in host.calls())
+    assert not any(call.startswith("build ") for call in host.calls())
+    assert f"save {IMAGE}" in host.calls()
     assert host.verified()["ubuntu"]["id"] == built
+
+
+EXTRAS = ["extra docker.io/library/python:3", "untagged sha256:" + "ef" * 32]
+
+
+@pytest.mark.parametrize("extra", EXTRAS)
+def test_a_cached_archive_with_another_image_is_discarded_and_only_the_target_is_saved(
+    host: Host, extra: str
+) -> None:
+    assert host.build("save").returncode == 0
+    archive = host.cache / "ubuntu" / "image.tar.zst"
+    archive.write_text(archive.read_text("utf-8") + extra + "\n", encoding="utf-8")
+    host.forget_images()
+    result = host.build("save")
+    assert result.returncode == 0, result.stdout
+    assert "the archive loads more than " + IMAGE in result.stdout
+    assert "does not verify; it is discarded and the image is built" in result.stdout
+    assert any(call.startswith("build ") for call in host.calls())
+    assert extra not in archive.read_text("utf-8")
+
+
+@pytest.mark.parametrize("extra", EXTRAS)
+def test_a_leg_refuses_an_archive_that_loads_another_image(host: Host, extra: str) -> None:
+    assert host.build("save").returncode == 0
+    built = host.verified()["ubuntu"]["id"]
+    archive = host.cache / "ubuntu" / "image.tar.zst"
+    archive.write_text(archive.read_text("utf-8") + extra + "\n", encoding="utf-8")
+    host.forget_images()
+    host.record.unlink()
+    result = host.load(f"ubuntu={built}")
+    assert result.returncode == 1
+    assert "the archive loads more than " + IMAGE in result.stderr
+    assert not host.record.exists()
 
 
 @pytest.mark.parametrize(
@@ -463,16 +499,32 @@ def test_only_the_images_job_builds_and_it_holds_read_only_permissions() -> None
     assert "secrets" not in yaml.safe_dump(job)
     assert job["timeout-minutes"] == 15
     assert cast("dict[str, str]", job["outputs"])["ids"] == "${{ steps.ids.outputs.ids }}"
-    caches = [step for step in steps(job) if str(step.get("uses", "")).startswith("actions/cache@")]
-    assert [cast("dict[str, str]", step["with"])["path"] for step in caches] == [
-        "build/molecule-images/ubuntu",
-        "build/molecule-images/rhel_compatible",
+    uses = [str(step.get("uses", "")).split("@", maxsplit=1)[0] for step in steps(job)]
+    assert "actions/cache" not in uses
+    restores = [
+        step for step, use in zip(steps(job), uses, strict=True) if use == "actions/cache/restore"
     ]
-    assert [step["if"] for step in caches] == [FORK_CONDITION] * 2
-    for step in caches:
-        key = cast("dict[str, str]", step["with"])["key"]
-        image = cast("dict[str, str]", step["with"])["path"].rsplit("/", 1)[1]
-        assert key == f"molecule-image-{image}-${{{{ steps.plan.outputs.{image} }}}}"
+    saves = [
+        step for step, use in zip(steps(job), uses, strict=True) if use == "actions/cache/save"
+    ]
+    paths = ["build/molecule-images/ubuntu", "build/molecule-images/rhel_compatible"]
+    assert [cast("dict[str, str]", step["with"])["path"] for step in restores] == paths
+    assert [cast("dict[str, str]", step["with"])["path"] for step in saves] == paths
+    assert [step["if"] for step in restores] == [FORK_CONDITION] * 2
+    for restore, save in zip(restores, saves, strict=True):
+        image = cast("dict[str, str]", restore["with"])["path"].rsplit("/", 1)[1]
+        week = "${{ steps.plan.outputs.week }}"
+        key = f"molecule-image-{image}-${{{{ steps.plan.outputs.{image} }}}}-{week}"
+        assert cast("dict[str, str]", restore["with"])["key"] == key
+        assert cast("dict[str, str]", save["with"])["key"] == key
+        assert " ".join(str(save["if"]).split()) == (
+            f"steps.{restore['id']}.outcome == 'success'"
+            f" && steps.{restore['id']}.outputs.cache-hit != 'true'"
+            " && github.event_name != 'schedule'"
+        )
+    assert uses.index("actions/cache/save") > uses.index("actions/upload-artifact")
+    makefile = MAKEFILE.read_text("utf-8")
+    assert "@printf 'week=%s\\n' \"$$(date -u +%G-W%V)\"" in makefile
     [upload] = [
         step
         for step in steps(job)

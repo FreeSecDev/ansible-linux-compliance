@@ -375,24 +375,26 @@ jobs:
       - name: Compute the tag of each instance image from its pinned inputs
         id: plan
         run: make -s molecule-images-plan >> "$GITHUB_OUTPUT"
-      - name: Restore the Ubuntu instance image of these inputs, except in a pull request from a fork
+      - name: Restore the Ubuntu instance image of these inputs and this week, except in a pull request from a fork
+        id: cache-ubuntu
         if: >-
           github.event_name != 'pull_request'
           || (!github.event.pull_request.head.repo.fork
           && github.event.pull_request.head.repo.full_name == github.repository)
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: build/molecule-images/ubuntu
-          key: molecule-image-ubuntu-${{ steps.plan.outputs.ubuntu }}
-      - name: Restore the Rocky Linux instance image of these inputs, except in a pull request from a fork
+          key: molecule-image-ubuntu-${{ steps.plan.outputs.ubuntu }}-${{ steps.plan.outputs.week }}
+      - name: Restore the Rocky Linux instance image of these inputs and this week, except in a pull request from a fork
+        id: cache-rhel-compatible
         if: >-
           github.event_name != 'pull_request'
           || (!github.event.pull_request.head.repo.fork
           && github.event.pull_request.head.repo.full_name == github.repository)
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: build/molecule-images/rhel_compatible
-          key: molecule-image-rhel_compatible-${{ steps.plan.outputs.rhel_compatible }}
+          key: molecule-image-rhel_compatible-${{ steps.plan.outputs.rhel_compatible }}-${{ steps.plan.outputs.week }}
       - name: Build what the cache lacks with bounded retries and verify every image
         run: make molecule-images-build
       - name: Record the verified image IDs for the Molecule legs
@@ -410,6 +412,22 @@ jobs:
           if-no-files-found: error
           retention-days: 1
           compression-level: 0
+      - name: Save the verified Ubuntu instance image, except in a scheduled run
+        if: >-
+          steps.cache-ubuntu.outcome == 'success'
+          && steps.cache-ubuntu.outputs.cache-hit != 'true' && github.event_name != 'schedule'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: build/molecule-images/ubuntu
+          key: molecule-image-ubuntu-${{ steps.plan.outputs.ubuntu }}-${{ steps.plan.outputs.week }}
+      - name: Save the verified Rocky Linux instance image, except in a scheduled run
+        if: >-
+          steps.cache-rhel-compatible.outcome == 'success'
+          && steps.cache-rhel-compatible.outputs.cache-hit != 'true' && github.event_name != 'schedule'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: build/molecule-images/rhel_compatible
+          key: molecule-image-rhel_compatible-${{ steps.plan.outputs.rhel_compatible }}-${{ steps.plan.outputs.week }}
 
   molecule-docker:
     name: molecule-docker (${{ matrix.scenario }})
