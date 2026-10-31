@@ -963,7 +963,7 @@
       {%- set accepted_ints = wanted.accepted | default([], true) | map('int') | list -%}
       {%- set combination = __linux_compliance_remediate_sysctl_interface_combination[key] -%}
       {%- set parts = key.split('.') -%}
-      {%- set all_text = wanted.value if planned.runtime | length > 0 else now[key] | default(none) -%}
+      {%- set all_text = (wanted.value | string) if planned.runtime | length > 0 else now[key] | default(none) -%}
       {%- set own_all = all_text | trim | int if all_text is string and all_text | trim is match('^-?[0-9]+$')
             else none -%}
       {%- set interface_pattern = '^' ~ ((parts[:3] | join('.')) | regex_escape) ~ '\\.([^.]+)\\.'
