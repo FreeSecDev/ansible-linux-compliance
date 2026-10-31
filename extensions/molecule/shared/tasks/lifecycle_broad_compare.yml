@@ -6,10 +6,14 @@
 - name: Lifecycle broad compare | Assert that the whole instance is back to the state before
   ansible.builtin.assert:
     that:
-      - lifecycle_broad_lines | length > 0
-      - lifecycle_broad_lines == lifecycle_broad_reference
+      - lifecycle_broad_reference is mapping
+      - lifecycle_broad_record.count > 0
+      - lifecycle_broad_record.digest == lifecycle_broad_reference.digest
     fail_msg: >-
       {{ lifecycle_label }}, {{ lifecycle_broad_step }} did not restore the instance. Only before:
-      {{ (lifecycle_broad_reference | difference(lifecycle_broad_lines))[:10] }}. Only after:
-      {{ (lifecycle_broad_lines | difference(lifecycle_broad_reference))[:10] }}.
+      {{ (lifecycle_broad_reference.lines.split('\n') | difference(lifecycle_broad_record.lines.split('\n')))[:10]
+         if lifecycle_broad_record.digest != lifecycle_broad_reference.digest | default('') else [] }}.
+      Only after:
+      {{ (lifecycle_broad_record.lines.split('\n') | difference(lifecycle_broad_reference.lines.split('\n')))[:10]
+         if lifecycle_broad_record.digest != lifecycle_broad_reference.digest | default('') else [] }}.
     quiet: true

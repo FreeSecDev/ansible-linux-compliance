@@ -91,12 +91,13 @@ NATIVE_KEYS: Final[frozenset[str]] = frozenset(
     {"rule_id", "revert_strategy", "runbook", "parameters"}
 )
 PROFILE_VALUE_KEY: Final[str] = "profile_value"
-PROFILE_VALUE_SOURCE_KEY: Final[str] = "profile_value_source"
-OPTIONAL_NATIVE_KEYS: Final[frozenset[str]] = frozenset(
-    {PROFILE_VALUE_KEY, PROFILE_VALUE_SOURCE_KEY}
-)
+PROFILE_VALUE_ID_KEY: Final[str] = "profile_value_id"
+OPTIONAL_NATIVE_KEYS: Final[frozenset[str]] = frozenset({PROFILE_VALUE_KEY, PROFILE_VALUE_ID_KEY})
 GENERATED_PARAMETERS: Final[tuple[str, ...]] = ("value_id", "profile_values")
 VALUE_NAME: Final[re.Pattern[str]] = re.compile(r"[a-z0-9][a-z0-9_]{0,127}")
+VALUE_ID: Final[re.Pattern[str]] = re.compile(
+    re.escape(profile_values.VALUE_PREFIX) + r"(?P<short>[a-z0-9][a-z0-9_]{0,127})"
+)
 TIERS: Final[tuple[str, ...]] = ("topic_groups", "rule_prefixes", "fallback_groups")
 GROUP_NAME: Final[re.Pattern[str]] = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}")
 PREFIX_NAME: Final[re.Pattern[str]] = re.compile(r"[a-z0-9][a-z0-9_-]{0,62}_")
@@ -265,20 +266,23 @@ def _native(raw: object, index: int) -> tuple[str, dict[str, object]]:
     if table is None or frozenset(table) - OPTIONAL_NATIVE_KEYS != NATIVE_KEYS:
         message = (
             f"{where} must be a mapping with exactly {sorted(NATIVE_KEYS)} "
-            f"and an optional {PROFILE_VALUE_KEY!r} with an optional {PROFILE_VALUE_SOURCE_KEY!r}"
+            f"and an optional {PROFILE_VALUE_KEY!r} or {PROFILE_VALUE_ID_KEY!r}"
         )
+        raise _fail(message)
+    if PROFILE_VALUE_KEY in table and PROFILE_VALUE_ID_KEY in table:
+        message = f"{where} may set {PROFILE_VALUE_KEY!r} or {PROFILE_VALUE_ID_KEY!r}, not both"
         raise _fail(message)
     value = table.get(PROFILE_VALUE_KEY)
     if PROFILE_VALUE_KEY in table and not (isinstance(value, str) and VALUE_NAME.fullmatch(value)):
         message = f"{where}.{PROFILE_VALUE_KEY} must be the short identifier of an XCCDF value"
         raise _fail(message)
-    source = table.get(PROFILE_VALUE_SOURCE_KEY)
-    if PROFILE_VALUE_SOURCE_KEY in table and (
-        value is None or source not in profile_values.SOURCES
+    pinned = table.get(PROFILE_VALUE_ID_KEY)
+    if PROFILE_VALUE_ID_KEY in table and not (
+        isinstance(pinned, str) and VALUE_ID.fullmatch(pinned)
     ):
         message = (
-            f"{where}.{PROFILE_VALUE_SOURCE_KEY} must be one of {list(profile_values.SOURCES)} "
-            f"and needs {PROFILE_VALUE_KEY!r}"
+            f"{where}.{PROFILE_VALUE_ID_KEY} must be the full identifier of an XCCDF value, "
+            f"starting with {profile_values.VALUE_PREFIX!r}"
         )
         raise _fail(message)
     parameters = toggles.as_mapping(table["parameters"])
@@ -299,8 +303,8 @@ def _native(raw: object, index: int) -> tuple[str, dict[str, object]]:
     details = {key: table[key] for key in ("revert_strategy", "runbook", "parameters")}
     if value is not None:
         details[PROFILE_VALUE_KEY] = value
-    if source is not None:
-        details[PROFILE_VALUE_SOURCE_KEY] = source
+    if pinned is not None:
+        details[PROFILE_VALUE_ID_KEY] = pinned
     return str(rule_id), details
 
 
@@ -658,13 +662,20 @@ def native_parameters(
 ) -> dict[str, object]:
     """Return the parameters of a native rule, with its profile values when it names a value.
 
-    A rule with ``profile_value`` gets ``value_id`` and ``profile_values``: per datastream that
-    selects it, the profiles that share one value and that value (:func:`profile_values.resolve`).
-    ``profile_value_source: fix`` takes a value that the rule's fixes substitute and its checks
-    do not export.
+    A rule with ``profile_value`` or ``profile_value_id`` gets ``value_id`` and
+    ``profile_values``: per datastream that selects it, the profiles that share one value and
+    that value (:func:`profile_values.resolve`). ``profile_value`` names a value that the rule's
+    checks export. ``profile_value_id`` pins the full identifier of a value that the checks do
+    not export, because they accept a range; the value still comes only from each profile's
+    ``refine-value`` and the value's options (ADR 0025).
     """
     parameters = dict(cast("Mapping[str, object]", native["parameters"]))
-    value = native.get(PROFILE_VALUE_KEY)
+    pinned = native.get(PROFILE_VALUE_ID_KEY)
+    value = (
+        native.get(PROFILE_VALUE_KEY)
+        if pinned is None
+        else str(pinned).removeprefix(profile_values.VALUE_PREFIX)
+    )
     if value is None:
         return parameters
     sources: list[profile_values.StreamProfiles] = []
@@ -674,12 +685,7 @@ def native_parameters(
             raise _fail(message)
         sources.append(profile_values.StreamProfiles(stream.name, stream.values, stream.profiles))
     try:
-        resolved = profile_values.resolve(
-            sources,
-            rule_id,
-            str(value),
-            str(native.get(PROFILE_VALUE_SOURCE_KEY, profile_values.CHECK_SOURCE)),
-        )
+        resolved = profile_values.resolve(sources, rule_id, str(value), pinned=pinned is not None)
     except profile_values.ProfileValueError as error:
         raise _fail(str(error)) from error
     parameters["value_id"] = value

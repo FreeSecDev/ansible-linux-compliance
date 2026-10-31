@@ -837,6 +837,7 @@ SANCTIONED_SANITY_IGNORE = (
     "plugins/modules/control_state.py validate-modules:missing-gplv3-license\n"
     "plugins/modules/profile_info.py validate-modules:missing-gplv3-license\n"
     "plugins/modules/sshd_validate.py validate-modules:missing-gplv3-license\n"
+    "plugins/modules/tree_info.py validate-modules:missing-gplv3-license\n"
 )
 
 

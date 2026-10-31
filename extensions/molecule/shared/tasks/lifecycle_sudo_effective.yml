@@ -34,7 +34,7 @@
 
 - name: Sudo effective files | Remember the state of the whole instance before the cases
   ansible.builtin.set_fact:
-    effective_broad_before: "{{ lifecycle_broad_lines }}"
+    effective_broad_before: "{{ lifecycle_broad_record }}"
 
 - name: Sudo effective files | Run the cases and remove the files of the administrator whatever happens
   block:

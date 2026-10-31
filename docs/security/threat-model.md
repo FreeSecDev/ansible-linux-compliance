@@ -80,15 +80,20 @@ SCAP datastream with `oscap` ([audit guide](../audit.md), [ADR 0004](../adr/0004
   A change of the pin is a reviewed pull request. A local user cannot swap the copy, and T-AUDIT-1 stops a swap of the
   source.
 - **Not remediation:** the scripts are XCCDF checks, not `fix` elements. `--remediate` is refused by the process
-  policy, so [ADR 0003](../adr/0003-native-module-remediation.md) (no upstream Bash fixes) still holds. ADR 0003 is about
+  policy, so [ADR 0003](../adr/0003-native-module-remediation.md) (no upstream Bash fixes) still holds, and
+  `make lint-repo` refuses Python that reads `fix` elements and any committed upstream remediation content
+  ([ADR 0025](../adr/0025-own-ansible-remediation-only.md)). ADR 0003 is about
   what changes a host; SCE checks are meant to read it, but nothing technical confines them to reading.
-- **Option to disable:** the pinned `oscap` 1.3.9 has no command-line option to disable SCE. SCE is the auto-loaded
+- **Option to disable:** the pinned `oscap` 1.3.9 has no command-line option to disable SCE (the source lines are
+  cited in [ADR 0025](../adr/0025-own-ansible-remediation-only.md), Security implications). SCE is the auto-loaded
   plugin `libopenscap_sce.so.25`, shipped in `libopenscap25t64` with the library itself. The undocumented variable
   `OSCAP_CHECK_ENGINE_PLUGIN_DIR` would redirect its `dlopen`, but the process helper does not pass it and redirecting
   root's library loading would add a code-loading path. Without SCE, the 16 SCE-only rules of `cis_level1_server` are
   `notchecked` (13 firewall rules and 3 file-system-wide ownership and permission rules); the other 392 rules are
   unaffected. An operator who does not want to run any SCE script can list those rules in `disabled_rules`: the
-  tailoring file deselects them, their scripts do not run, and they are reported as `disabled`.
+  tailoring file deselects them, their scripts do not run, and they are reported as `disabled`. That is not the
+  default, so the owner's requirement that ComplianceAsCode code never runs is not yet met for SCE;
+  [FREES-191](https://vidlunnia.atlassian.net/browse/FREES-191) tracks it.
 - **Residual:** the pinned content and its 81 scripts are trusted as a whole, like the OVAL definitions, which
   `oscap` also evaluates as root. A content update is therefore a change to code that runs as root: its review covers
   the SCE scripts that changed, not only the digest.
@@ -393,8 +398,9 @@ installed in the test virtual machines (FREES-61)
   package changes what the virtual machine proves.
 - **Mitigation:** every file is checked against a SHA-256 and size pinned in a reviewed file of this repository (`tools/molecule/libvirt-host.pins`,
   `extensions/molecule/shared/images/cloud-images.pins`) after it is restored and before it is used:
-  `tools/molecule/libvirt-host-packages.sh` checks every host package in place, copies the ones it installs into a
-  private directory, checks the copies and installs only those, with `apt-get` given no package source so that it can
+  `tools/molecule/libvirt-host-packages.sh` checks every host package in place, copies the ones it installs with
+  `sudo install -o root -m 0644` into a private directory of root in the sticky `/tmp`, checks the copies there as root
+  and installs only those, with `apt-get` given no package source so that it can
   neither download nor install anything else; `fetch-cloud-images.sh` checks every image and package, and
   `create_libvirt.yml` and `prepare` check them again before use. A file that fails is downloaded again from the
   pinned HTTPS source and checked once more; a symbolic link or a planted file of another name is never used. The
@@ -407,7 +413,9 @@ installed in the test virtual machines (FREES-61)
   before the checks run. The boundary is who can write an entry in a scope that a run restores; see T-MOLECULE-1,
   which applies to these caches too. A pin change is trusted through review: a reviewer who
   accepts a wrong digest accepts the file. The runner image itself, and the packages that it already has in the
-  pinned version or later, are trusted as the runner is. No update bot refreshes the pins (FREES-81).
+  pinned version or later, are trusted as the runner is. No update bot refreshes the pins (FREES-81). The runner user has passwordless
+  `sudo`, so no privilege boundary separates it from the install; the root-owned copies only close the window in
+  which a process of that user could swap a checked copy before `apt-get` reads it.
 
 ## Molecule CI inputs
 

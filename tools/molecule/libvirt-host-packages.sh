@@ -92,8 +92,21 @@ is_verified() {
     && printf '%s  %s\n' "$2" "$1" | sha256sum --check --strict --quiet
 }
 
+is_verified_as_root() {
+  sudo test -f "$1" && ! sudo test -L "$1" \
+    && [[ "$(sudo stat -c %s:%U -- "$1")" == "$3:root" ]] \
+    && printf '%s  %s\n' "$2" "$1" | sudo sha256sum --check --strict --quiet
+}
+
 work_dir="$(mktemp -d)"
-trap 'rm -rf "${work_dir}"' EXIT
+copies=""
+remove_work() {
+  rm -rf "${work_dir}"
+  if [[ -n "${copies}" ]]; then
+    sudo rm -rf -- "${copies}"
+  fi
+}
+trap remove_work EXIT
 
 fetch_all() {
   local index name target
@@ -141,8 +154,13 @@ install_all() {
       exit 1
     fi
   done
-  chmod 0711 "${work_dir}"
-  mkdir -m 0755 "${work_dir}/debs"
+  copies="$(sudo mktemp -d)"
+  if [[ "${copies}" != /* ]] || [[ "$(sudo stat -c %U:%a -- "${copies}")" != root:700 ]]; then
+    printf 'error: %s is not a private directory of root; nothing was installed\n' "${copies}" >&2
+    exit 1
+  fi
+  sudo install -d -o root -g root -m 0755 -- "${copies}/debs" "${copies}/lists/partial" "${copies}/sources.list.d"
+  sudo chmod 0755 -- "${copies}"
   for index in "${!deb_names[@]}"; do
     name="${deb_names[${index}]}"
     installed="$(installed_version "${name}")"
@@ -150,18 +168,17 @@ install_all() {
       printf 'keeping the installed %s %s\n' "${name}" "${installed}"
       continue
     fi
-    copy="${work_dir}/debs/$(basename "${deb_paths[${index}]}")"
-    cp -- "${directory}/$(basename "${deb_paths[${index}]}")" "${copy}"
-    if ! is_verified "${copy}" "${deb_digests[${index}]}" "${deb_sizes[${index}]}"; then
-      printf 'error: the copy of %s does not match its pin; nothing was installed\n' "${name}" >&2
+    copy="${copies}/debs/$(basename "${deb_paths[${index}]}")"
+    sudo install -o root -g root -m 0644 -- "${directory}/$(basename "${deb_paths[${index}]}")" "${copy}"
+    if ! is_verified_as_root "${copy}" "${deb_digests[${index}]}" "${deb_sizes[${index}]}"; then
+      printf 'error: the root-owned copy of %s does not match its pin; nothing was installed\n' "${name}" >&2
       exit 1
     fi
     files+=("${copy}")
   done
-  mkdir -p "${work_dir}/lists/partial" "${work_dir}/sources.list.d"
   if [[ ${#files[@]} -gt 0 ]]; then
     sudo DEBIAN_FRONTEND=noninteractive apt-get -o Dir::Etc::SourceList=/dev/null \
-      -o "Dir::Etc::SourceParts=${work_dir}/sources.list.d" -o "Dir::State::Lists=${work_dir}/lists" \
+      -o "Dir::Etc::SourceParts=${copies}/sources.list.d" -o "Dir::State::Lists=${copies}/lists" \
       -o Dpkg::Use-Pty=0 install -y --no-install-recommends -- "${files[@]}"
   fi
   for index in "${!require_names[@]}"; do
