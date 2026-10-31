@@ -1,0 +1,6 @@
+---
+bugfixes:
+  - >-
+    remediate - ``login_defs`` refuses a number line that contains a carriage return, a vertical tab or a form feed
+    as ``unreadable_value``, such as ``PASS_MAX_DAYS 30`` with Windows line endings or ``PASS_MAX_DAYS \v30``, which
+    shadow-utils reads as 30; before, the profile's looser value (365, or 7 under a minimum) was written.
