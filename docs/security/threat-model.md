@@ -87,9 +87,12 @@ The former SCE-only rules are `notchecked`. The text below records the situation
   A change of the pin is a reviewed pull request. A local user cannot swap the copy, and T-AUDIT-1 stops a swap of the
   source.
 - **Not remediation:** the scripts are XCCDF checks, not `fix` elements. `--remediate` is refused by the process
-  policy, so [ADR 0003](../adr/0003-native-module-remediation.md) (no upstream Bash fixes) still holds. ADR 0003 is about
+  policy, so [ADR 0003](../adr/0003-native-module-remediation.md) (no upstream Bash fixes) still holds, and
+  `make lint-repo` refuses Python that reads `fix` elements and any committed upstream remediation content
+  ([ADR 0025](../adr/0025-own-ansible-remediation-only.md)). ADR 0003 is about
   what changes a host; SCE checks are meant to read it, but nothing technical confines them to reading.
-- **Option to disable:** the pinned `oscap` 1.3.9 has no command-line option to disable SCE. SCE is the auto-loaded
+- **Option to disable:** the pinned `oscap` 1.3.9 has no command-line option to disable SCE (the source lines are
+  cited in [ADR 0025](../adr/0025-own-ansible-remediation-only.md), Security implications). SCE is the auto-loaded
   plugin `libopenscap_sce.so.25`, shipped in `libopenscap25t64` with the library itself. The undocumented variable
   `OSCAP_CHECK_ENGINE_PLUGIN_DIR` would redirect its `dlopen`, but the process helper does not pass it and redirecting
   root's library loading would add a code-loading path. Without SCE, the 16 SCE-only rules of `cis_level1_server` are

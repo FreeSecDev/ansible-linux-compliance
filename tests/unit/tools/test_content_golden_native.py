@@ -12,8 +12,13 @@ from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compli
     xmlsafe,
 )
 from tests.unit.tools.test_content_golden import CONTENT_DIRECTORY, REQUIRE_CONTENT
+from tests.unit.tools.test_profile_values import (
+    PINNED_TIMEOUT_RULE,
+    PINNED_TIMEOUT_VALUE_ID,
+    PINNED_TIMEOUT_VALUES,
+)
 from tools.content import fetch_content as fetch
-from tools.roles import generate_toggles, profile_values
+from tools.roles import generate_catalogue, generate_toggles, profile_values
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 OVAL = "{http://oval.mitre.org/XMLSchema/oval-definitions-5#independent}"
@@ -385,3 +390,25 @@ def test_each_sudo_attribute_rule_restricts_what_the_content_checks() -> None:
                 assert parameters["id"] == 0
             checked += 1
     assert checked == 6
+
+
+def test_the_pinned_sudo_timeout_value_gives_every_selecting_profile_its_value() -> None:
+    manifest = fetch.load_manifest(REPOSITORY_ROOT / "content" / "manifest.yml")
+    pinned_benchmarks()
+    found: dict[str, dict[str, str]] = {}
+    for stream in generate_catalogue.streams_of(manifest, CONTENT_DIRECTORY):
+        rules = generate_catalogue.read_stream(stream)
+        values = cast("profile_values.StreamValues", rules.values)
+        assert PINNED_TIMEOUT_VALUE_ID in values.values, stream.name
+        assert PINNED_TIMEOUT_VALUE_ID not in values.exports[PINNED_TIMEOUT_RULE], stream.name
+        selecting = {
+            profile_id: profile_values.profile_value(values, profile_id, PINNED_TIMEOUT_VALUE_ID)
+            for profile_id, rule_ids in rules.profiles.items()
+            if PINNED_TIMEOUT_RULE in rule_ids
+        }
+        if selecting:
+            found[stream.name] = {
+                profile_id.removeprefix(profile_values.PROFILE_PREFIX): value
+                for profile_id, value in selecting.items()
+            }
+    assert found == PINNED_TIMEOUT_VALUES

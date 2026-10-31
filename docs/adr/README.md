@@ -26,5 +26,6 @@
 | [0022](0022-native-sudo-drop-ins.md) | Native sudo remediation through validated drop-ins | proposed |
 | [0026](0026-no-content-scripts-on-hosts.md) | No script of the scanner content runs on a managed host, not even to audit | proposed |
 | [0023](0023-native-ssh-server-configuration.md) | Native SSH server configuration through validated drop-ins | proposed |
+| [0025](0025-own-ansible-remediation-only.md) | Remediation is our own Ansible only; scanner remediation content is never used | proposed |
 
 Proposed ADRs are accepted through the pull request that introduces their first implementation.

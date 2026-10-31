@@ -7,13 +7,20 @@ reviewers. Jira: FREES-52, FREES-55 (generated toggles), FREES-53 (full catalogu
 [ADR 0011](adr/0011-control-toggles-and-cleanup.md) (toggles, cleanup and the state ledger, with the amendments of
 FREES-52, FREES-55 and FREES-53), [ADR 0021](adr/0021-native-banners-pwquality-and-profile-values.md) (profile values,
 banners and password quality), [ADR 0022](adr/0022-native-sudo-drop-ins.md) (sudo, FREES-175),
-[ADR 0023](adr/0023-native-ssh-server-configuration.md) (SSH server, FREES-109). How to make a further topic
-native is in the
+[ADR 0023](adr/0023-native-ssh-server-configuration.md) (SSH server, FREES-109),
+[ADR 0025](adr/0025-own-ansible-remediation-only.md) (our own Ansible only, FREES-188). How to make a further
+topic native is in the
 [native remediation guide](native-remediation-guide.md).
 
-Remediation changes managed hosts. It never runs ComplianceAsCode playbooks, Bash fixes or `oscap --remediate`; every
-change is made by a native Ansible module or by a module of this collection. A remediated rule is not a claim of
-compliance: only a later audit shows whether the rule now passes, and a host scan is never a certification.
+Remediation changes managed hosts. Every change is made by this project's own Ansible: a native Ansible module or a
+module of this collection ([ADR 0025](adr/0025-own-ansible-remediation-only.md)). The collection never runs, reads,
+generates or ships ComplianceAsCode or OpenSCAP remediation: no generated playbooks or Bash fixes, no `fix` elements of
+the datastream, no `oscap --remediate` or `generate fix`, and no script that the scanner provides. The scanner content
+is used only to audit and, in golden tests, as the reference that pins what our own remediation writes. Values come
+from the profile's XCCDF values through our own pinned mappings in `content/catalogue.yml`. A rule without a native
+remediation is scan-only: remediation reports it as `not_implemented` and no other tool remediates it. `make lint-repo`
+enforces this on every tracked file. A remediated rule is not a claim of compliance: only a later audit shows whether
+the rule now passes, and a host scan is never a certification.
 
 ## Status
 
@@ -296,8 +303,8 @@ must:
 
 ### Reference family: `file_permissions`
 
-`file_permissions_crontab` restricts `/etc/crontab` to at most `0600`, as the ComplianceAsCode fix does
-(`chmod u-xs,g-xwrs,o-xwrt`): the filter `freesecdev.linux_compliance.restricted_mode` computes `current & 0600`, so a
+`file_permissions_crontab` restricts `/etc/crontab` to at most `0600`, the most that its OVAL check accepts (no
+set-ID, sticky or owner-execute bit and no group or other bit): the filter `freesecdev.linux_compliance.restricted_mode` computes `current & 0600`, so a
 stricter mode such as `0400` is kept and only the excess bits are removed. Its strategy is `recorded_value`.
 
 | Step | Module | Behaviour |
@@ -314,9 +321,11 @@ Besides the reference family, three topics are native
 [ADR 0023](adr/0023-native-ssh-server-configuration.md)).
 Their rules use the profile's own values, which `make catalogue` reads from the pinned datastreams into the rule
 parameters (`value_id`, `profile_values`); a rule whose content and profile the catalogue holds no value for fails the
-family before anything changes. A rule whose check accepts a range and leaves the exact value to the content's fix
-sets `profile_value_source: fix` in `content/catalogue.yml`, and the value is the one the fixes substitute
-(`sudo_require_reauthentication`).
+family before anything changes. A rule whose check exports its value names it with `profile_value` in
+`content/catalogue.yml`. A rule whose check accepts a range and exports nothing pins the full XCCDF `Value` identifier
+with `profile_value_id`. The value is still the profile's own `refine-value` or the `Value`'s default, and a golden
+test pins it per profile (`sudo_require_reauthentication`: 15 for CIS, 0 for the STIG, 5 for CCN and PCI DSS). The
+content's `fix` elements are never read ([ADR 0025](adr/0025-own-ansible-remediation-only.md)).
 
 ### Banners
 
@@ -451,7 +460,7 @@ writes one drop-in on both platforms ([ADR 0022](adr/0022-native-sudo-drop-ins.m
 
 | Rules | What is applied | Record and cleanup |
 |---|---|---|
-| `sudo_add_use_pty`, `sudo_custom_logfile`, `sudo_require_reauthentication`, `sudoers_validate_passwd` | `/etc/sudoers.d/50-freesecdev-<setting>` with a header that names the rule and `Defaults use_pty`, `Defaults logfile=<var_sudo_logfile>`, `Defaults timestamp_timeout=<var_sudo_timestamp_timeout>` (from the content's fix) or the three `Defaults !targetpw`, `!rootpw`, `!runaspw` lines; mode `0440`, owner and group root, written with `copy` and `validate: /usr/sbin/visudo -cf %s`. `/etc/sudoers` and other drop-ins are never written | `recorded_value` of `method` (`dropin`), `dropin` (`null`: it did not exist) and `dropin_sha256`; cleanup removes the drop-in when it carries the header and still has that SHA-256 |
+| `sudo_add_use_pty`, `sudo_custom_logfile`, `sudo_require_reauthentication`, `sudoers_validate_passwd` | `/etc/sudoers.d/50-freesecdev-<setting>` with a header that names the rule and `Defaults use_pty`, `Defaults logfile=<var_sudo_logfile>`, `Defaults timestamp_timeout=<var_sudo_timestamp_timeout>` (pinned with `profile_value_id`) or the three `Defaults !targetpw`, `!rootpw`, `!runaspw` lines; mode `0440`, owner and group root, written with `copy` and `validate: /usr/sbin/visudo -cf %s`. `/etc/sudoers` and other drop-ins are never written | `recorded_value` of `method` (`dropin`), `dropin` (`null`: it did not exist) and `dropin_sha256`; cleanup removes the drop-in when it carries the header and still has that SHA-256 |
 | `file_permissions_etc_sudoers`, `file_owner_etc_sudoers`, `file_groupowner_etc_sudoers` | `/etc/sudoers` at most `0440` (a stricter mode is kept), uid 0, gid 0 | `recorded_value` of `method` (`attribute`), the prior `mode`, `owner` or `group` and `written`; cleanup restores the prior attribute when the current one is still `written` |
 | `directory_permissions_etc_sudoersd`, `directory_owner_etc_sudoersd`, `directory_groupowner_etc_sudoersd` | `/etc/sudoers.d` at most `0750`, uid 0, gid 0 | as above |
 
@@ -570,8 +579,9 @@ already controls the host. A remediated rule is not proof that the control passe
 | `tests/unit/tools/test_content_golden_ssh.py` | With the pinned content: the check of every native ssh rule on both platforms reads `sshd_config` and the rule's own drop-in with `check="all"`, each fixed value satisfies the check's state and each profile value is exported by the check, no pinned profile selects two native ssh rules for one keyword, the crypto rules carry the RHEL 9 refusal, every drop-in sorts before the distributions' drop-ins, and `sshd_rekey_limit` refuses every drop-in | `make test-content-golden`, CI job `test` |
 | `tests/unit/plugins/modules/test_sshd_validate.py`, `test_process.py` | The `sshd_validate` module passes only the keywords of the native rules and one-word values as `-o` options of `sshd -t -f /etc/ssh/sshd_config`, reports a refusal with sshd's bounded message, a timeout and a missing executable, and changes nothing in check mode; the process policy refuses every other sshd command line. 100% line and branch coverage | `make test-coverage` |
 | `tests/playbooks/remediate-native-check.yml`, ssh plays | Against localhost in check mode with the Ubuntu 24.04 CIS rules of `ssh` allow-listed: every rule gets exactly one result, `changed` exactly when it is `applied`, every refusal has a reason and `/etc/ssh` is unchanged (as a user that cannot read a drop-in, the run must stop at the read); a rule without its profile value fails before any change; `ssh.yml` refuses to run without the opt-in | `make test-remediate-check`, CI job `test-playbooks` |
-| `tests/unit/tools/test_profile_values.py` | The profile value reader against synthetic datastreams: values, defaults, refinements, exports and the values that fixes substitute, digest and safety refusals, oversized values, chunking, grouping per profile, and every error of the generator integration, including `profile_value_source`. 100% line and branch coverage | `make test-coverage` |
-| `tests/unit/tools/test_content_golden_native.py`, sudo | With the pinned content: every sudo drop-in is read by every check of its rule on both platforms, satisfies the check's pattern and state for every profile value (and matches none of its `none_exist` patterns), and every attribute rule restricts the path and the mode bits that the OVAL checks | `make test-content-golden`, CI job `test` |
+| `tests/unit/tools/test_profile_values.py` | The profile value reader against synthetic datastreams: values, defaults, refinements and exports, that the `fix` elements of the content are never kept, digest and safety refusals, oversized values, chunking, grouping per profile, pinned `profile_value_id` values, and every error of the generator integration, including the removed `profile_value_source`. Without content: no catalogue entry sets `profile_value_source`, and the generated `timestamp_timeout` keeps 15 for CIS, 0 for the STIG and 5 for CCN and PCI DSS. 100% line and branch coverage | `make test-coverage` |
+| `tests/unit/tools/test_check_repo_rules_own_remediation.py` | The repository guard of ADR 0025 with mutation cases: Python outside `tests/unit/` that names the XCCDF `fix` element in a string or bytes constant, as a path, namespace, wildcard, suffix test, markup or regular expression (including the removed fix reader and the ElementTree and lxml forms), files that are ComplianceAsCode or OpenSCAP remediation content, invocations of the scanner's remediation (also across line continuations, and `usg fix`) and of scripts it provides in makefiles, workflows, tasks, scripts, Jinja templates, container files and Python, the exact pinned exceptions, that adding a path form to a pinned file is refused, and that only the pinned constants name the element in the repository | `make test-coverage`, `make lint-repo` |
+| `tests/unit/tools/test_content_golden_native.py`, sudo | With the pinned content: every sudo drop-in is read by every check of its rule on both platforms, satisfies the check's pattern and state for every profile value (and matches none of its `none_exist` patterns), every attribute rule restricts the path and the mode bits that the OVAL checks, and the pinned `xccdf_org.ssgproject.content_value_var_sudo_timestamp_timeout` exists in both datastreams, is not exported by the check, and gives every selecting profile its value (15 for CIS, 0 for the STIG, 5 for CCN and PCI DSS) | `make test-content-golden`, CI job `test` |
 | `tests/playbooks/remediate-native-check.yml`, sudo | A sudo rule without a profile value fails before any sudoers file is read, and every sudo family file and helper refuses to run without the opt-in. The sudo rules are not run against localhost, because `/etc/sudoers` is readable only by root | `make test-remediate-check`, CI job `test-playbooks` |
 
 `make test-remediate-check` reads the ledger directory as the calling user; on a host where
