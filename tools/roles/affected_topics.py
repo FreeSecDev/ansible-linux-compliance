@@ -17,7 +17,7 @@ the file names. A path that the mapping cannot confine to topics plans the full 
   (``make lint-role-guards``) are a function of files that are classified themselves, by
   generators below ``tools/roles``, which plan the full matrix when they change.
   ``content/catalogue.yml`` is only the input of ``roles/remediate/vars/rules.yml``
-  (``generate_catalogue --check`` in the ``test`` job), which is classified by its entries.
+  (``generate_catalogue --check`` in the ``test-suites`` job), which is classified by its entries.
 * **The catalogue.** ``roles/remediate/vars/rules.yml`` is compared entry by entry: a family's
   registry entry, its rules, its ``audit_only`` list and the subsystem tags affect that family,
   and the families of the rules that a tag gains or loses. A change to the order or the set of

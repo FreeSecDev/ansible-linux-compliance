@@ -824,6 +824,15 @@ no required job comes near the merge queue's 30 minutes. The `test` job, 21 minu
 the coverage, audit-exception, golden-content and browser tests, and `test-playbooks` runs the check-mode playbooks
 (`test-evidence`, `test-remediate-check`, `test-role-guards`, `test-verify`).
 
+By 9be18b4 `test` was close to its limit again: in four of the eight latest runs it took 18.0 to 18.6 minutes, 13.8
+to 14.2 of them in `make test-coverage`, which grows with every topic (the other four took 10.3 to 15.4). Since FREES-174
+`make test-coverage` runs pytest on `PYTEST_WORKERS` pytest-xdist workers (`auto`: one per CPU, four on the hosted
+runner) and pytest-cov combines the data of the workers, so both 100% gates still run on the whole suite. On a
+16-CPU workstation the suite took 555 seconds serially and 146 seconds on four workers, with the same 10,094 tests
+and the same covered lines and branches. The audit-exception, golden-content and browser tests, 3 to 4.5 minutes
+together, moved to their own job, `test-suites` (timeout 10), which runs alongside `test`; `ci-gate` needs both, and
+neither has a condition, so every event that ran the former `test` job runs both.
+
 With `sudo` (FREES-175) the regressions moved out of the cycle legs: `make molecule-matrix` adds one leg per regression
 group that a declaration lists and platform it runs on, with the mode `regressions-<group>`, after the two toggle
 modes of the topic, so 24 cycle legs and 19 regression legs (`pwquality` `changes`, `ssh` `changes` and `vendor`,
@@ -854,7 +863,7 @@ deletion and an addition. Nothing is listed per topic by hand:
 | `roles/remediate/vars/rules.yml` | the families whose registry entry, rules or `audit_only` list changed, a changed subsystem tag and the families of the rules it gains or loses; a change to the set or order of families, to the order of unchanged families' entries or to another key plans the full matrix |
 | `roles/remediate/vars/main.yml` | the topics of the files that use each changed key; a key that no file or a shared file uses plans the full matrix |
 | `roles/{audit,remediate}/meta/argument_specs.yml` | none when only descriptions changed, else the full matrix |
-| the role guards, `roles/remediate/tasks/dispatch.yml`, `playbooks/run_start.yml`, `content/catalogue.yml` | none: they are generated or a generator's input, checked for drift by the required `lint` and `test` jobs, and their effect is classified through their sources |
+| the role guards, `roles/remediate/tasks/dispatch.yml`, `playbooks/run_start.yml`, `content/catalogue.yml` | none: they are generated or a generator's input, checked for drift by the required `lint` and `test-suites` jobs, and their effect is classified through their sources |
 | documentation, changelog fragments, unit tests and fixtures, check-mode playbooks, the reporting, lint, docs and IaC tools, the SCC and OpenSCAP image definitions, linter and bot configuration | none |
 | anything else: the shared harness and tasks, images and pins, scenarios, plugins and `module_utils`, role defaults and entry points, content pins, `tools/roles`, `tools/molecule`, `ci.yml`, the `Makefile`, the Python lock, a symbolic link, an unknown path | the full matrix |
 

@@ -518,7 +518,7 @@ The audit role's `deferred.yml` and `enforce.yml` entry points defer and enforce
   become; modes; the collection version matches `galaxy.yml`; the allow-list uses the audit module's file names;
   `playbooks/evidence.yml` defers the gates, collects, summarises and only then runs `gate.yml`; the audit role defers
   its gates only on request.
-- `make test-evidence` (part of `make ci` and the CI `test` job) runs `tests/playbooks/evidence.yml` on two local
+- `make test-evidence` (part of `make ci` and the CI `test-playbooks` job) runs `tests/playbooks/evidence.yml` on two local
   inventory hosts with synthetic `linux_compliance_audited` facts and fixture files, the audit role's `evaluate.yml` and
   `stale.yml`, and the evidence role. It checks the bundle content, provenance, permissions and owner, that no planted
   secret is in a bundle, that the XCCDF target facts and SCE output are carried, that a second collection of the same
