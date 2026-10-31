@@ -87,6 +87,50 @@
       loop_control:
         label: "{{ item.name }}"
 
+    - name: Read the record of the verified instance images
+      ansible.builtin.set_fact:
+        create_verified_images: >-
+          {{ lookup('ansible.builtin.file', lookup('ansible.builtin.env', 'FREESECDEV_MOLECULE_IMAGES'))
+          | from_yaml }}
+      when: lookup('ansible.builtin.env', 'FREESECDEV_MOLECULE_IMAGES') | length > 0
+
+    - name: Refuse to run without a record of the verified instance images
+      ansible.builtin.assert:
+        that:
+          - create_verified_images is defined
+          - create_verified_images is mapping
+          - item.image in create_verified_images
+          - create_verified_images[item.image].tag | default('') == create_image_tags[item.image]
+          - create_verified_images[item.image].id | default('') is match('^sha256:[0-9a-f]{64}$')
+        fail_msg: >-
+          The image {{ item.image }} with tag {{ create_image_tags[item.image] }} was not built or loaded and verified.
+          Run the scenario through make (make test-molecule-docker), which prepares the images; create never builds one.
+        quiet: true
+      loop: "{{ molecule_yml.platforms }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: Inspect the verified instance images
+      community.docker.docker_image_info:
+        name: "freesecdev-molecule/{{ item.image }}:{{ create_image_tags[item.image] }}"
+      register: create_image_info
+      loop: "{{ molecule_yml.platforms }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: Refuse an instance image that is missing or is not the verified one
+      ansible.builtin.assert:
+        that:
+          - item.images | length == 1
+          - item.images[0].Id == create_verified_images[item.item.image].id
+        fail_msg: >-
+          freesecdev-molecule/{{ item.item.image }}:{{ create_image_tags[item.item.image] }} is missing or is not
+          the image {{ create_verified_images[item.item.image].id }} that was verified; create never builds one.
+        quiet: true
+      loop: "{{ create_image_info.results }}"
+      loop_control:
+        label: "{{ item.item.name }}"
+
     - name: Compute unique instance names, markers and labels
       ansible.builtin.set_fact:
         instance_conf: >-
@@ -120,24 +164,6 @@
             content: "{{ instance_conf | to_nice_yaml }}"
             dest: "{{ molecule_instance_config }}"
             mode: "0600"
-
-        - name: Build instance images from digest-pinned bases
-          community.docker.docker_image:
-            name: "freesecdev-molecule/{{ item.image }}"
-            tag: "{{ create_image_tags[item.image] }}"
-            source: build
-            state: present
-            build:
-              path: "{{ playbook_dir }}/images"
-              dockerfile: "{{ molecule_images[item.image].dockerfile }}"
-              pull: false
-              args:
-                BASE_IMAGE: >-
-                  {{ molecule_images[item.image].reference }}:{{ molecule_images[item.image].tag }}@{{
-                  molecule_images[item.image].digest }}
-          loop: "{{ molecule_yml.platforms }}"
-          loop_control:
-            label: "{{ item.name }}"
 
         - name: Start instances without privileges and without capabilities
           community.docker.docker_container:
