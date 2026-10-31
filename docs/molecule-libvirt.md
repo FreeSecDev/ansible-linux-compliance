@@ -153,7 +153,9 @@ The GitHub-hosted runner lacks QEMU and libvirt. `tools/molecule/libvirt-host.pi
   is downloaded again.
 - `install` (`make molecule-libvirt-host-install`) checks every pinned file again and installs nothing if one is
   missing or differs. It skips the packages that the runner already has installed (`ii`) in the pinned or a later
-  version, copies the others into a temporary directory of its own, checks the copies and installs them with
+  version, copies the others with `sudo install -o root -m 0644` into a directory that `sudo mktemp -d` creates for root in
+  the sticky `/tmp`, so that the runner user can neither change a copy nor swap the directory, checks the copies
+  there as root (`sudo sha256sum --check`, size and owner) and installs them with
   `apt-get` from those verified copies alone: with no source list and an empty list directory, `apt`
   resolves the dependencies from the installed packages and these files and cannot download anything, so an
   unverified file never reaches `dpkg`. It then checks that every `require` package is installed (`ii`) in its exact version. It refuses to run
@@ -495,9 +497,8 @@ lifecycle cycle on the machine in one leg per platform.
 | `libvirt-selftest` | 4 | 5.5 | 7.9 |
 
 Each leg spends about a minute installing QEMU and libvirt and seconds restoring the cache; `create` and `prepare`
-take about 1.5 minutes. The rest of a lifecycle leg is one cycle: seven no-change snapshots and four whole-instance
-records of the machine, each a `find` with a SHA-256 of every file below `/etc`, `/usr` and the other watched paths,
-plus the warm-up scan. The same steps took up to 1.7 times as long on a slow runner as on a fast one, which explains
+take about 1.5 minutes. The rest of a lifecycle leg is one cycle, with the warm-up scan, its no-change snapshots and
+whole-instance records of the machine (see [what each record guarantees](molecule.md#what-each-record-guarantees)). The same steps took up to 1.7 times as long on a slow runner as on a fast one, which explains
 the spread between legs that do the same work. The job's `timeout-minutes` is 28, about one and a half times the
 slowest observed leg, and stays within the merge queue's 30 minutes.
 
@@ -526,6 +527,22 @@ task time were the lifecycle (`side_effect`): the seven no-change snapshots (`fi
 147 seconds), the four whole-instance records (`find` with SHA-256 175 seconds, normalising 105 seconds, sorting 21
 seconds) and the warm-up scan (69 seconds), about three quarters of the leg. The slow runs of `main` show the same
 order.
+
+Before and after the cheaper records of FREES-180 part 2, in minutes: the lines are built in Python, a snapshot taken at
+the moment of a whole-instance record shares its walk, and `/usr` is listed by `tree_info` without content. `main` is
+runs 41123794064 and 41115262555; the pull request is run 41169364693.
+
+| Leg | `main` 41123794064 | `main` 41115262555 | Pull request 41169364693 |
+|---|---|---|---|
+| `libvirt-ubuntu-lifecycle`, `file_permissions`, `topic` | 21.1 | 19.2 | 7.7 |
+| `libvirt-ubuntu-lifecycle`, `file_permissions`, `rule` | 20.0 | 19.5 | 7.2 |
+| `libvirt-rhel-compatible-lifecycle`, `file_permissions`, `topic` | 10.8 | 9.9 | 5.2 |
+| `libvirt-rhel-compatible-lifecycle`, `file_permissions`, `rule` | 9.6 | 6.8 | 3.5 |
+
+In the `topic` leg of the pull request, the lifecycle took 5.0 of 6.9 minutes of task time. The largest parts were the
+warm-up scan (68 seconds), the nine `tree_info` listings of `/usr` (19.5 seconds), the nine checksummed walks of the
+other watched paths (18.6 seconds), the remediate role's input checks (16.7 seconds), the four reads of every service
+(13.0 seconds) and the eight records built by the filter (6.6 seconds).
 
 ## Troubleshooting
 

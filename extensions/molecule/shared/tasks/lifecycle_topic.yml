@@ -154,7 +154,10 @@
 
 - name: Lifecycle topic | Remember the state of the whole instance before any cycle
   ansible.builtin.set_fact:
-    lifecycle_broad_pristine: "{{ lifecycle_broad_lines }}"
+    lifecycle_broad_pristine: "{{ lifecycle_broad_record }}"
+    lifecycle_broad_kept:
+      record: "{{ lifecycle_broad_record }}"
+      snapshot: "{{ lifecycle_broad_snapshot }}"
   when: lifecycle_runs | bool
 
 - name: Lifecycle topic | Run every cycle, topic toggle before rule toggle, for every declared pre-state of the mode

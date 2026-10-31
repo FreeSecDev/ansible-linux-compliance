@@ -15,6 +15,7 @@ __linux_compliance_remediate_login_defs_umask_pattern: '^[0-7]{3}$'
 __linux_compliance_remediate_login_defs_word_pattern: '^[a-z]{1,8}$'
 __linux_compliance_remediate_login_defs_umask_read_pattern: '^(0[0-7]{0,2}|00[0-7]{2}|[0-7])$'
 __linux_compliance_remediate_login_defs_base0_pattern: '^"?[+-]?(0[xX][0-9a-fA-F]+|0[0-7]*|[1-9][0-9]*)"?$'
+__linux_compliance_remediate_login_defs_getdef_number_pattern: '^\+?(0[xX][0-9a-fA-F]+|0[0-7]*|[1-9][0-9]*)$'
 __linux_compliance_remediate_newline: "\n"
 __linux_compliance_remediate_backslash: "\\"
 __linux_compliance_remediate_sshd_main: /etc/ssh/sshd_config
