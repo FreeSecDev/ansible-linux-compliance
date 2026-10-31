@@ -104,7 +104,10 @@ def _path(rule: Mapping[str, object]) -> str:
 
 
 def _cleanup_result(
-    rule: Mapping[str, object], planned: Mapping[str, object], *, changed: bool, found: str | None
+    rule: Mapping[str, object],
+    planned: Mapping[str, object],
+    changed: frozenset[str],
+    found: str | None,
 ) -> dict[str, object]:
     reason = planned.get("reason")
     present = bool(planned.get("present"))
@@ -128,13 +131,16 @@ def _cleanup_result(
         "action": "cleanup",
         "status": "restored" if reason is None else "cleanup_incomplete",
         "reason": reason if reason is not None else (effect_reason if present else None),
-        "changed": changed,
+        "changed": str(rule["rule_id"]) in changed,
         "message": f"{_path(rule)}: {text}",
     }
 
 
 def _apply_result(
-    rule: Mapping[str, object], planned: Mapping[str, object], *, changed: bool, found: str | None
+    rule: Mapping[str, object],
+    planned: Mapping[str, object],
+    changed: frozenset[str],
+    found: str | None,
 ) -> dict[str, object]:
     status = str(planned.get("status"))
     reason = planned.get("reason")
@@ -151,7 +157,7 @@ def _apply_result(
         "action": "apply",
         "status": status,
         "reason": reason or (effect_reason if status == "applied" else None),
-        "changed": changed,
+        "changed": str(rule["rule_id"]) in changed,
         "message": f"{_path(rule)}: {text}",
     }
 
@@ -166,14 +172,14 @@ def audit_rule_results(
     if not isinstance(changed_ids, Sequence) or isinstance(changed_ids, str):
         message = "audit_rule_results needs the changed rule identifiers as a list"
         raise TypeError(message)
-    changed = {str(item) for item in cast("Sequence[object]", changed_ids)}
+    changed = frozenset(str(item) for item in cast("Sequence[object]", changed_ids))
     found = effect(_mapping(outcome, "the outcome"))
     results = [
         _cleanup_result(
             rule,
             _mapping(cleanups[str(rule["rule_id"])], "a cleanup plan entry"),
-            changed=str(rule["rule_id"]) in changed,
-            found=found,
+            changed,
+            found,
         )
         for rule in _rules(rules, "cleanup")
     ]
@@ -181,8 +187,8 @@ def audit_rule_results(
         _apply_result(
             rule,
             _mapping(applies[str(rule["rule_id"])], "an apply plan entry"),
-            changed=str(rule["rule_id"]) in changed,
-            found=found,
+            changed,
+            found,
         )
         for rule in _rules(rules, "apply")
     )

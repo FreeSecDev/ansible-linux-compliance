@@ -31,6 +31,7 @@ if TYPE_CHECKING:
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 COPIED = ("roles", "extensions/molecule", "playbooks")
+COPIED_FILES = ("content/manifest.yml",)
 SUDO_DROPIN = "roles/remediate/tasks/sudo_dropin_apply.yml"
 SUDO_STATES = "extensions/molecule/shared/tasks/lifecycle_sudo_states.yml"
 PWQUALITY_TASKS = "roles/remediate/tasks/pwquality.yml"
@@ -53,6 +54,9 @@ class Trees:
         for tree in (self.base, self.head):
             for part in COPIED:
                 shutil.copytree(REPOSITORY_ROOT / part, tree / part, symlinks=True)
+            for part in COPIED_FILES:
+                (tree / part).parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(REPOSITORY_ROOT / part, tree / part)
 
     def write(self, relative: str, text: str) -> None:
         path = self.head / relative
