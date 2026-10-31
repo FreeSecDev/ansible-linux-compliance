@@ -139,7 +139,7 @@ def unsupported(entries: Sequence[Entry]) -> list[str]:
     procps expands every configuration file name with glob(3), so a name with a glob, brace or
     tilde character may read other files a second time, at its own place in the order.
     """
-    reasons = []
+    reasons: list[str] = []
     for entry in ordered_files(entries, PROCPS):
         name = entry.path.rsplit("/", 1)[1]
         if PROCPS_NAME_EXPANSION & set(name):

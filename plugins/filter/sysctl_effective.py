@@ -70,7 +70,7 @@ _value:
 
 def sysctl_effective(
     entries: list[dict[str, object]], key: str, after: list[str] | None = None
-) -> dict[str, dict[str, str | None]]:
+) -> dict[str, object]:
     """Return what each reader sets for ``key``.
 
     Args:

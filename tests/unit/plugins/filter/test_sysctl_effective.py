@@ -31,7 +31,10 @@ def test_the_files_read_after_boot_come_last() -> None:
 
 
 def test_a_name_that_procps_expands_is_reported() -> None:
-    entries = [*ENTRIES, {"path": "/etc/sysctl.d/z*.conf", "kind": "file", "text": ""}]
+    entries: list[dict[str, object]] = [
+        *ENTRIES,
+        {"path": "/etc/sysctl.d/z*.conf", "kind": "file", "text": ""},
+    ]
     found = sysctl_effective.sysctl_effective(entries, RP_FILTER)
     assert found["unsupported"] == [
         (
