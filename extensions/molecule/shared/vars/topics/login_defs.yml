@@ -84,3 +84,11 @@ regressions:
   - name: profiles
     files:
       - lifecycle_login_defs_other_profiles.yml
+  - name: bytes
+    files:
+      - lifecycle_login_defs_bytes.yml
+  - name: readers
+    platforms:
+      - rhel_compatible
+    files:
+      - lifecycle_login_defs_readers.yml
