@@ -221,7 +221,7 @@ def is_generated(name: str) -> bool:
 
 def _load_yaml(path: Path) -> object:
     try:
-        return cast("object", yaml.safe_load(path.read_text(encoding="utf-8")))
+        return cast("object", yaml.load(path.read_text(encoding="utf-8"), Loader=yaml.CSafeLoader))
     except (OSError, yaml.YAMLError) as error:
         message = f"{path}: cannot be read as YAML: {error}"
         raise GenerationError(message) from error
