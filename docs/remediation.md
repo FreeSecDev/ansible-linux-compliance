@@ -564,7 +564,7 @@ toggle also switch off `set_password_hashing_algorithm_logindefs`, which stays i
 
 | Rules | What is applied | Record and cleanup |
 |---|---|---|
-| `accounts_maximum_age_login_defs` (`PASS_MAX_DAYS`, at most the value), `accounts_minimum_age_login_defs` (`PASS_MIN_DAYS`), `accounts_password_warn_age_login_defs` (`PASS_WARN_AGE`), `accounts_password_minlen_login_defs` (`PASS_MIN_LEN`), `accounts_logon_fail_delay` (`FAIL_DELAY`, each at least the value) | `<NAME> <value>` with the profile's value, written with `lineinfile` in place of the one line of the setting (found in any case), or appended when the setting is absent; a stricter value in the strict form is kept | `recorded_value` of `method` (`line`), `setting_line` (the prior line, or `null`), `written_line` and the file's `mode`, `owner`, `group` and `sha256`; cleanup writes the prior line back in its place, or removes the line when the setting was absent |
+| `accounts_maximum_age_login_defs` (`PASS_MAX_DAYS`, at most the value), `accounts_minimum_age_login_defs` (`PASS_MIN_DAYS`), `accounts_password_warn_age_login_defs` (`PASS_WARN_AGE`), `accounts_password_minlen_login_defs` (`PASS_MIN_LEN`), `accounts_logon_fail_delay` (`FAIL_DELAY`, each at least the value) | `<NAME> <value>` with the profile's value (`FAIL_DELAY  <value>` with two spaces, so that libeconf, through which util-linux `login` reads it on Rocky Linux, never glues it to the line before, and never below `login`'s default of 5 seconds when libeconf reads no value), in place of the one line of the setting (found in any case), or appended when the setting is absent; every other byte of the file is kept, Windows line endings included; a stricter value in the strict form is kept | `recorded_value` of `method` (`line`), `setting_line` (the prior line, or `null`), `written_line` and the file's `mode`, `owner`, `group` and `sha256`; cleanup writes the prior line back in its place, or removes the line when the setting was absent |
 | `accounts_umask_etc_login_defs` (`UMASK`) | Three octal digits with every bit that the profile requires; the bits of the current value are kept (`UMASK 0077` becomes `077` under 027) | as above |
 | `accounts_have_homedir_login_defs` (`CREATE_HOME`) | `CREATE_HOME yes` | as above |
 
@@ -574,16 +574,20 @@ The statuses that refuse to act, each with a reason, nothing changed and the led
 |---|---|
 | `notapplicable` (apply) | `/etc/login.defs` does not exist (shadow-utils is not installed) |
 | `not_regular_file` | `/etc/login.defs` is a symbolic link or not a regular file; nothing is written through a link |
-| `overridden`, `not_directory` (apply) | Only `CREATE_HOME`, whose check also reads `/etc/login.defs.d`: a drop-in there sets the name, or the directory is a symbolic link or not a directory. The other rules ignore the directory, as their checks and the pinned shadow-utils do |
-| `duplicate_setting` (apply) | The name is set on more than one line, in any case (`pam_umask` reads the first, shadow-utils the last) |
-| `unreadable_value` (apply) | The value is in a form that shadow-utils or `pam_umask` may read but the family cannot compare (quoted, signed, longer, another base, such as `"30"`, `+30`, `00077` or `0x3f`, or a number line with a carriage return, vertical tab or form feed), so a written value could be looser; the reason names the line |
+| `overridden`, `not_directory` (apply) | Only `CREATE_HOME`, whose check also reads `/etc/login.defs.d`, and `FAIL_DELAY` and `UMASK`, which libeconf reads with the drop-ins: a drop-in there mentions the name, or the directory is a symbolic link or not a directory. The other rules ignore the directory, as their checks and the pinned shadow-utils do |
+| `long_line` (apply) | A line of `/etc/login.defs` is 1023 bytes or longer, which shadow-utils reads in pieces that can each set a setting |
+| `unreadable_file` (apply) | Only `FAIL_DELAY` and `UMASK`, which util-linux `login` and Rocky Linux's `pam_umask` read through libeconf: a line of login.defs or of a drop-in starts a section (`[`), or a drop-in is a link to no regular file, so libeconf would not read the value written |
+| `modified_during_apply` (apply), `modified_during_cleanup` (cleanup) | login.defs changed between the read and the write; nothing is written over the change and the rule is retried on the next run |
+| `duplicate_setting` (apply) | The name is set on more than one line, in any case, counting for `UMASK` and `FAIL_DELAY` the forms that `pam_umask` and libeconf read, such as `\vUMASK 000` or `FAIL_DELAY=30` (`pam_umask` and libeconf read the first, shadow-utils the last) |
+| `unreadable_value` (apply) | The value is in a form that shadow-utils, libeconf or `pam_umask` may read but the family cannot compare (quoted, signed, longer, another base, such as `"30"`, `+30`, `00077` or `0x3f`, a carriage return, vertical tab or form feed inside the value, or for `FAIL_DELAY` a negative value), the line holds a NUL or, when it would be rewritten, another control character than a tab or a carriage return, which the ledger does not record, or the only line that sets the name is in a form that only libeconf or `pam_umask` reads; so a written value could be looser; the reason names the line |
 | `method_changed` | The ledger entry records another method, or none |
 | `modified_since_apply` (cleanup) | The setting is not exactly the line the collection wrote any more (changed or removed by hand), or the file's mode or ownership changed; an administrator's later change is never overwritten |
 | `invalid_record`, `target_absent` (cleanup) | The record is malformed, or `/etc/login.defs` is gone |
 
 A line counts as compliant only in the form that both shadow-utils and the check read: the name in upper case, one
 decimal value without a leading zero and no trailing comment (shadow-utils parses with base 0, so it does not read
-`PASS_MAX_DAYS 30 # site` or `090` and reads `010` as 8). Any other line is rewritten, never looser than any
+`PASS_MAX_DAYS 30 # site` or `090` and reads `010` as 8); a carriage return, vertical tab or form feed around the value
+is a blank, as for shadow-utils, so `PASS_MAX_DAYS 30` with a Windows line ending is compliant. Any other line is rewritten, never looser than any
 reading of its first word (`PASS_MAX_DAYS 30 # site` becomes `PASS_MAX_DAYS 30`, `UMASK 077 # site` becomes `UMASK 077`). Commented lines are
 never touched. When the file already holds the recorded prior state at cleanup (an added line removed again by hand),
 the rule is `restored`, its entry is removed and nothing is written (FREES-173). Kept `audit_only`, with the reasons in
