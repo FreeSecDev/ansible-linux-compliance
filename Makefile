@@ -43,6 +43,22 @@ MOLECULE_LIBVIRT_CACHE := $(CURDIR)/build/molecule-libvirt/cache
 MOLECULE_LIBVIRT_HOST_PINS := tools/molecule/libvirt-host.pins
 MOLECULE_LIBVIRT_HOST_CACHE := $(CURDIR)/build/molecule-libvirt/host-packages
 MOLECULE_LIBVIRT_HOST_PACKAGES := tools/molecule/libvirt-host-packages.sh
+GITHUB_ACTIONS ?=
+MOLECULE_OFFLINE ?= $(if $(filter true,$(GITHUB_ACTIONS)),true,false)
+MOLECULE_COLLECTIONS_PINS := extensions/molecule/collections.pins
+MOLECULE_COLLECTIONS_CACHE := $(CURDIR)/build/molecule-collections
+MOLECULE_GALAXY_COLLECTIONS := tools/molecule/galaxy-collections.sh
+MOLECULE_INSTANCE_IMAGES := tools/molecule/instance-images.sh
+MOLECULE_IMAGES_CACHE := $(CURDIR)/build/molecule-images
+MOLECULE_IMAGES_PLAN := $(CURDIR)/build/molecule-images.plan
+MOLECULE_IMAGE_IDS ?=
+FREESECDEV_MOLECULE_IMAGES := $(CURDIR)/build/molecule-images.verified.yml
+export FREESECDEV_MOLECULE_IMAGES
+MOLECULE_IMAGE_PLANNER := $(RUN) python -m tools.molecule.instance_images
+MOLECULE_IMAGES_READY = mkdir -p '$(CURDIR)/build' && $(MOLECULE_IMAGE_PLANNER) $(addprefix --platforms ,$(1)) \
+	> '$(MOLECULE_IMAGES_PLAN)' && $(MOLECULE_INSTANCE_IMAGES) $(if $(filter true,$(MOLECULE_OFFLINE)),load,build) \
+	'$(MOLECULE_IMAGES_PLAN)' '$(MOLECULE_IMAGES_CACHE)' '$(FREESECDEV_MOLECULE_IMAGES)' \
+	$(if $(filter true,$(MOLECULE_OFFLINE)),'$(MOLECULE_IMAGE_IDS)')
 MOLECULE_TIMINGS_LOG ?=
 MOLECULE_TIMINGS_TOP ?= 15
 MOLECULE_LIBVIRT_SELFTEST_DIR := $(CURDIR)/build/molecule-libvirt-selftest
@@ -221,6 +237,7 @@ HADOLINT := build/tools/hadolint
 SHELL_SCRIPTS := build/bootstrap.rendered.sh tools/iac/install-tofu.sh tools/browser/fetch-test-deps.sh \
 	tools/lint/fetch-hadolint.sh tools/scc/fetch-scc.sh tools/scc/smoke-test.sh tools/scc/check-expiry.sh \
 	tools/scc/needs-smoke.sh tools/scc/expiry-state.sh
+SHELL_SCRIPTS += tools/molecule/galaxy-collections.sh tools/molecule/instance-images.sh
 
 INDEX_MODES := build/lint-repo-index-modes
 PYLINT_BASE_IGNORES := ^\.venv/|^\.agents/|^\.claude/|^build/|^dist/
@@ -292,6 +309,11 @@ Tests
   test-integration      [pending FREES-60] Integration tests
   test-molecule-docker  Molecule Docker scenarios and their self-test (requires a running Docker daemon)
   test-molecule-docker-selftest Guard bypass attempts and the destroy fallback against real containers
+  molecule-collections-fetch Fetch the pinned Galaxy collections once and check their SHA-256 and size
+  molecule-collections-lock Pin the SHA-256 and size of every collection of extensions/molecule/requirements.yml
+  molecule-images-build Build or reuse the Docker instance images, verify them and save them for the Molecule legs
+  molecule-images-plan  Print the tag of each Docker instance image for $$GITHUB_OUTPUT
+  molecule-images-ids   Print the verified image ID of each Docker instance image
   molecule-matrix       Print the CI matrix of the toggle lifecycle legs of MOLECULE_MATRIX_DRIVER (docker or libvirt)
   molecule-plan         Print the legs that a pull request against MOLECULE_PLAN_BASE runs, as the base's planner decides
   molecule-affected     Keep the legs of the topics that a change affects (run by the base revision's planner in CI)
@@ -344,7 +366,9 @@ export HELP_TEXT
 .PHONY: help bootstrap install format lint lint-ansible lint-toggles toggles lint-role-guards role-guards lint-lifecycle content catalogue stig-mapping lint-python lint-yaml lint-actions \
 	lint-containerfile oscap-image scc-expiry-check scc-fetch scc-image scc-image-ubuntu2604 scc-smoke scc-integration scc-own-expiry-check scc-image-clean scc-release-watch lint-iac lock-check tofu-validate aws-bootstrap-render lint-packer lint-repo lint-skills security typecheck test test-unit test-sanity test-audit-exceptions test-evidence test-remediate-check test-remediate-disruptive test-role-guards test-verify \
 	test-ansible-units package-check collection-tree collection-link sanity-pythons name-sets test-name-sets \
-	test-integration test-coverage test-content-golden test-oscap-integration test-browser browser-test-deps molecule-dependencies molecule-content molecule-matrix molecule-affected molecule-plan test-molecule-docker test-molecule-docker-selftest test-molecule-libvirt \
+	test-integration test-coverage test-content-golden test-oscap-integration test-browser browser-test-deps molecule-dependencies molecule-content molecule-matrix \
+	molecule-affected molecule-plan molecule-collections-fetch molecule-collections-lock molecule-images-build molecule-images-plan molecule-images-ids \
+	test-molecule-docker test-molecule-docker-selftest test-molecule-libvirt \
 	test-molecule-libvirt-selftest molecule-libvirt-images molecule-libvirt-preflight \
 	molecule-libvirt-host-fetch molecule-libvirt-host-install molecule-libvirt-host-pins molecule-task-timings \
 	test-molecule-golden test-idempotency test-compliance packer-validate packer-build \
@@ -790,14 +814,36 @@ test-ansible-units: require-uv collection-tree sanity-pythons
 test-integration:
 	$(call NOT_IMPLEMENTED,test-integration,FREES-60)
 
-molecule-dependencies: require-uv collection-link
-	$(RUN) ansible-galaxy collection install -r extensions/molecule/requirements.yml -p '$(ANSIBLE_COLLECTIONS_PATH)'
+molecule-collections-fetch:
+	$(MOLECULE_GALAXY_COLLECTIONS) fetch '$(MOLECULE_COLLECTIONS_PINS)' '$(MOLECULE_COLLECTIONS_CACHE)'
+
+molecule-collections-lock:
+	mkdir -p build
+	$(MOLECULE_GALAXY_COLLECTIONS) lock extensions/molecule/requirements.yml > build/collections.pins.new
+	mv build/collections.pins.new '$(MOLECULE_COLLECTIONS_PINS)'
+
+molecule-dependencies: require-uv collection-link $(if $(filter true,$(MOLECULE_OFFLINE)),,molecule-collections-fetch)
+	$(RUN) $(MOLECULE_GALAXY_COLLECTIONS) install '$(MOLECULE_COLLECTIONS_PINS)' '$(MOLECULE_COLLECTIONS_CACHE)' \
+		'$(ANSIBLE_COLLECTIONS_PATH)'
+
+molecule-images-plan: require-uv
+	@$(MOLECULE_IMAGE_PLANNER) --output github
+	@printf 'week=%s\n' "$$(date -u +%G-W%V)"
+
+molecule-images-build: require-uv
+	mkdir -p build
+	$(MOLECULE_IMAGE_PLANNER) > '$(MOLECULE_IMAGES_PLAN)'
+	$(MOLECULE_INSTANCE_IMAGES) build '$(MOLECULE_IMAGES_PLAN)' '$(MOLECULE_IMAGES_CACHE)' '$(FREESECDEV_MOLECULE_IMAGES)' save
+
+molecule-images-ids:
+	@$(MOLECULE_INSTANCE_IMAGES) ids '$(FREESECDEV_MOLECULE_IMAGES)'
 
 molecule-content: require-uv
 	$(RUN) python tools/content/fetch_content.py --output-dir build/content --datastream ubuntu2404 --datastream rhel9
 
 test-molecule-docker: require-uv molecule-dependencies molecule-content
 	@docker info >/dev/null 2>&1 || { printf 'error: a running Docker daemon is required\n' >&2; exit 1; }
+	$(call MOLECULE_IMAGES_READY,$(patsubst %,extensions/molecule/%/molecule.yml,$(MOLECULE_DOCKER_SCENARIOS)))
 	for scenario in $(MOLECULE_DOCKER_SCENARIOS); do \
 		$(RUN) molecule test -s "$$scenario" || exit 1; \
 	done
@@ -805,6 +851,7 @@ test-molecule-docker: require-uv molecule-dependencies molecule-content
 
 test-molecule-docker-selftest: require-uv molecule-dependencies
 	@docker info >/dev/null 2>&1 || { printf 'error: a running Docker daemon is required\n' >&2; exit 1; }
+	$(call MOLECULE_IMAGES_READY,extensions/molecule/selftest/vars/platforms.yml)
 	rm -rf '$(MOLECULE_SELFTEST_DIR)'
 	mkdir -p '$(MOLECULE_SELFTEST_DIR)/host-directory'
 	status=0; \
