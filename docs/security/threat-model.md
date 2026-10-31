@@ -361,7 +361,7 @@ installed in the test virtual machines (FREES-61)
 
 The `molecule-images` and `molecule-collections` jobs of `ci.yml` prepare the Docker instance images and the Galaxy
 collections once per run (FREES-182, FREES-184). They restore two kinds of Actions cache: `build/molecule-images/<image>`
-(the `docker save` archive of an instance image, key `molecule-image-<image>-<tag>-<ISO week>`) and
+(the archive of an instance image, key `molecule-image-<image>-<tag>-<ISO week>`) and
 `build/molecule-collections` (the collection artifacts, key `galaxy-collections-<hash of the pins>`). They pass on two
 run artifacts, `molecule-images` and `molecule-collections`, which every Docker leg, every libvirt leg and `lint`
 download ([Molecule guide](../molecule.md#images-and-collections-built-once-per-run),
@@ -391,7 +391,7 @@ download ([Molecule guide](../molecule.md#images-and-collections-built-once-per-
     pin**: builds are not reproducible, so a matching label on the base layers says nothing about the layers on top.
   - The image cache key carries the ISO week of the run, so a planted image entry is restored at most until the week
     ends; a scheduled run never saves an image entry, and a push to `main` saves one only on a miss.
-  - The job always writes the archive it shares with `docker save` from the verified image, so the legs never receive
+  - The job always writes the archive it shares anew from the verified image, so the legs never receive
     the cache's bytes, and a leg refuses an archive that loads any other image.
   - A pull request from a fork neither restores nor saves these caches, as for SCC (T-SCC-1).
   - Within a run, `actions/download-artifact` checks each artifact's digest, every Docker leg checks each image ID
