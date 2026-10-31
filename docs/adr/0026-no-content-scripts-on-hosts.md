@@ -118,6 +118,12 @@ The only reliable control is therefore the content: an SCE check or script that 
      1.3.9 loads such a reference as a separate document. A `file:` path is resolved against the datastream's
      directory and is not confined (`src/DS/sds.c`), so `../` would bring in a document that neither the digest nor
      this check sees. `http(s)` references stay inert, because the collection never passes `--fetch-remote-resources`.
+     The refusal is right for the SCC backend too: SCC reads the same datastream on the host, and its download
+     setting is a second control, not the first. The SCC egress probe (ADR 0019) carries a remote `component-ref` on
+     purpose, so `compliance_scan` now refuses it before SCC runs, and the egress test asserts that refusal. ADR
+     0019's evidence that SCC itself makes no download with the backend's options comes from a direct `cscc` run on
+     the same probe (`scc_driver.py negative`), with the positive control unchanged. Narrowing the refusal for SCC
+     was rejected, because it would let SCC content refer to documents that neither the digest nor this check sees.
    - `xmlsafe` refuses an XML declaration whose encoding is not UTF-8 (case-insensitive), and a UTF-16 or UTF-32 byte
      order mark. expat is forced to UTF-8, but `oscap` parses with libxml2 (`xmlReadFd`), which honours the declared
      encoding. A plain ASCII document that declares `UTF-7` would otherwise be text to the check and markup to the
