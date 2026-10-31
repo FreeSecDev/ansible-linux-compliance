@@ -838,7 +838,7 @@ fails fails the gate. Since FREES-189 a pull request or merge group plans only t
 On GitHub's runners at b1630d8 the twelve legs took 5.5 to 11.6 minutes (the longest is `ubuntu`, `pwquality`,
 `rule`, which includes the regressions), the standard scenarios 4.0 and 4.6 and the self-test 2.9; the run took
 12 minutes from the first job to `ci-gate`. Each job's `timeout-minutes` is about one and a half times its longest
-duration: 18 for `molecule-lifecycle`, 18 for `molecule-docker`, 20 for `test` (11.2 then; 15 on `main` by 2026-10-30, so FREES-189 raised it from 17; 12 since FREES-174, below) and 16 for `test-playbooks`
+duration: 18 for `molecule-lifecycle`, 18 for `molecule-docker`, 20 for `test` (11.2 then; 15 on `main` by 2026-10-30, so FREES-189 raised it from 17; 12 and then 15 since FREES-174, below) and 16 for `test-playbooks`
 (10.8; split in two since FREES-174, below). One [scanner timeout](#scanner-hangs) and its retry add three minutes. `molecule-docker` was raised from 8
 on 2026-10-30: over the 15 latest CI runs its successful jobs took 3 to 7.9 minutes, but 7 of 42 were cancelled, and
 in job 124055287121 building the Rocky Linux instance image alone took 9 minutes because the package mirror was slow.
@@ -858,9 +858,12 @@ and the same covered lines and branches. The audit-exception, golden-content and
 together, moved to their own job, `test-suites` (timeout 10), which runs alongside `test`; `ci-gate` needs both, and
 neither has a condition, so every event that ran the former `test` job runs both. In the first CI run (e7718ce),
 on the slower of the two runner classes seen, `test` took 5.0 minutes (`make test-coverage` 289 seconds instead of
-829 to 853) and `test-suites` 4.4. `test` now has a timeout of 12 minutes: one and a half times its longest duration
+829 to 853) and `test-suites` 4.4. `test` then got a timeout of 12 minutes: one and a half times its longest duration
 is 7.5, and the rest covers the runner variance (the slower runners took up to 1.9 times as long before) and the
-growth of the suite, while a hung run is still cancelled long before the merge queue's 30 minutes.
+growth of the suite, while a hung run is still cancelled long before the merge queue's 30 minutes. The suite grew
+faster than that: by 5a97b7b, with about 10,400 tests, `test` took 5.6 to 9.1 minutes in the seven latest runs
+(544 seconds on the slower runners) and 7.9 in the first run of the split below, so its timeout is 15 minutes:
+one and a half times 544 seconds is 13.6, and the rest covers the runner variance.
 
 `test-playbooks` then grew in the same way: over the 15 latest successful runs before 5a97b7b it took 8.9 to 15.9
 minutes, `make test-remediate-check` 4.4 to 9.4 of them (it runs every native topic's check-mode plays, so it grows
