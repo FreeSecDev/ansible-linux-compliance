@@ -154,23 +154,21 @@
     fail_msg: "{{ lifecycle_label }}: the ledger already records {{ lifecycle_before.ledger }}."
     quiet: true
 
-- name: Lifecycle cycle | Take the state of the whole instance before the topic is applied
+- name: Lifecycle cycle | Keep the last record of the whole instance when nothing has written since it
+  ansible.builtin.set_fact:
+    lifecycle_broad_reused: >-
+      {{ lifecycle_broad_kept is not none and lifecycle_pre_state.files | default([]) | length == 0 }}
+
+- name: Lifecycle cycle | Take the state of the whole instance before the topic is applied, unless it is kept
   ansible.builtin.include_tasks:
     file: lifecycle_broad.yml
+  when: not lifecycle_broad_reused
 
-- name: Lifecycle cycle | Remember the state of the whole instance before the topic is applied
+- name: Lifecycle cycle | Remember the state of the whole instance and the no-change snapshot before check mode
   ansible.builtin.set_fact:
-    lifecycle_broad_before: "{{ lifecycle_broad_lines }}"
-
-- name: Lifecycle cycle | Take the no-change snapshot before check mode
-  ansible.builtin.include_tasks:
-    file: snapshot.yml
-
-- name: Lifecycle cycle | Remember the no-change snapshot before check mode
-  ansible.builtin.set_fact:
-    lifecycle_reference:
-      digest: "{{ snapshot_digest }}"
-      lines: "{{ snapshot_lines }}"
+    lifecycle_broad_before: "{{ lifecycle_broad_kept.record if lifecycle_broad_reused else lifecycle_broad_record }}"
+    lifecycle_reference: >-
+      {{ lifecycle_broad_kept.snapshot if lifecycle_broad_reused else lifecycle_broad_snapshot }}
 
 - name: Lifecycle cycle | Apply the topic in check mode
   ansible.builtin.include_tasks:
@@ -407,15 +405,17 @@
       | sort(attribute='rule_id') }}
   when: lifecycle_audit | bool
 
-- name: Lifecycle cycle | Take the no-change snapshot of the switched-off topic
+- name: Lifecycle cycle | Take the no-change snapshot of the switched-off topic, after the scan that wrote evidence
   ansible.builtin.include_tasks:
     file: snapshot.yml
+  when: lifecycle_audit | bool
 
-- name: Lifecycle cycle | Remember the no-change snapshot of the switched-off topic
+- name: Lifecycle cycle | Remember the no-change snapshot of the switched-off topic, that of the cleanup without a scan
   ansible.builtin.set_fact:
-    lifecycle_reference:
-      digest: "{{ snapshot_digest }}"
-      lines: "{{ snapshot_lines }}"
+    lifecycle_reference: "{{ snapshot_record if lifecycle_audit | bool else lifecycle_broad_snapshot }}"
+    lifecycle_broad_kept: >-
+      {{ none if lifecycle_audit | bool or lifecycle_pre_state.files | default([]) | length > 0
+         else {'record': lifecycle_broad_record, 'snapshot': lifecycle_broad_snapshot} }}
 
 - name: Lifecycle cycle | Run the switched-off topic again
   ansible.builtin.include_tasks:

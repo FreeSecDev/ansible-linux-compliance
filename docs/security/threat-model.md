@@ -346,8 +346,9 @@ installed in the test virtual machines (FREES-61)
   package changes what the virtual machine proves.
 - **Mitigation:** every file is checked against a SHA-256 and size pinned in a reviewed file of this repository (`tools/molecule/libvirt-host.pins`,
   `extensions/molecule/shared/images/cloud-images.pins`) after it is restored and before it is used:
-  `tools/molecule/libvirt-host-packages.sh` checks every host package in place, copies the ones it installs into a
-  private directory, checks the copies and installs only those, with `apt-get` given no package source so that it can
+  `tools/molecule/libvirt-host-packages.sh` checks every host package in place, copies the ones it installs with
+  `sudo install -o root -m 0644` into a private directory of root in the sticky `/tmp`, checks the copies there as root
+  and installs only those, with `apt-get` given no package source so that it can
   neither download nor install anything else; `fetch-cloud-images.sh` checks every image and package, and
   `create_libvirt.yml` and `prepare` check them again before use. A file that fails is downloaded again from the
   pinned HTTPS source and checked once more; a symbolic link or a planted file of another name is never used. The
@@ -360,7 +361,9 @@ installed in the test virtual machines (FREES-61)
   before the checks run. The boundary is who can write an entry in a scope that a run restores; see T-MOLECULE-1,
   which applies to these caches too. A pin change is trusted through review: a reviewer who
   accepts a wrong digest accepts the file. The runner image itself, and the packages that it already has in the
-  pinned version or later, are trusted as the runner is. No update bot refreshes the pins (FREES-81).
+  pinned version or later, are trusted as the runner is. No update bot refreshes the pins (FREES-81). The runner user has passwordless
+  `sudo`, so no privilege boundary separates it from the install; the root-owned copies only close the window in
+  which a process of that user could swap a checked copy before `apt-get` reads it.
 
 ## Molecule CI inputs
 

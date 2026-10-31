@@ -1,0 +1,35 @@
+---
+- name: Record the lines that the Jinja templates of the lifecycle harness rendered before FREES-180
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Read the recorded walks of a container and the synthetic edge cases
+      ansible.builtin.set_fact:
+        record_input: "{{ lookup('ansible.builtin.file', playbook_dir ~ '/input.json') | from_json }}"
+
+    - name: Render every case with the templates of extensions/molecule/shared/tasks before FREES-180
+      ansible.builtin.include_tasks:
+        file: record_case.yml
+      vars:
+        snapshot_entries: "{{ record_input.raw.files }}"
+        find_sums: "{{ record_input.raw.checksums }}"
+        snapshot_volatile_directories: "{{ record_case.volatile_directories }}"
+        contract_snapshot_volatile_contents: "{{ record_case.instance.volatile_contents }}"
+        contract_snapshot_volatile_times: "{{ record_case.instance.volatile_times }}"
+        lifecycle_broad_declared: "{{ record_case.instance.declared }}"
+        lifecycle_broad_rewritten: "{{ record_case.instance.rewritten }}"
+        lifecycle_broad_ignored_paths: "{{ record_case.instance.ignored_paths }}"
+        lifecycle_broad_ignored_trees: "{{ record_case.instance.ignored_trees }}"
+        lifecycle_broad_volatile_sysctl: "{{ record_case.instance.volatile_sysctl }}"
+        lifecycle_broad_volatile_sysctl_trees: "{{ record_case.instance.volatile_sysctl_trees }}"
+        lifecycle_broad_raw: "{{ record_input.raw | combine({'services': record_case.services}) }}"
+      loop: "{{ record_input.cases }}"
+      loop_control:
+        loop_var: record_case
+        label: "{{ record_case.name }}"
+
+    - name: Write the rendered lines
+      ansible.builtin.copy:
+        content: "{{ record_output | to_json(sort_keys=true) }}\n"
+        dest: "{{ record_output_path }}"
+        mode: "0644"

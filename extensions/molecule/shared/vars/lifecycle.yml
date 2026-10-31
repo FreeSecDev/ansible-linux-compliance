@@ -35,6 +35,8 @@ lifecycle_broad_paths:
   - /var/spool
   - /var/log
   - /var/lib
+lifecycle_watched_directories: >-
+  {{ lifecycle_items.files | default([]) | map(attribute='path') | map('dirname') | unique | list }}
 lifecycle_broad_ignored_paths:
   - /var/lib/freesecdev
   - /var/lib/freesecdev/linux_compliance
@@ -82,11 +84,31 @@ lifecycle_broad_selfcheck_with_syslog:
     - "{{ lifecycle_broad_selfcheck_syslog }}"
 lifecycle_broad_selfcheck_declared:
   - /etc/crontab
+  - /usr/lib/fsd-declared
+lifecycle_broad_selfcheck_sources:
+  walk: "{{ lifecycle_broad_selfcheck_state.files }}"
+  walk_excluded: "^$"
+  extra: []
+  metadata: "{{ lifecycle_broad_selfcheck_state.metadata | default([]) }}"
+  checksums: "{{ lifecycle_broad_selfcheck_state.checksums | default({}) }}"
+  sysctl: "{{ lifecycle_broad_selfcheck_state.sysctl }}"
+  packages: "{{ lifecycle_broad_selfcheck_state.packages }}"
+  users: "{{ lifecycle_broad_selfcheck_state.users }}"
+  groups: "{{ lifecycle_broad_selfcheck_state.groups }}"
+  services: "{{ lifecycle_broad_selfcheck_state.services }}"
+lifecycle_broad_selfcheck_static: >-
+  {{ lifecycle_broad_selfcheck_file | combine({'path': '/usr/lib/fsd-static', 'inode': 106}) | dict2items
+     | rejectattr('key', 'equalto', 'checksum') | items2dict }}
+lifecycle_broad_selfcheck_usr_declared: >-
+  {{ lifecycle_broad_selfcheck_file | combine({'path': '/usr/lib/fsd-declared', 'inode': 107}) }}
 lifecycle_broad_selfcheck_raw:
   files:
     - "{{ lifecycle_broad_selfcheck_file }}"
     - "{{ lifecycle_broad_selfcheck_crontab }}"
     - "{{ lifecycle_broad_selfcheck_ledger }}"
+  metadata:
+    - "{{ lifecycle_broad_selfcheck_static }}"
+    - "{{ lifecycle_broad_selfcheck_usr_declared }}"
   sysctl:
     - path: /proc/sys/kernel/dmesg_restrict
       checksum: a
@@ -191,6 +213,31 @@ lifecycle_broad_selfcheck_cases:
         - "{{ lifecycle_broad_selfcheck_crontab | combine({'inode': 103, 'checksum': 'b'}) }}"
         - "{{ lifecycle_broad_selfcheck_ledger }}"
     refused: true
+  - name: declared file in /etc left with other content of the same size
+    after:
+      files:
+        - "{{ lifecycle_broad_selfcheck_file }}"
+        - "{{ lifecycle_broad_selfcheck_crontab | combine({'checksum': 'b'}) }}"
+        - "{{ lifecycle_broad_selfcheck_ledger }}"
+    refused: true
+  - name: static file in /usr changed in place, which only its ctime shows
+    after:
+      metadata:
+        - "{{ lifecycle_broad_selfcheck_static | combine({'ctime': 2.0}) }}"
+        - "{{ lifecycle_broad_selfcheck_usr_declared }}"
+    refused: true
+  - name: declared file in /usr left with other content of the same size
+    after:
+      metadata:
+        - "{{ lifecycle_broad_selfcheck_static }}"
+        - "{{ lifecycle_broad_selfcheck_usr_declared | combine({'checksum': 'b', 'mtime': 2.0, 'ctime': 2.0}) }}"
+    refused: true
+  - name: declared file in /usr only touched
+    after:
+      metadata:
+        - "{{ lifecycle_broad_selfcheck_static }}"
+        - "{{ lifecycle_broad_selfcheck_usr_declared | combine({'mtime': 2.0, 'ctime': 2.0}) }}"
+    refused: false
   - name: declared file replaced by another inode
     after:
       files:
@@ -249,6 +296,16 @@ lifecycle_broad_selfcheck_cases:
           state: running
           status: enabled
     refused: true
+lifecycle_record_selfcheck_declared:
+  - /etc/fsd-record-selfcheck
+  - /usr/local/fsd-record-selfcheck
+lifecycle_record_selfcheck_items:
+  files:
+    - path: "{{ lifecycle_record_selfcheck_declared[0] }}"
+    - path: "{{ lifecycle_record_selfcheck_declared[1] }}"
+lifecycle_record_selfcheck_stray: /etc/fsd-record-selfcheck-stray
+lifecycle_record_selfcheck_before: "same size, first content\n"
+lifecycle_record_selfcheck_after: "same size, other content\n"
 lifecycle_selfcheck_file:
   exists: true
   type: file
