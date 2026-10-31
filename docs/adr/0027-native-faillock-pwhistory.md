@@ -154,7 +154,9 @@ The filter `pam_conf_restore` computes the text that puts the recorded `setting_
 `written_line`, or removes the written line, every other byte unchanged; the role writes it with
 `ansible.builtin.copy` after the same SHA-256 re-check as the apply. When the rule is the last one of the family that
 holds the file, the text that the cleanup leaves must have the recorded `baseline_sha256`, so the file is proven to be
-byte for byte what it was before the first write; otherwise nothing is written and the entry is kept.
+byte for byte what it was before the first write; otherwise nothing is written and the entry is kept. In check mode,
+where nothing is written, each cleanup of a run decides on the text that the previous one would have left, so check
+mode reports what the real run does.
 
 | Result | When |
 |---|---|

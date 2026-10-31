@@ -42,6 +42,7 @@
       {%- endfor -%}
       {{ values }}
     __linux_compliance_remediate_sc_written: {}
+    __linux_compliance_remediate_sc_pending_text: null
   tags:
     - always
 

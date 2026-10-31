@@ -62,9 +62,14 @@
     - always
 
 - name: PAM configuration line | Compute the exact text that restores the recorded line, every other byte unchanged
+  vars:
+    __linux_compliance_remediate_sc_text: >-
+      {{ __linux_compliance_remediate_sc_pending_text
+         if ansible_check_mode and __linux_compliance_remediate_sc_pending_text is not none
+         else __linux_compliance_remediate_sc_current.content | b64decode }}
   ansible.builtin.set_fact:
     __linux_compliance_remediate_sc_restore: >-
-      {{ (__linux_compliance_remediate_sc_current.content | b64decode)
+      {{ __linux_compliance_remediate_sc_text
          | freesecdev.linux_compliance.pam_conf_restore(
              __linux_compliance_remediate_rule.parameters.setting,
              __linux_compliance_remediate_sc_prior.setting_line | default(none),
@@ -175,6 +180,7 @@
       {{ __linux_compliance_remediate_sc_entries | difference([__linux_compliance_remediate_rule.rule_id]) }}
     __linux_compliance_remediate_sc_baseline: >-
       {{ none if __linux_compliance_remediate_sc_last else __linux_compliance_remediate_sc_baseline }}
+    __linux_compliance_remediate_sc_pending_text: "{{ __linux_compliance_remediate_sc_restore.new_text }}"
   when: __linux_compliance_remediate_sc_reason is none
   tags:
     - always
