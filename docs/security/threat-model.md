@@ -275,8 +275,10 @@ by the `scc-smoke` job and never published.
 The kernel module families of the `remediate` role write drop-ins below `/etc/modprobe.d`, and the module
 `modprobe_config` runs `modprobe -c` as root through the audited process helper to learn what kmod reads
 ([ADR 0028](../adr/0028-native-kernel-module-drop-ins.md)). The policy allows only `-c -d /dev` and
-`-c -d /dev -C <path>`: kmod prints its parsed configuration and loads, unloads or runs nothing, and the module
-accepts only files of the five modprobe directories. A configuration that kmod and the family read differently
+`-c -d /dev -C <path>`: kmod prints its parsed configuration and loads, unloads or runs nothing. The helper itself
+accepts as `<path>` only `/dev/null` or a file of the five modprobe directories that still is one with every symbolic
+link resolved, because kmod echoes the first word of every line it rejects and `-C` on a link to `/etc/shadow` would
+print a password hash. A configuration that kmod and the family read differently
 makes every rule refuse (`config_unreadable`), so a misread file can never produce a false `applied` or `compliant`.
 
 The `ssh` family of the `remediate` role writes sshd drop-ins and changes conflicting lines of the vendor files

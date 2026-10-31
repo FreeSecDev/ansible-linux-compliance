@@ -19,9 +19,14 @@ description:
     C(install) and C(blacklist) directive is known with the file it came from, and C(modprobe -c
     -d /dev) once for the default configuration directories. C(-d /dev) points kmod at a root
     without C(lib/modules), so it dumps no module index after the configuration.
-  - kmod also takes directives from the kernel command line (C(modprobe.blacklist=)) in every run.
-    The module reads them once with C(-C /dev/null), a configuration without files, and removes
-    them from the front of every other run, so that each file's directives are its own.
+  - kmod also takes directives from the kernel command line (C(modprobe.blacklist=)) in every run,
+    and parses the command line after every file, so its blacklist entries come last. The module
+    reads them once with C(-C /dev/null), a configuration without files, and removes them from the
+    end of every other run, so that each file's directives are its own. The command line never
+    adds an install directive.
+  - A file that is not C(/dev/null) or a configuration file of a modprobe directory once every
+    symbolic link is resolved is not passed to modprobe (kmod echoes the first word of every line
+    that it rejects); the result is then not C(consistent).
   - The result is C(consistent) only when every run succeeded and the directives of O(files), in
     that order, are exactly those of the default configuration. A caller that passes the files it
     believes kmod reads therefore learns whether kmod agrees, and refuses to act when it does not.
@@ -117,22 +122,14 @@ from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compli
     process,
 )
 
-DIRECTORIES: Final[frozenset[str]] = frozenset(
-    {
-        "/etc/modprobe.d",
-        "/run/modprobe.d",
-        "/usr/local/lib/modprobe.d",
-        "/usr/lib/modprobe.d",
-        "/lib/modprobe.d",
-    }
-)
-NAME: Final[str] = r"[^./][^/]{0,250}\.(conf|alias)"
+DIRECTORIES: Final[frozenset[str]] = process.MODPROBE_CONFIG_DIRECTORIES
+NAME: Final[str] = process.MODPROBE_CONFIG_NAME
 MAX_FILES: Final[int] = 256
 TIMEOUT_SECONDS: Final[float] = 30.0
 MAX_OUTPUT_BYTES: Final[int] = 4 * 1024 * 1024
 MAX_MESSAGE: Final[int] = 2048
 END_OF_CONFIGURATION: Final[str] = "# End of configuration files."
-NO_FILES: Final[str] = "/dev/null"
+NO_FILES: Final[str] = process.MODPROBE_NO_FILES
 INSTALL_WORDS: Final[int] = 3
 BLACKLIST_WORDS: Final[int] = 2
 UNPRINTABLE: Final[str] = r"[^\x20-\x7e]+"
@@ -211,12 +208,17 @@ def show(args: tuple[str, ...]) -> tuple[dict[str, list[object]] | None, str]:
 def without(
     parsed: dict[str, list[object]], baseline: dict[str, list[object]]
 ) -> dict[str, list[object]] | None:
-    """Return ``parsed`` without the directives of ``baseline`` at its front, or ``None``."""
+    """Return ``parsed`` without the directives of ``baseline`` at its end, or ``None``.
+
+    kmod parses the kernel command line after every file, so the command line's directives are
+    the last of each list.
+    """
     kept: dict[str, list[object]] = {}
     for kind, entries in baseline.items():
-        if parsed[kind][: len(entries)] != entries:
+        cut = len(parsed[kind]) - len(entries)
+        if cut < 0 or parsed[kind][cut:] != entries:
             return None
-        kept[kind] = parsed[kind][len(entries) :]
+        kept[kind] = parsed[kind][:cut]
     return kept
 
 
@@ -241,15 +243,22 @@ def read(files: list[str]) -> dict[str, object]:
     problem = problem or why
     merged = without(shown, baseline) if shown is not None else None
     if shown is not None and merged is None:
-        problem = problem or "the directives of the kernel command line are not at the front"
+        problem = problem or "the directives of the kernel command line are not at the end"
     found: list[object] = []
     joined: dict[str, list[object]] = {"install": [], "blacklist": []}
     parsed: dict[str, list[object]] | None
     for path in files:
-        output, why = show((*process.MODPROBE_SHOW_CONFIG, "-C", path))
+        if not process.is_modprobe_config(path):
+            problem = problem or (
+                f"{path} is not a configuration file of a modprobe directory once its links are "
+                "resolved, so it is not passed to modprobe"
+            )
+            output, why = None, ""
+        else:
+            output, why = show((*process.MODPROBE_SHOW_CONFIG, "-C", path))
         parsed = without(output, baseline) if output is not None else None
         if parsed is None:
-            problem = problem or why or f"the directives of {path} do not follow the command line"
+            problem = problem or why or f"the directives of {path} do not end with the command line"
             parsed = {"install": [], "blacklist": []}
         found.append({"path": path, **parsed})
         joined["install"].extend(parsed["install"])

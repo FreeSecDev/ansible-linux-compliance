@@ -1,0 +1,6 @@
+blacklist nouveau
+blacklist foo
+options pty legacy_count=0
+
+# End of configuration files. Dumping indexes now:
+

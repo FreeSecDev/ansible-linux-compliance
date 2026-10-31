@@ -199,9 +199,10 @@ Decision: kmod, the platform's own reader and not content of the scanner, is the
   its place in kmod's order, and once without, for the whole configuration. `-d /dev` points kmod at a root without
   `lib/modules`, so it dumps no module index. kmod prints the directives as it keeps them: backslashes resolved,
   continued lines joined, comments and rejected lines dropped and `-` turned into `_` in module names. Directives from
-  the kernel command line, which kmod adds to every run, are read once with `-C /dev/null` and removed from the front
-  of each run. Checked against both pinned kmods: `install \*cramfs` prints as `install *cramfs`, `ins\tall cramfs` as
-  `install cramfs`, and the two lines after one ending in `\\` as two directives.
+  the kernel command line, which kmod adds to every run, are read once with `-C /dev/null` and removed from the end
+  of each run (see the next amendment). Checked against both pinned kmods: `install \*cramfs` prints as
+  `install *cramfs`, `ins\tall cramfs` as `install cramfs`, and the two lines after one ending in `\\` as two
+  directives.
 - The family fails closed: when the concatenation of the files' directives is not exactly the whole configuration
   (a file it missed, one that kmod skips, a failed or truncated run), every rule is `config_unreadable` and nothing is
   written; without `modprobe` every rule is `modprobe_missing`.
@@ -217,3 +218,27 @@ Decision: kmod, the platform's own reader and not content of the scanner, is the
   inside a bracket (1,729 rows, 0 narrower divergences).
 - The regression group adds an escaped wildcard, a backslash inside the directive, a line ending in `\\` followed by
   a re-enabling line, and `cr[]a[a]mfs`, each before the collection's drop-ins and each expected `overridden`.
+
+## Amendment 2026-10-31: the kernel command line comes last (fourth review of PR #76)
+
+kmod parses the kernel command line after every configuration file (`kmod_config_parse_kcmdline()` is the last step
+of `kmod_config_new()` in kmod 28 and 31) and appends its entries, so `modprobe.blacklist=` entries are the last
+`blacklist` lines of every `modprobe -c` run, not the first. The module had removed them from the front, so on any host
+booted with, for example, `modprobe.blacklist=nouveau`, every rule became `config_unreadable` once a single file
+blacklisted anything, which on Ubuntu the stock files do.
+
+Decision:
+
+- `modprobe_config` removes the directives of the `-C /dev/null` run from the end of each list. The command line adds
+  only `blacklist` and `options` entries, never `install`.
+- The unit tests run against output captured from the real `modprobe -c` of both pinned images
+  (`tests/fixtures/kmod/showconfig/`), under a faked `/proc/cmdline` with and without `modprobe.blacklist=nouveau,foo`,
+  where a site file and a vendor file blacklist modules of their own and the vendor file blacklists `nouveau` as the
+  command line does. The order is therefore kmod's, not one written by hand.
+- No Molecule regression fakes the command line: replacing `/proc/cmdline` in a container needs `CAP_SYS_ADMIN` and a
+  mount that Docker's default AppArmor profile denies, and the shared create playbook refuses privileged instances on
+  purpose. The captured fixture covers it instead.
+- The process helper accepts `-C <path>` only for `/dev/null` or a `.conf` or `.alias` file directly inside one of the
+  five modprobe directories, and only if it still is one with every symbolic link resolved (ADR 0004). kmod echoes the
+  first word of every line that it rejects, so `-C` on a link to `/etc/shadow` would print a password hash. A file that
+  the helper would refuse is not run at all: every rule is `config_unreadable`.

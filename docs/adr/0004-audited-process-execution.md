@@ -1063,7 +1063,10 @@ gains one policy:
 - `modprobe`, resolved in the trusted directories like `oscap` (the `kmod` multi-call binary keeps its name through the
   vetted path inside the trusted directory), with exactly two argument lists: the standalone command `-c -d /dev`
   (`MODPROBE_SHOW_CONFIG`), which prints the whole configuration, and the form `-c -d /dev -C <path>`, which prints the
-  directives of one file. `-c` only prints; `-d /dev` names a root without `lib/modules`, so no module index is dumped.
+  directives of one file. `<path>` is `/dev/null` or a `.conf` or `.alias` file directly inside one of the five
+  modprobe directories, and must still be one once every symbolic link is resolved (`is_modprobe_config()`): kmod
+  echoes the first word of every line that it rejects, so `-C` on a link to `/etc/shadow` would print a password hash
+  to standard error. `-c` only prints; `-d /dev` names a root without `lib/modules`, so no module index is dumped.
   The helper refuses every other argument list, so it cannot load (`modprobe cramfs`), unload (`-r`), run an install
   command (`-n` is not allowed either) or read the kernel's module tree
   (`tests/unit/plugins/module_utils/compliance/test_process.py`).

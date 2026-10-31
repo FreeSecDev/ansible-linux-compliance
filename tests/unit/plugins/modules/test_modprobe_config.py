@@ -1,7 +1,24 @@
+"""Tests of modprobe_config against output captured from the real kmod of both pinned images.
+
+``tests/fixtures/kmod/showconfig/<image>/<scenario>/`` holds what ``modprobe -c -d /dev`` printed
+in a throwaway, network-less container of each pinned Molecule image (kmod 31 on Ubuntu 24.04,
+kmod 28 on Rocky Linux 9) with every modprobe directory emptied and two files written::
+
+    /etc/modprobe.d/00-site.conf      blacklist cramfs / install cram* /sbin/modprobe ...
+    /usr/lib/modprobe.d/vendor.conf   blacklist hfs / blacklist nouveau / install hfs  /bin/false
+
+``/proc/cmdline`` was bind-mounted from the file ``cmdline`` of each scenario: ``plain`` without a
+modprobe entry, ``blacklist`` with ``modprobe.blacklist=nouveau,foo pty.legacy_count=0``. For each,
+``null.out`` is ``-C /dev/null``, ``site.out`` and ``vendor.out`` are ``-C`` with that file, and
+``default.out`` is the whole configuration. kmod parses the command line after the files, so its
+blacklist entries are the last ones of every run.
+"""
+
 from __future__ import annotations
 
 import importlib.util
 import json
+import os
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
@@ -17,21 +34,31 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
 
 MODULE_FILE = Path(__file__).resolve().parents[4] / "plugins" / "modules" / "modprobe_config.py"
-END = b"\n# End of configuration files. Dumping indexes now:\n\nalias install x\n"
-COMMAND_LINE = b"options pty legacy_count=0\nblacklist fromcmdline\n"
+CAPTURES = Path(__file__).resolve().parents[3] / "fixtures" / "kmod" / "showconfig"
+END = b"\n# End of configuration files. Dumping indexes now:\n\n"
 SITE = "/etc/modprobe.d/00-site.conf"
 VENDOR = "/usr/lib/modprobe.d/vendor.conf"
-OUTPUTS: dict[tuple[str, ...], bytes] = {
-    (): COMMAND_LINE
-    + b"blacklist cramfs\nblacklist hfs\n"
-    + b"install cram* /sbin/modprobe --ignore-install cramfs\ninstall hfs  /bin/false\n"
-    + END,
-    ("-C", "/dev/null"): COMMAND_LINE + END,
-    ("-C", SITE): COMMAND_LINE
-    + b"blacklist cramfs\ninstall cram* /sbin/modprobe --ignore-install cramfs\n"
-    + END,
-    ("-C", VENDOR): COMMAND_LINE + b"blacklist hfs\ninstall hfs  /bin/false\n" + END,
+CAPTURED = sorted(
+    f"{image.name}/{scenario.name}"
+    for image in CAPTURES.iterdir()
+    for scenario in image.iterdir()
+    if scenario.is_dir()
+)
+HARDEST = "ubuntu-kmod31/blacklist"
+RUNS: dict[tuple[str, ...], str] = {
+    (): "default.out",
+    ("-C", "/dev/null"): "null.out",
+    ("-C", SITE): "site.out",
+    ("-C", VENDOR): "vendor.out",
 }
+
+
+def captured(capture: str) -> dict[tuple[str, ...], bytes]:
+    """Return what the real modprobe printed for each argument list of ``capture``."""
+    return {extra: (CAPTURES / capture / name).read_bytes() for extra, name in RUNS.items()}
+
+
+OUTPUTS: dict[tuple[str, ...], bytes] = captured(HARDEST)
 
 
 def result(
@@ -70,12 +97,24 @@ def overflows(_extra: tuple[str, ...]) -> process.CommandResult:
     return result(b"x", truncated=True)
 
 
-def loses_the_command_line(extra: tuple[str, ...]) -> process.CommandResult:
-    return result(OUTPUTS[extra] if extra else b"install x /bin/true\n" + END)
+def puts_the_command_line_first(extra: tuple[str, ...]) -> process.CommandResult:
+    first = b"blacklist nouveau\nblacklist foo\nblacklist cramfs\nblacklist hfs\n"
+    first += b"blacklist nouveau\n"
+    return result(OUTPUTS[extra] if extra else first + END)
 
 
 def loses_it_for_one_file(extra: tuple[str, ...]) -> process.CommandResult:
-    return result(b"" + END if extra == ("-C", SITE) else OUTPUTS[extra])
+    return result(b"blacklist cramfs\n" + END if extra == ("-C", SITE) else OUTPUTS[extra])
+
+
+class Captured:
+    """Answers every run with what the real modprobe printed for one capture."""
+
+    def __init__(self, capture: str) -> None:
+        self.outputs = captured(capture)
+
+    def __call__(self, extra: tuple[str, ...]) -> process.CommandResult:
+        return result(self.outputs[extra])
 
 
 class FakeRun:
@@ -115,6 +154,38 @@ def run(
     return int(cast("int", raised.value.code)), cast("dict[str, object]", json.loads(output))
 
 
+def test_the_captures_are_the_two_pinned_kmods_with_and_without_a_command_line_blacklist() -> None:
+    assert CAPTURED == [
+        "rocky-kmod28/blacklist",
+        "rocky-kmod28/plain",
+        "ubuntu-kmod31/blacklist",
+        "ubuntu-kmod31/plain",
+    ]
+    assert (CAPTURES / "rocky-kmod28" / "kmod-version").read_text() == "kmod version 28\n"
+    assert (CAPTURES / "ubuntu-kmod31" / "kmod-version").read_text() == "kmod version 31\n"
+    for capture in CAPTURED:
+        command_line = (CAPTURES / capture / "cmdline").read_text()
+        blacklisted = "modprobe.blacklist=nouveau,foo" in command_line
+        assert blacklisted is capture.endswith("/blacklist")
+
+
+@pytest.mark.parametrize("capture", [c for c in CAPTURED if c.endswith("/blacklist")])
+def test_kmod_puts_the_blacklist_of_the_command_line_after_every_file(capture: str) -> None:
+    outputs = captured(capture)
+    command_line = modprobe_config.directives(outputs[("-C", "/dev/null")].decode())
+    assert command_line == {"install": [], "blacklist": ["nouveau", "foo"]}
+    for extra in RUNS:
+        blacklist = modprobe_config.directives(outputs[extra].decode())["blacklist"]
+        assert blacklist[-2:] == ["nouveau", "foo"]
+    assert modprobe_config.directives(outputs[()].decode())["blacklist"] == [
+        "cramfs",
+        "hfs",
+        "nouveau",
+        "nouveau",
+        "foo",
+    ]
+
+
 def test_the_policy_allows_only_the_two_read_only_forms() -> None:
     for arguments in (("-c", "-d", "/dev"), ("-c", "-d", "/dev", "-C", SITE)):
         assert process.check_policy(process.CommandSpec("modprobe", arguments, 1)).name == (
@@ -137,10 +208,11 @@ def test_the_policy_allows_only_the_two_read_only_forms() -> None:
             process.check_policy(process.CommandSpec("modprobe", refusal, 1))
 
 
+@pytest.mark.parametrize("capture", CAPTURED)
 def test_each_file_has_its_own_directives_without_the_command_line(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, capture: str
 ) -> None:
-    fake = install(monkeypatch, FakeRun())
+    fake = install(monkeypatch, FakeRun(Captured(capture)))
     outcome = modprobe_config.read([SITE, VENDOR])
     assert outcome["available"] is True
     assert outcome["consistent"] is True
@@ -154,10 +226,14 @@ def test_each_file_has_its_own_directives_without_the_command_line(
         {
             "path": VENDOR,
             "install": [{"module": "hfs", "command": "/bin/false"}],
-            "blacklist": ["hfs"],
+            "blacklist": ["hfs", "nouveau"],
         },
     ]
-    assert cast("dict[str, list[object]]", outcome["merged"])["blacklist"] == ["cramfs", "hfs"]
+    assert cast("dict[str, list[object]]", outcome["merged"])["blacklist"] == [
+        "cramfs",
+        "hfs",
+        "nouveau",
+    ]
     assert [spec.args[3:] for spec in fake.specs] == [
         ("-C", "/dev/null"),
         (),
@@ -167,10 +243,11 @@ def test_each_file_has_its_own_directives_without_the_command_line(
     assert {spec.timeout_seconds for spec in fake.specs} == {modprobe_config.TIMEOUT_SECONDS}
 
 
+@pytest.mark.parametrize("capture", CAPTURED)
 def test_files_in_another_order_or_a_missing_file_are_not_consistent(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, capture: str
 ) -> None:
-    install(monkeypatch, FakeRun())
+    install(monkeypatch, FakeRun(Captured(capture)))
     for files in ([VENDOR, SITE], [SITE], []):
         outcome = modprobe_config.read(files)
         assert outcome["consistent"] is False
@@ -183,8 +260,8 @@ def test_files_in_another_order_or_a_missing_file_are_not_consistent(
         (fails, "exited with 1: modprobe"),
         (times_out, "did not finish within 30 s"),
         (overflows, "printed more than"),
-        (loses_the_command_line, "the kernel command line are not at the front"),
-        (loses_it_for_one_file, "do not follow the command line"),
+        (puts_the_command_line_first, "the kernel command line are not at the end"),
+        (loses_it_for_one_file, "do not end with the command line"),
     ],
 )
 def test_a_failed_or_odd_run_is_not_consistent(
@@ -197,6 +274,25 @@ def test_a_failed_or_odd_run_is_not_consistent(
     assert outcome["available"] is True
     assert outcome["consistent"] is False
     assert message in str(outcome["message"])
+
+
+def test_a_link_that_leaves_the_modprobe_directories_is_never_read(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    real = os.path.realpath
+
+    def resolved(path: str) -> str:
+        return "/etc/shadow" if path == VENDOR else real(path)
+
+    fake = install(monkeypatch, FakeRun())
+    monkeypatch.setattr(os.path, "realpath", resolved)
+    outcome = modprobe_config.read([SITE, VENDOR])
+    assert outcome["available"] is True
+    assert outcome["consistent"] is False
+    assert f"{VENDOR} is not a configuration file of a modprobe directory" in str(
+        outcome["message"]
+    )
+    assert ("-C", VENDOR) not in [spec.args[3:] for spec in fake.specs]
 
 
 def test_a_missing_modprobe_is_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -298,7 +394,7 @@ def test_the_module_refuses_a_file_before_running_modprobe(
 def test_the_module_runs_as_a_script(
     capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    install(monkeypatch, FakeRun(lambda _extra: result(COMMAND_LINE + END)))
+    install(monkeypatch, FakeRun(lambda _extra: result(OUTPUTS[("-C", "/dev/null")])))
     spec = importlib.util.spec_from_file_location("__main__", MODULE_FILE)
     assert spec is not None
     assert spec.loader is not None
