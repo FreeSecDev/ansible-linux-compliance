@@ -1,30 +1,21 @@
 ---
-- name: Snapshot | Find every entry below the watched paths, with a checksum of every file that root can read
+- name: Snapshot | Find every entry below the watched paths, with a checksum of what root can read outside /usr
   ansible.builtin.include_tasks:
     file: find_with_checksums.yml
   vars:
-    find_paths: "{{ contract_snapshot_paths }}"
-    find_checksum_algorithm: sha1
+    find_paths: "{{ contract_snapshot_paths | reject('in', contract_snapshot_metadata_paths) | list }}"
+    find_metadata_paths: "{{ contract_snapshot_paths | select('in', contract_snapshot_metadata_paths) | list }}"
+    find_checksum_algorithm: sha256
+    find_watched_directories: "{{ snapshot_watched_directories | default([]) }}"
 
 - name: Snapshot | Record paths, ownership, modes, sizes, times and content of every entry
-  vars:
-    snapshot_entries: >-
-      {{ find_whole.files + find_extra if find_aborted | length == 0
-         else (find_whole.files | rejectattr('path', 'match', find_under) | list) + find_listed.files }}
   ansible.builtin.set_fact:
-    snapshot_lines: >-
-      {%- for entry in snapshot_entries | sort(attribute='path') -%}
-      {%- set entry_sum = entry.checksum | default(find_sums[entry.path] | default('')) -%}
-      {{ entry.path }}|{{ entry.mode }}|{{ entry.uid }}|{{ entry.gid }}|
-      {{- 'volatile-directory' if entry.path in snapshot_volatile_directories | default([])
-      else 'volatile-contents' if entry.path is match(contract_snapshot_volatile_contents)
-      else entry.size ~ '|volatile-times|' ~ entry_sum
-      if entry.path is match(contract_snapshot_volatile_times)
-      else entry.size ~ '|' ~ entry.mtime ~ '|' ~ entry.ctime ~ '|' ~ entry_sum }}
-      {{ '\n' }}
-      {%- endfor -%}
-    snapshot_count: "{{ snapshot_entries | length }}"
+    snapshot_record: >-
+      {{ (contract_find_sources | freesecdev.linux_compliance.lifecycle_record(
+           {'snapshot': contract_snapshot_options, 'instance': none})).snapshot }}
 
-- name: Snapshot | Reduce the snapshot to a hash
+- name: Snapshot | Keep the lines, their hash and their number
   ansible.builtin.set_fact:
-    snapshot_digest: "{{ snapshot_lines | hash('sha256') }}"
+    snapshot_lines: "{{ snapshot_record.lines }}"
+    snapshot_digest: "{{ snapshot_record.digest }}"
+    snapshot_count: "{{ snapshot_record.count }}"

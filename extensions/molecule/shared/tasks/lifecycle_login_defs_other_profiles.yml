@@ -48,7 +48,7 @@
 
 - name: Login defaults other profiles | Remember the state of the whole instance before these rules run
   ansible.builtin.set_fact:
-    ldo_broad_before: "{{ lifecycle_broad_lines }}"
+    ldo_broad_before: "{{ lifecycle_broad_record }}"
 
 - name: Login defaults other profiles | Read login.defs as built
   ansible.builtin.slurp:

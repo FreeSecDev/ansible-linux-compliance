@@ -399,11 +399,25 @@ the failure of a task inside the role.
 
 ### The no-change snapshot
 
-`shared/tasks/snapshot.yml` records path, mode, uid, gid, size, mtime, ctime and SHA-1 checksum of every entry below
+`shared/tasks/snapshot.yml` records path, mode, uid, gid, size, mtime and ctime of every entry below
 `/etc`, `/usr`, `/root`, `/home`, `/var/spool`, `/var/log`, `/opt`, `/srv`, `/var/lib/dpkg`, `/var/lib/rpm`,
 `/var/lib/linux_compliance` and
-`/var/lib/freesecdev`. The state ledger and the evidence directory are part of it. On a mismatch the assertion prints
-up to 20 differing entries. Both this snapshot and the whole-instance record take their entries from
+`/var/lib/freesecdev`, and the SHA-256 of every regular file that root can read outside `/usr`. The state ledger and
+the evidence directory are part of it. On a mismatch the assertion prints up to 20 differing entries.
+`/usr` (`contract_snapshot_metadata_paths`) is listed without reading content (FREES-180), by the module
+`freesecdev.linux_compliance.tree_info`, which lists every entry below it as `find` would and fails on any
+directory or entry that it cannot read: every write of a file
+updates its mtime and ctime, and no process can set a ctime back without setting the clock of the instance back, so
+size, mtime and ctime catch a change of content there; the files in the directory of a path that a topic declares
+below `/usr` still get their SHA-256, because the whole-instance record does not count their times (see
+[what each record guarantees](#what-each-record-guarantees)); a checksum pass there that stops early fails the
+record. The lines are built by the filter `freesecdev.linux_compliance.lifecycle_record` (`plugins/filter`), in typed
+Python, byte for byte as the Jinja templates built them before, because templating the 100,000 entries of a virtual
+machine took up to half a minute per record. It reads the `find` entries as ansible-core stores them
+([ADR 0031](adr/0031-fast-records-for-the-lifecycle-harness.md)), which takes about a second;
+`tests/unit/plugins/filter/test_lifecycle_record.py` proves the bytes
+against a recorded walk and the old templates (`tests/fixtures/lifecycle_record`). Both this snapshot and the
+whole-instance record take their entries from
 `shared/tasks/find_with_checksums.yml` (FREES-175): one `find` with checksums, as before. Root in the Docker
 containers has no capabilities, and a file that it cannot read (`/etc/shadow` on Rocky Linux, `/usr/bin/sudo` with
 mode `4111`) stops that `find`'s walk of its whole path, so every later entry of the path would be missing. For a
@@ -575,7 +589,8 @@ and the state after the cleanup and after the last cycle must equal it:
 
 - every entry below `/etc`, `/usr`, `/root`, `/home`, `/opt`, `/srv`, `/var/spool`, `/var/log` and `/var/lib`
   (`find` without following links): path, type, mode, uid, gid, size, inode, mtime, ctime and the SHA-256 of every
-  regular file that root can read, through the same task as the [no-change snapshot](#the-no-change-snapshot);
+  regular file outside `/usr` that root can read and of the files in the directories of the declared paths below
+  `/usr`, through the same task as the [no-change snapshot](#the-no-change-snapshot);
 - every kernel parameter that the instance may read (`find` over `/proc/sys` with a SHA-256 of each value);
 - every installed package with its versions (`package_facts`), every user and group with its entry (`getent`), and
   every service where a service manager runs (`service_facts`; the containers have none, which is recorded as such).
@@ -601,6 +616,45 @@ where the file system of the container does not support them, `stat` reports non
 Three mutations of the remediate role, each applied only to a local copy and reverted, made the harness fail at the
 first cleanup with the offending entry: writing an undeclared `/etc/fsd-review-stray` during apply, appending a line
 to `/etc/issue`, and appending a user to `/etc/passwd` (which shows as the changed file and the new `user` entry).
+
+### What each record guarantees
+
+Every record of a cycle, and what it is compared with (FREES-180). A record taken from the same walk as another one
+is the same moment of the instance, not a second look at it:
+
+| Record | Taken | Compared with | A difference means |
+|---|---|---|---|
+| Whole instance before any cycle | at the start of the topic | the whole instance after every cycle | the topic left something anywhere |
+| Whole instance before a cycle | its own walk, or the kept record (below) | the whole instance after the cleanup | the cycle left something anywhere |
+| No-change snapshot before check mode | the walk of the record above, limited to the watched paths | a snapshot after check mode | check mode with the topic on changed a watched path |
+| No-change snapshot of the applied topic | its own walk | snapshots after the second apply and after the check-mode cleanup | the second apply or the check-mode cleanup changed a watched path |
+| No-change snapshot of the switched-off topic | the walk of the cleanup record, or its own walk after a real scan | a snapshot after the second run with the topic off | that run changed a watched path |
+| Snapshots of `converge.yml` and `verify.yml` | their own walks | a snapshot after the run that must not change anything | that run changed a watched path |
+
+What each record sees of a file:
+
+| Where | Content | Everything else |
+|---|---|---|
+| `/etc`, `/root`, `/home`, `/opt`, `/srv`, `/var/spool`, `/var/log` and `/var/lib` (the snapshot: `/var/lib/dpkg`, `rpm`, `linux_compliance` and `freesecdev`) | SHA-256 of every regular file that root can read, and size, mtime and ctime | path, type, mode, uid, gid, inode (whole instance), with the listed exceptions |
+| `/usr` | size, mtime and ctime; the SHA-256 of the files in the directory of a declared path | as above |
+
+So a change of content of the same size is caught everywhere: in a declared file through its SHA-256, because the
+whole-instance record does not count the times of declared files, and in any other file also through its times. A
+change of content below `/usr` that kept the size, mtime and ctime of the file would need the clock of the instance
+set back or a write to the block device; neither the collection nor the harness does that, and the scenarios own
+their instances. The self-checks prove it: `shared/vars/lifecycle.yml` has synthetic cases for a declared file below
+`/etc` and below `/usr` left with other content of the same size and for a static file below `/usr` changed in place
+(only its ctime differs), and `shared/tasks/lifecycle_record_selfcheck.yml` rewrites, on the Docker instance, a
+declared file below `/etc` and one below `/usr` with content of the same size, with its times and inode not counted,
+and refuses unless exactly that file differs.
+
+A cycle keeps the last record of the whole instance instead of taking its own when nothing has written since it: the
+record before the first cycle when the pre-state adds or changes no file, and the record after the cleanup of the
+previous cycle when neither pre-state touches a file and no real scan ran after it. The cleanup is then compared with
+the kept record. A change made between the kept record and the cycle is therefore caught by the comparison after the
+cleanup, one cycle earlier than without the reuse, never later: `lifecycle_record_selfcheck.yml` adds a file and
+rewrites a declared one after keeping a record and refuses unless the next record differs from the kept one in
+exactly those two, and the unit tests of the filter check the same with synthetic walks.
 
 The topic-toggle cycles run before the rule-toggle cycles, because a rule toggle that is set wins over the topic
 toggle and set facts cannot be unset. The harness asserts that no rule toggle of the topic exists before a

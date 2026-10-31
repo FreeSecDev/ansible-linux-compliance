@@ -24,7 +24,7 @@
 
 - name: Login defaults values | Remember the state of the whole instance before the value forms
   ansible.builtin.set_fact:
-    ldf_broad_before: "{{ lifecycle_broad_lines }}"
+    ldf_broad_before: "{{ lifecycle_broad_record }}"
 
 - name: Login defaults values | Read login.defs as built
   ansible.builtin.slurp:
