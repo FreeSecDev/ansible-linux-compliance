@@ -1,0 +1,11 @@
+blacklist cramfs
+blacklist hfs
+blacklist nouveau
+blacklist nouveau
+blacklist foo
+install cram* /sbin/modprobe --ignore-install cramfs
+install hfs  /bin/false
+options pty legacy_count=0
+
+# End of configuration files. Dumping indexes now:
+

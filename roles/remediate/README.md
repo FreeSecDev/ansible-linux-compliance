@@ -8,7 +8,7 @@ opt-in. The full guide, including the family file contract, is [docs/remediation
 
 ## Status
 
-Dispatcher and safety model implemented (FREES-52). 92 rules have a native remediation: the reference rule
+Dispatcher and safety model implemented (FREES-52). 113 rules have a native remediation: the reference rule
 `xccdf_org.ssgproject.content_rule_file_permissions_crontab` (`file_permissions`), 15 rules of `banners` (the text,
 mode, owner and group of `/etc/issue`, `/etc/issue.net` and `/etc/motd`), 14 rules of `pwquality` (one line per
 setting in `/etc/security/pwquality.conf` on Ubuntu, one drop-in per setting on RHEL, where each content checks),
@@ -23,13 +23,16 @@ of `login_defs` (one recorded line per setting in `/etc/login.defs`: `PASS_MAX_D
 through the shared helpers `pam_conf_prepare.yml`, `pam_conf_apply.yml` and `pam_conf_cleanup.yml` and the filter
 `pam_conf_decision`, which reads the file and every file of `/etc/pam.d` as linux-pam does; the PAM stack is only
 read, a setting that a module line sets or redirects with `conf=` is `overridden`, and a line that pam reads but the
-collection would not edit is `hidden_setting`), with the values of
-the selected profile
+collection would not edit is `hidden_setting`), with the values of the selected profile, and
+the 21 rules of the kernel module topics `filesystem_modules` (usb-storage included), `protocol_modules` and
+`wireless_modules` (one drop-in per module, `/etc/modprobe.d/freesecdev-<module>.conf`, with
+`install <module> /bin/false` and `blacklist <module>`; no module is unloaded and no initramfs rebuilt)
 ([ADR 0021](../../docs/adr/0021-native-banners-pwquality-and-profile-values.md),
 [ADR 0022](../../docs/adr/0022-native-sudo-drop-ins.md),
 [ADR 0023](../../docs/adr/0023-native-ssh-server-configuration.md),
 [ADR 0024](../../docs/adr/0024-native-login-defs.md),
-[ADR 0027](../../docs/adr/0027-native-faillock-pwhistory.md)). The catalogue `vars/rules.yml` holds
+[ADR 0027](../../docs/adr/0027-native-faillock-pwhistory.md),
+[ADR 0028](../../docs/adr/0028-native-kernel-module-drop-ins.md)). The catalogue `vars/rules.yml` holds
 every rule of the 25 pinned profiles, 1203 rules in 56 families, generated from the pinned content (FREES-53,
 [control families](../../docs/control-families.md)); every rule without a native remediation has the strategy
 `audit_only` and is reported as `not_implemented`, never as remediated. The topic toggles are generated from the

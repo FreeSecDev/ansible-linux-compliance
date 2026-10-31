@@ -19,6 +19,9 @@ SECOND_SENTINEL = "__linux_compliance_unset_again__"
 NATIVE_FAMILIES = (
     "file_permissions",
     "banners",
+    "filesystem_modules",
+    "protocol_modules",
+    "wireless_modules",
     "ssh",
     "pwquality",
     "pwhistory",

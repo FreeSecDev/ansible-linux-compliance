@@ -93,9 +93,9 @@ the family it came from, so the split changes nothing that the allow-list gates.
 | 26 | `ipsec` | `network` | IPsec (Libreswan) | yes | Changing IPsec configuration or approved tunnels can drop VPN connections | 11 | 0 | 11 |
 | 27 | `wireless` | `network` | Wireless interfaces and Bluetooth | yes | Disabling wireless interfaces or Bluetooth cuts hosts that are connected through them off | 3 | 0 | 3 |
 | 28 | `network_settings` | `network` | Network configuration (name resolution, NetworkManager, promiscuous mode, certificates) | yes | Name resolution, NetworkManager and certificate settings can cut the host off from its services | 7 | 0 | 7 |
-| 29 | `filesystem_modules` | `kernel_modules` | File system and USB storage kernel modules | yes | Blacklisting overlay, squashfs, udf or usb-storage breaks container runtimes, snaps, optical media and USB storage that depend on them | 9 | 0 | 9 |
-| 30 | `protocol_modules` | `kernel_modules` | Uncommon network protocol kernel modules (ATM, CAN, DCCP, FireWire, RDS, SCTP, TIPC) | yes | Blacklisting SCTP, CAN or RDS breaks telecom, automotive and cluster software that uses them | 7 | 0 | 7 |
-| 31 | `wireless_modules` | `kernel_modules` | Wireless and Bluetooth kernel modules | yes | Blacklisting wireless or Bluetooth modules disconnects hosts and devices that use them | 5 | 0 | 5 |
+| 29 | `filesystem_modules` | `kernel_modules` | File system and USB storage kernel modules | yes | Blacklisting overlay, squashfs, udf or usb-storage breaks container runtimes, snaps, optical media and USB storage that depend on them | 9 | 9 | 0 |
+| 30 | `protocol_modules` | `kernel_modules` | Uncommon network protocol kernel modules (ATM, CAN, DCCP, FireWire, RDS, SCTP, TIPC) | yes | Blacklisting SCTP, CAN or RDS breaks telecom, automotive and cluster software that uses them | 7 | 7 | 0 |
+| 31 | `wireless_modules` | `kernel_modules` | Wireless and Bluetooth kernel modules | yes | Blacklisting wireless or Bluetooth modules disconnects hosts and devices that use them | 5 | 5 | 0 |
 | 32 | `firewalld` | `firewall` | firewalld | yes | A default-deny zone or removed services can cut every remote session | 10 | 0 | 10 |
 | 33 | `nftables` | `firewall` | nftables | yes | A default-deny base chain can cut every remote session | 11 | 0 | 11 |
 | 34 | `iptables` | `firewall` | iptables and ip6tables | yes | A default-drop policy can cut every remote session | 12 | 0 | 12 |
@@ -121,7 +121,7 @@ the family it came from, so the split changes nothing that the allow-list gates.
 | 54 | `mount_options` | `mounts` | Mount options (nodev, noexec, nosuid) | yes | noexec and nosuid on shared, temporary or remote file systems can break running software | 34 | 0 | 34 |
 | 55 | `partitioning` | `mounts` | Separate partitions and disk encryption | yes | Partitioning and encryption are irreversible and need a reinstall or a maintenance window | 12 | 0 | 12 |
 | 56 | `bootloader` | none | Boot loader and firmware | yes | A wrong boot configuration can leave the host unbootable | 45 | 0 | 45 |
-|  | All |  |  |  |  | 1203 | 92 | 1111 |
+|  | All |  |  |  |  | 1203 | 113 | 1090 |
 
 ## Umbrellas
 
@@ -478,7 +478,7 @@ or datastreams is one catalogue entry with one toggle.
 | `partitioning` | 2 | 2 | 7 | 7 | 1 |
 | `bootloader` | 4 | 4 | 4 | 4 | 3 |
 | All families | 408 | 399 | 510 | 507 | 239 |
-| Native remediation | 50 | 52 | 54 | 54 | 29 |
+| Native remediation | 56 | 57 | 66 | 66 | 30 |
 
 ### `rhel9` (content 0.1.82)
 
@@ -541,7 +541,7 @@ or datastreams is one catalogue entry with one toggle.
 | `partitioning` | 7 | 7 | 6 | 0 | 8 | 1 | 0 | 0 | 7 | 2 | 2 | 7 | 1 | 0 | 1 | 0 | 1 | 0 | 7 | 7 |
 | `bootloader` | 21 | 21 | 12 | 0 | 16 | 7 | 7 | 7 | 7 | 7 | 7 | 7 | 13 | 0 | 4 | 0 | 13 | 7 | 9 | 9 |
 | All families | 310 | 388 | 227 | 40 | 192 | 153 | 101 | 140 | 401 | 295 | 288 | 395 | 139 | 94 | 131 | 146 | 139 | 252 | 481 | 477 |
-| Native remediation | 20 | 20 | 19 | 11 | 13 | 22 | 18 | 19 | 49 | 45 | 47 | 49 | 14 | 9 | 9 | 22 | 14 | 31 | 43 | 43 |
+| Native remediation | 20 | 20 | 19 | 11 | 20 | 25 | 18 | 22 | 61 | 51 | 52 | 61 | 18 | 9 | 10 | 22 | 18 | 34 | 51 | 51 |
 
 ## Mapping
 

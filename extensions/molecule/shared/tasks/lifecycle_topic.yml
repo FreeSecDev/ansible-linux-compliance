@@ -7,6 +7,36 @@
       {{ lifecycle_catalogue.__linux_compliance_remediate_families | selectattr('name', 'equalto', lifecycle_family)
       | first }}
 
+- name: Lifecycle topic | Name the profile that the declaration runs the topic with on this platform
+  ansible.builtin.set_fact:
+    lifecycle_topic_profile: >-
+      {{ (lifecycle_topic.profiles | default([], true) | selectattr('platform', 'equalto', lifecycle_platform)
+      | map(attribute='profile') | list + [molecule_image.profile]) | first }}
+    lifecycle_profile_switched: >-
+      {{ ((lifecycle_topic.profiles | default([], true) | selectattr('platform', 'equalto', lifecycle_platform)
+      | map(attribute='profile') | list + [molecule_image.profile]) | first) != molecule_profile }}
+
+- name: Lifecycle topic | Run the topic with the profile of its declaration instead of the platform's own
+  when: lifecycle_profile_switched | bool
+  block:
+    - name: Lifecycle topic | Switch to the profile of the declaration
+      ansible.builtin.set_fact:
+        molecule_profile: "{{ lifecycle_topic_profile }}"
+
+    - name: Lifecycle topic | Discover the profile of the declaration in the pinned datastream
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.discover
+
+    - name: Lifecycle topic | Check that the discover role verified the profile of the declaration
+      ansible.builtin.assert:
+        that:
+          - linux_compliance_discovered.profile_id == molecule_profile_id
+          - linux_compliance_discovered.content_sha256 == molecule_datastream.sha256
+        fail_msg: >-
+          {{ lifecycle_family }}: the discover role verified {{ linux_compliance_discovered.profile_id }}, not the
+          profile {{ molecule_profile_id }} that the declaration names for {{ molecule_target.instance }}.
+        quiet: true
+
 - name: Lifecycle topic | Select the rules of the topic that the profile of this platform selects
   ansible.builtin.set_fact:
     lifecycle_rules: >-
@@ -218,6 +248,7 @@
   ansible.builtin.set_fact:
     lifecycle_proven_families: "{{ lifecycle_proven_families | default([]) + [lifecycle_family] }}"
   when: lifecycle_runs | bool
+
 - name: Lifecycle topic | Run the regression groups of the topic that this run selects, in the Docker scenarios
   ansible.builtin.include_tasks:
     file: lifecycle_regressions.yml
@@ -236,3 +267,23 @@
     - >-
       lifecycle_regression.platforms is not defined
       or lifecycle_platform in lifecycle_regression.platforms
+
+- name: Lifecycle topic | Give the platform its own profile back for the next topic
+  when: lifecycle_profile_switched | bool
+  block:
+    - name: Lifecycle topic | Switch back to the profile of the platform
+      ansible.builtin.set_fact:
+        molecule_profile: "{{ molecule_image.profile }}"
+
+    - name: Lifecycle topic | Discover the profile of the platform again
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.discover
+
+    - name: Lifecycle topic | Check that the discover role verified the profile of the platform again
+      ansible.builtin.assert:
+        that:
+          - linux_compliance_discovered.profile_id == molecule_profile_id
+        fail_msg: >-
+          {{ lifecycle_family }}: the discover role verified {{ linux_compliance_discovered.profile_id }}, not the
+          profile {{ molecule_profile_id }} of {{ molecule_target.instance }}.
+        quiet: true

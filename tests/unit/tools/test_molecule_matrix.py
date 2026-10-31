@@ -63,6 +63,10 @@ def make_root(
     versions = root / check_lifecycle_topics.VERSIONS
     versions.parent.mkdir(parents=True)
     shutil.copyfile(REPOSITORY_ROOT / check_lifecycle_topics.VERSIONS, versions)
+    (root / check_lifecycle_topics.MANIFEST).parent.mkdir(parents=True)
+    shutil.copyfile(
+        REPOSITORY_ROOT / check_lifecycle_topics.MANIFEST, root / check_lifecycle_topics.MANIFEST
+    )
     shutil.copytree(
         REPOSITORY_ROOT / check_lifecycle_topics.TOPICS, root / check_lifecycle_topics.TOPICS
     )
@@ -138,7 +142,7 @@ def test_the_repository_matrix_covers_every_native_topic_in_both_modes_on_every_
         }
         for platform in platforms
         for topic in topics
-        if platform in cycles[topic]["docker"]
+        if platform in cycles[topic].get("docker", frozenset())
         for mode in (
             "topic",
             "rule",
@@ -156,6 +160,8 @@ def test_the_repository_matrix_covers_every_native_topic_in_both_modes_on_every_
         "regressions-profiles",
     }
     assert ("rhel_compatible", "regressions-files") not in sudo
+    wireless = {leg["platform"] for leg in found["include"] if leg["topic"] == "wireless_modules"}
+    assert wireless == {"rhel_compatible"}
     declared = sorted(
         path.stem for path in (REPOSITORY_ROOT / check_lifecycle_topics.TOPICS).glob("*.yml")
     )
@@ -178,6 +184,7 @@ def test_the_scenario_of_a_platform_follows_the_scenario_names() -> None:
 def test_the_docker_matrix_holds_every_topic_with_a_docker_cycle(tmp_path: Path) -> None:
     root = make_root(tmp_path)
     topics = native_topics(root)
+    running = check_lifecycle_topics.cycle_platforms(root)
     cycles = [leg for leg in matrix.legs(root) if leg["mode"] in matrix.MODES]
     running = check_lifecycle_topics.cycle_platforms(root)
     assert cycles == [

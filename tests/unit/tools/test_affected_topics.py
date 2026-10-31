@@ -30,7 +30,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
-COPIED = ("roles", "extensions/molecule", "playbooks")
+COPIED = ("roles", "extensions/molecule", "playbooks", "content")
 SUDO_DROPIN = "roles/remediate/tasks/sudo_dropin_apply.yml"
 SUDO_STATES = "extensions/molecule/shared/tasks/lifecycle_sudo_states.yml"
 PWQUALITY_TASKS = "roles/remediate/tasks/pwquality.yml"
@@ -203,29 +203,56 @@ def role_task_files() -> list[str]:
     )
 
 
+def umbrellas() -> dict[str, str | None]:
+    """Return every family of the registry with its umbrella, or ``None``."""
+    data = cast(
+        "dict[str, list[dict[str, object]]]",
+        load_yaml((REPOSITORY_ROOT / generate_toggles.CATALOGUE).read_text(encoding="utf-8")),
+    )
+    return {
+        str(entry["name"]): str(entry["umbrella"]) if "umbrella" in entry else None
+        for entry in data["__linux_compliance_remediate_families"]
+    }
+
+
 def test_every_role_task_file_belongs_to_the_native_topic_of_its_name(trees: Trees) -> None:
     files = role_task_files()
     assert files
     families = native()
-    registry = list(
-        generate_toggles.load_catalogue(REPOSITORY_ROOT / generate_toggles.CATALOGUE).families
-    )
+    umbrella_of = umbrellas()
+    shared = 0
     for relative in files:
         stem = Path(relative).stem
-        named = {family for family in registry if stem == family or stem.startswith(family + "_")}
-        including = {
-            family
-            for family in families
-            if (REPOSITORY_ROOT / "roles" / "remediate" / "tasks" / f"{family}.yml").is_file()
-            and Path(relative).name
-            in (REPOSITORY_ROOT / "roles" / "remediate" / "tasks" / f"{family}.yml").read_text(
-                encoding="utf-8"
-            )
+        named = {
+            family for family in umbrella_of if stem == family or stem.startswith(family + "_")
         }
-        assert len(named) == 1, relative
-        expected = named | including
-        assert len(expected) == 1 or not named & set(families), relative
+        expected = named
+        if not named & set(families):
+            shared += 1
+            including = [
+                family
+                for family in families
+                if Path(relative).name
+                in (REPOSITORY_ROOT / "roles" / "remediate" / "tasks" / f"{family}.yml").read_text(
+                    encoding="utf-8"
+                )
+            ] or [
+                family
+                for family in families
+                if umbrella_of[family] is not None and stem.startswith(f"{umbrella_of[family]}_")
+            ]
+            assert len(including) > 1, relative
+            assert len({umbrella_of[family] for family in including}) == 1, relative
+            expected = named | {
+                name
+                for family in including
+                for name in umbrella_of
+                if family == name or family.startswith(name + "_")
+            }
+        else:
+            assert len(named & set(families)) == 1, relative
         assert set(trees.context.classify(relative)[0]) == expected, relative
+    assert shared == 6
 
 
 def test_every_regression_file_belongs_to_the_topics_whose_groups_name_it(trees: Trees) -> None:

@@ -1,0 +1,262 @@
+---
+- name: Kernel modules | Refuse to run outside a kernel module family that the dispatcher planned
+  ansible.builtin.assert:
+    that:
+      - linux_compliance_remediate_enabled is boolean
+      - linux_compliance_remediate_enabled
+      - __linux_compliance_remediate_plan is defined
+      - __linux_compliance_remediate_plan is mapping
+      - __linux_compliance_remediate_plan.enabled is true
+      - __linux_compliance_remediate_family is defined
+      - __linux_compliance_remediate_family is mapping
+      - __linux_compliance_remediate_family.name in __linux_compliance_remediate_modprobe_families
+      - >-
+        __linux_compliance_remediate_family ==
+        (__linux_compliance_remediate_plan.families
+         | selectattr('name', 'equalto', __linux_compliance_remediate_family.name) | list | first | default({}))
+    fail_msg: >-
+      kernel_modules_family.yml runs only from the filesystem_modules, protocol_modules or wireless_modules family
+      file that the remediate dispatcher included, with linux_compliance_remediate_enabled true. No change was made
+      to the host.
+    quiet: true
+  tags:
+    - always
+
+- name: Kernel modules | Refuse a platform whose modprobe directories the family does not know, before any change
+  ansible.builtin.assert:
+    that:
+      - linux_compliance_discovered is mapping
+      - >-
+        linux_compliance_discovered.benchmark_id | default('')
+        in __linux_compliance_remediate_modprobe_read_directories
+    fail_msg: >-
+      The kernel module families know the directories that modprobe reads only for the benchmarks
+      {{ __linux_compliance_remediate_modprobe_read_directories | list }}, not for
+      {{ linux_compliance_discovered.benchmark_id | default('none') }} (ADR 0028). No modprobe configuration was
+      changed.
+    quiet: true
+  tags:
+    - always
+
+- name: Kernel modules | Refuse a rule whose drop-in, module or lines the family cannot write, before any change
+  vars:
+    __linux_compliance_remediate_km_parameters: "{{ __linux_compliance_remediate_km_rule.parameters | default({}) }}"
+  ansible.builtin.assert:
+    that:
+      - __linux_compliance_remediate_km_rule.family == __linux_compliance_remediate_family.name
+      - __linux_compliance_remediate_km_parameters.method | default('') == 'dropin'
+      - __linux_compliance_remediate_km_parameters.module | default('') is string
+      - >-
+        __linux_compliance_remediate_km_parameters.module | default('')
+        is match(__linux_compliance_remediate_modprobe_module_pattern)
+      - >-
+        __linux_compliance_remediate_km_parameters.path | default('')
+        == __linux_compliance_remediate_modprobe_directory ~ '/freesecdev-'
+           ~ __linux_compliance_remediate_km_parameters.module | default('') ~ '.conf'
+      - >-
+        __linux_compliance_remediate_km_parameters.install | default(none) is none
+        or __linux_compliance_remediate_km_parameters.install
+           in __linux_compliance_remediate_modprobe_disabling_commands
+      - __linux_compliance_remediate_km_parameters.blacklist | default(false) is boolean
+      - >-
+        __linux_compliance_remediate_km_parameters.install | default(none) is not none
+        or __linux_compliance_remediate_km_parameters.blacklist | default(false)
+    fail_msg: >-
+      {{ __linux_compliance_remediate_km_rule.rule_id }} cannot be written: a kernel module rule needs the method
+      dropin, a module name matching {{ __linux_compliance_remediate_modprobe_module_pattern }}, the drop-in
+      {{ __linux_compliance_remediate_modprobe_directory }}/freesecdev-<module>.conf, and an install command out of
+      {{ __linux_compliance_remediate_modprobe_disabling_commands }}, a blacklist line, or both (ADR 0028). No
+      modprobe configuration was changed.
+    quiet: true
+  loop: "{{ __linux_compliance_remediate_family.cleanup + __linux_compliance_remediate_family.apply }}"
+  loop_control:
+    loop_var: __linux_compliance_remediate_km_rule
+    label: "{{ __linux_compliance_remediate_km_rule.rule_id }}"
+  tags:
+    - always
+
+- name: Kernel modules | Inspect the drop-in directory without following a symbolic link
+  ansible.builtin.stat:
+    path: "{{ __linux_compliance_remediate_modprobe_directory }}"
+    follow: false
+    get_checksum: false
+    get_mime: false
+    get_attributes: false
+  register: __linux_compliance_remediate_km_directory
+  tags:
+    - always
+
+- name: Kernel modules | Name the directories that the modprobe of this platform reads, in its order
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_km_read_paths: >-
+      {{ __linux_compliance_remediate_modprobe_read_directories[linux_compliance_discovered.benchmark_id] }}
+  tags:
+    - always
+
+- name: Kernel modules | Inspect every directory that modprobe reads its configuration from
+  ansible.builtin.stat:
+    path: "{{ __linux_compliance_remediate_km_path }}"
+    follow: true
+    get_checksum: false
+    get_mime: false
+    get_attributes: false
+  loop: "{{ __linux_compliance_remediate_km_read_paths }}"
+  loop_control:
+    loop_var: __linux_compliance_remediate_km_path
+  register: __linux_compliance_remediate_km_read_directories
+  tags:
+    - always
+
+- name: Kernel modules | Name the drop-ins that the collection owns and the directories that exist
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_km_directory_stat: "{{ __linux_compliance_remediate_km_directory.stat }}"
+    __linux_compliance_remediate_km_owned: >-
+      {{ __linux_compliance_remediate_rules
+         | selectattr('family', 'in', __linux_compliance_remediate_modprobe_families)
+         | map(attribute='parameters') | map(attribute='path') | list }}
+    __linux_compliance_remediate_km_existing_directories: >-
+      {{ __linux_compliance_remediate_km_read_directories.results
+         | selectattr('stat.isdir', 'defined') | selectattr('stat.isdir')
+         | map(attribute='__linux_compliance_remediate_km_path') | list }}
+  tags:
+    - always
+
+- name: Kernel modules | List every entry of those directories with a name that modprobe reads, of any type
+  ansible.builtin.find:
+    paths: "{{ __linux_compliance_remediate_km_existing_directories }}"
+    patterns: "{{ __linux_compliance_remediate_modprobe_read_patterns }}"
+    file_type: any
+    follow: false
+    hidden: false
+    recurse: false
+  register: __linux_compliance_remediate_km_entries
+  when: __linux_compliance_remediate_km_existing_directories | length > 0
+  tags:
+    - always
+
+- name: Kernel modules | Inspect the target of every symbolic link among them
+  ansible.builtin.stat:
+    path: "{{ __linux_compliance_remediate_km_link }}"
+    follow: true
+    get_checksum: false
+    get_mime: false
+    get_attributes: false
+  loop: >-
+    {{ __linux_compliance_remediate_km_entries.files | default([]) | selectattr('islnk')
+       | map(attribute='path') | sort }}
+  loop_control:
+    loop_var: __linux_compliance_remediate_km_link
+  register: __linux_compliance_remediate_km_link_targets
+  tags:
+    - always
+
+- name: Kernel modules | Keep, per file name, the entry that modprobe reads, and which of them hold text
+  vars:
+    __linux_compliance_remediate_km_link_types: >-
+      {{ dict(__linux_compliance_remediate_km_link_targets.results | default([])
+              | map(attribute='__linux_compliance_remediate_km_link')
+              | zip(__linux_compliance_remediate_km_link_targets.results | default([])
+                    | map(attribute='stat') | list)) }}
+    __linux_compliance_remediate_km_candidates: >-
+      {%- set kept = [] -%}
+      {%- for entry in __linux_compliance_remediate_km_entries.files | default([]) -%}
+      {%- set target = __linux_compliance_remediate_km_link_types[entry.path] | default({}) -%}
+      {%- if entry.islnk and not (target.isdir | default(false)) -%}
+      {%- set _ = kept.append({'path': entry.path, 'text': target.isreg | default(false)}) -%}
+      {%- elif not entry.islnk and not entry.isdir -%}
+      {%- set _ = kept.append({'path': entry.path, 'text': entry.isreg}) -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {{ kept }}
+    __linux_compliance_remediate_km_chosen: >-
+      {%- set chosen = {} -%}
+      {%- for directory in __linux_compliance_remediate_km_read_paths -%}
+      {%- for entry in __linux_compliance_remediate_km_candidates | sort(attribute='path') -%}
+      {%- if (entry.path | dirname) == directory and (entry.path | basename) not in chosen -%}
+      {%- set _ = chosen.update({entry.path | basename: entry}) -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {%- endfor -%}
+      {{ chosen | dictsort(true) | map('last') | selectattr('text') | map(attribute='path') | list }}
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_km_kmod_files: "{{ __linux_compliance_remediate_km_chosen }}"
+    __linux_compliance_remediate_km_read_files: >-
+      {{ __linux_compliance_remediate_km_chosen | reject('in', __linux_compliance_remediate_km_owned) | list }}
+  tags:
+    - always
+
+- name: Kernel modules | Read every install and blacklist directive with kmod's own reader, per file and as a whole
+  freesecdev.linux_compliance.modprobe_config:
+    files: "{{ __linux_compliance_remediate_km_kmod_files }}"
+  register: __linux_compliance_remediate_km_modprobe
+  tags:
+    - always
+
+- name: Kernel modules | Read every configuration file that modprobe reads besides the collection's drop-ins
+  ansible.builtin.slurp:
+    src: "{{ __linux_compliance_remediate_km_source }}"
+  loop: "{{ __linux_compliance_remediate_km_read_files }}"
+  loop_control:
+    loop_var: __linux_compliance_remediate_km_source
+  register: __linux_compliance_remediate_km_read
+  tags:
+    - always
+
+- name: Kernel modules | Keep the directives of the files besides the collection's drop-ins, and the checked text
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_km_available: "{{ __linux_compliance_remediate_km_modprobe.available }}"
+    __linux_compliance_remediate_km_consistent: "{{ __linux_compliance_remediate_km_modprobe.consistent }}"
+    __linux_compliance_remediate_km_problem: "{{ __linux_compliance_remediate_km_modprobe.message }}"
+    __linux_compliance_remediate_km_commands: >-
+      {%- set found = [] -%}
+      {%- for file in __linux_compliance_remediate_km_modprobe.files
+            if file.path not in __linux_compliance_remediate_km_owned -%}
+      {%- for directive in file.install -%}
+      {%- set pattern = directive.module | freesecdev.linux_compliance.modprobe_pattern -%}
+      {%- set _ = found.append({'path': file.path, 'name': file.path | basename, 'command': 'install',
+            'token': directive.module, 'module': directive.module,
+            'pattern': '.*' if pattern is none else pattern, 'argument': directive.command}) -%}
+      {%- endfor -%}
+      {%- for module in file.blacklist -%}
+      {%- set _ = found.append({'path': file.path, 'name': file.path | basename, 'command': 'blacklist',
+            'token': module, 'module': module, 'pattern': module | regex_escape, 'argument': ''}) -%}
+      {%- endfor -%}
+      {%- endfor -%}
+      {{ found }}
+    __linux_compliance_remediate_km_checked_text: >-
+      {{ __linux_compliance_remediate_km_read.results | default([])
+         | selectattr('__linux_compliance_remediate_km_source', 'search',
+                      '^(' ~ (__linux_compliance_remediate_modprobe_checked_directories
+                              | map('regex_escape') | join('|'))
+                      ~ ')/[^/]+$')
+         | selectattr('__linux_compliance_remediate_km_source', 'search',
+                      __linux_compliance_remediate_modprobe_checked_name)
+         | map(attribute='content') | map('b64decode') | list }}
+  tags:
+    - always
+
+- name: Kernel modules | Remove the drop-ins of rules no longer effective
+  ansible.builtin.include_tasks:
+    file: "{{ role_path }}/tasks/kernel_modules_cleanup.yml"
+    apply:
+      tags:
+        - always
+  loop: "{{ __linux_compliance_remediate_family.cleanup }}"
+  loop_control:
+    loop_var: __linux_compliance_remediate_rule
+    label: "{{ __linux_compliance_remediate_rule.rule_id }}"
+  tags:
+    - always
+
+- name: Kernel modules | Write the drop-ins of the effective rules
+  ansible.builtin.include_tasks:
+    file: "{{ role_path }}/tasks/kernel_modules_apply.yml"
+    apply:
+      tags:
+        - always
+  loop: "{{ __linux_compliance_remediate_family.apply }}"
+  loop_control:
+    loop_var: __linux_compliance_remediate_rule
+    label: "{{ __linux_compliance_remediate_rule.rule_id }}"
+  tags:
+    - always

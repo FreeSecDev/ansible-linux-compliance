@@ -1,0 +1,8 @@
+blacklist cramfs
+blacklist hfs
+blacklist nouveau
+install cram* /sbin/modprobe --ignore-install cramfs
+install hfs  /bin/false
+
+# End of configuration files. Dumping indexes now:
+
