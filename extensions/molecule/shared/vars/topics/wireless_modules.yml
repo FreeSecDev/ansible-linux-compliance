@@ -1,0 +1,104 @@
+---
+family: wireless_modules
+disruptive: true
+containment: >-
+  wireless_modules writes one drop-in per rule below /etc/modprobe.d and nothing else: it never runs modprobe, never
+  unloads a module and never rebuilds an initramfs, so the drop-ins only decide what a later modprobe would do.
+  The containers drop every capability, CAP_SYS_MODULE included, and run no service manager, so nothing in them
+  can load or unload a kernel module and the host kernel is never touched. The harness connects with docker exec
+  through the Docker API, without sshd, PAM, sudo or a login shell, and the guard's connection test after every
+  remediate run proves that it still reaches the same unprivileged container. The allow-list names wireless_modules
+  only for the runs of this topic.
+profiles:
+  - platform: rhel_compatible
+    profile: bsi
+    reason: >-
+      cis_server_l1 selects none of the wireless module rules; the BSI profile selects all five.
+unselected_platforms:
+  - platform: ubuntu
+    reason: >-
+      The Ubuntu 24.04 datastream has no wireless or Bluetooth kernel module rule, so no profile of the platform
+      selects a rule of the topic.
+audit:
+  applied_outcomes:
+    - notapplicable
+  reason: >-
+    ComplianceAsCode limits every wireless module rule to the system_with_kernel platform, which excludes
+    containers, and the RHEL 9 datastream does not recognise Rocky Linux, so a container audit reports them
+    notapplicable; the drop-ins with their checksums under applied are the evidence
+    (tests/unit/tools/test_content_golden_kernel_modules.py checks what the OVAL reads).
+state:
+  files:
+    - path: /etc/modprobe.d
+      rewritten: true
+    - path: /etc/modprobe.d/freesecdev-bluetooth.conf
+      rewritten: true
+    - path: /etc/modprobe.d/freesecdev-cfg80211.conf
+      rewritten: true
+    - path: /etc/modprobe.d/freesecdev-iwlmvm.conf
+      rewritten: true
+    - path: /etc/modprobe.d/freesecdev-iwlwifi.conf
+      rewritten: true
+    - path: /etc/modprobe.d/freesecdev-mac80211.conf
+      rewritten: true
+  packages:
+    - name: kmod
+  users:
+    - name: root
+  groups:
+    - name: root
+applied:
+  files:
+    - path: /etc/modprobe.d/freesecdev-bluetooth.conf
+      exists: true
+      type: file
+      attributes: []
+      mode: "0644"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: a6dd3f4b97bcd31fdbc8fcb8cc31bb883f4d8d2a7f53f392d3ff4998b92e412b
+    - path: /etc/modprobe.d/freesecdev-cfg80211.conf
+      exists: true
+      type: file
+      attributes: []
+      mode: "0644"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: 77c105a039165f127b0b0e002afa6f105998cd5d97a1a6a6a77a2a4255a16bfa
+    - path: /etc/modprobe.d/freesecdev-iwlmvm.conf
+      exists: true
+      type: file
+      attributes: []
+      mode: "0644"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: 08040e55cf18eb52c3fd845b4c5111946945767e6547e7d4590109f93ea49c5a
+    - path: /etc/modprobe.d/freesecdev-iwlwifi.conf
+      exists: true
+      type: file
+      attributes: []
+      mode: "0644"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: 499adc6d0046a7d1a8d11e4cb10a082a4fcce1c863325e4ee677d97994da7275
+    - path: /etc/modprobe.d/freesecdev-mac80211.conf
+      exists: true
+      type: file
+      attributes: []
+      mode: "0644"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: 23f8aa2d64b59e6b9711a8652487e852c8dd8483a4ef3bdcff4d3d329e7b14bb
+pre_states:
+  - name: as built
+    audit: true

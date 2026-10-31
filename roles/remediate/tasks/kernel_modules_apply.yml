@@ -1,0 +1,262 @@
+---
+- name: Kernel modules | Refuse to write a drop-in that the dispatcher did not plan
+  ansible.builtin.assert:
+    that:
+      - linux_compliance_remediate_enabled is boolean
+      - linux_compliance_remediate_enabled
+      - __linux_compliance_remediate_family is mapping
+      - __linux_compliance_remediate_family.name in __linux_compliance_remediate_modprobe_families
+      - __linux_compliance_remediate_rule is mapping
+      - __linux_compliance_remediate_rule.family == __linux_compliance_remediate_family.name
+      - __linux_compliance_remediate_rule.parameters.method == 'dropin'
+      - __linux_compliance_remediate_rule.parameters.path in __linux_compliance_remediate_km_owned
+      - >-
+        __linux_compliance_remediate_rule.parameters.module
+        is match(__linux_compliance_remediate_modprobe_module_pattern)
+      - >-
+        __linux_compliance_remediate_rule.parameters.path
+        == __linux_compliance_remediate_modprobe_directory ~ '/freesecdev-'
+           ~ __linux_compliance_remediate_rule.parameters.module ~ '.conf'
+      - __linux_compliance_remediate_plan is defined
+      - __linux_compliance_remediate_plan is mapping
+      - __linux_compliance_remediate_plan.enabled is true
+      - >-
+        __linux_compliance_remediate_rule in
+        ((__linux_compliance_remediate_plan.families
+         | selectattr('name', 'equalto', __linux_compliance_remediate_family.name) | list | first
+         | default({}))).apply | default([])
+    fail_msg: >-
+      kernel_modules_apply.yml runs only for a rule that the remediate dispatcher planned to apply,
+      with linux_compliance_remediate_enabled true. No change was made to the host.
+    quiet: true
+  tags:
+    - always
+
+- name: Kernel modules | Read the method and the content that the ledger entry of the rule records
+  vars:
+    __linux_compliance_remediate_km_recorded: >-
+      {{ (__linux_compliance_remediate_rule.ledger_entry.prior_values | default([])
+          | items2dict(key_name='name', value_name='value'))
+         if __linux_compliance_remediate_rule.ledger_entry is mapping else {} }}
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_km_entry: "{{ __linux_compliance_remediate_km_recorded }}"
+    __linux_compliance_remediate_km_entry_method: >-
+      {{ none if __linux_compliance_remediate_rule.ledger_entry is not mapping
+         else __linux_compliance_remediate_km_recorded.method | default('unknown') }}
+  tags:
+    - always
+
+- name: Kernel modules | Inspect the drop-in without following a symbolic link
+  ansible.builtin.stat:
+    path: "{{ __linux_compliance_remediate_rule.parameters.path }}"
+    follow: false
+    get_checksum: false
+    get_mime: false
+    get_attributes: false
+  register: __linux_compliance_remediate_km_stat
+  when: __linux_compliance_remediate_km_directory_stat.isdir | default(false)
+  tags:
+    - always
+
+- name: Kernel modules | Read the drop-in when it exists
+  ansible.builtin.slurp:
+    src: "{{ __linux_compliance_remediate_rule.parameters.path }}"
+  register: __linux_compliance_remediate_km_current
+  when:
+    - __linux_compliance_remediate_km_stat is not skipped
+    - __linux_compliance_remediate_km_stat.stat.isreg | default(false)
+  tags:
+    - always
+
+- name: Kernel modules | Compose the drop-in and find what the other configuration files set for the module
+  vars:
+    __linux_compliance_remediate_km_module: "{{ __linux_compliance_remediate_rule.parameters.module }}"
+    __linux_compliance_remediate_km_key: "{{ __linux_compliance_remediate_rule.parameters.module | replace('-', '_') }}"
+    __linux_compliance_remediate_km_install: >-
+      {{ __linux_compliance_remediate_rule.parameters.install | default(none) }}
+    __linux_compliance_remediate_km_blacklist: >-
+      {{ __linux_compliance_remediate_rule.parameters.blacklist | default(false) }}
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_km_header: >-
+      {{ '# Managed by freesecdev.linux_compliance for ' ~ __linux_compliance_remediate_rule.rule_id ~ '.' }}
+    __linux_compliance_remediate_km_lines: >-
+      {{ (['install ' ~ __linux_compliance_remediate_km_module ~ ' ' ~ __linux_compliance_remediate_km_install]
+          if __linux_compliance_remediate_km_install is not none else [])
+         + (['blacklist ' ~ __linux_compliance_remediate_km_module]
+            if __linux_compliance_remediate_km_blacklist else []) }}
+    __linux_compliance_remediate_km_first_install: >-
+      {%- set first = namespace(found=none) -%}
+      {%- for command in __linux_compliance_remediate_km_commands
+            if command.command == 'install' and first.found is none
+            and __linux_compliance_remediate_km_key is match('^(?:' ~ command.pattern ~ ')$') -%}
+      {%- set first.found = command -%}
+      {%- endfor -%}
+      {{ first.found }}
+    __linux_compliance_remediate_km_blacklisted: >-
+      {{ __linux_compliance_remediate_km_commands | selectattr('command', 'equalto', 'blacklist')
+         | selectattr('module', 'equalto', __linux_compliance_remediate_km_key) | list | length > 0 }}
+    __linux_compliance_remediate_km_checked_install: >-
+      {{ __linux_compliance_remediate_km_checked_text
+         | select('search', __linux_compliance_remediate_modprobe_checked_install
+                  | replace('{module}', __linux_compliance_remediate_km_module | regex_escape))
+         | list | length > 0 }}
+    __linux_compliance_remediate_km_checked_blacklist: >-
+      {{ __linux_compliance_remediate_km_checked_text
+         | select('search', __linux_compliance_remediate_modprobe_checked_blacklist
+                  | replace('{module}', __linux_compliance_remediate_km_module | regex_escape))
+         | list | length > 0 }}
+    __linux_compliance_remediate_km_wants_install: "{{ __linux_compliance_remediate_km_install is not none }}"
+    __linux_compliance_remediate_km_wants_blacklist: "{{ __linux_compliance_remediate_km_blacklist }}"
+  tags:
+    - always
+
+- name: Kernel modules | Decide whether the drop-in must be written or the module is already set elsewhere
+  vars:
+    __linux_compliance_remediate_km_existing: >-
+      {{ (__linux_compliance_remediate_km_current.content | b64decode)
+         if __linux_compliance_remediate_km_current is not skipped else none }}
+    __linux_compliance_remediate_km_name: "{{ __linux_compliance_remediate_rule.parameters.path | basename }}"
+    __linux_compliance_remediate_km_overriding: >-
+      {{ __linux_compliance_remediate_km_wants_install
+         and __linux_compliance_remediate_km_first_install is not none
+         and __linux_compliance_remediate_km_first_install.argument
+             not in __linux_compliance_remediate_modprobe_disabling_commands
+         and __linux_compliance_remediate_km_first_install.name < __linux_compliance_remediate_km_name }}
+    __linux_compliance_remediate_km_satisfied_elsewhere: >-
+      {{ __linux_compliance_remediate_km_existing is none
+         and (not __linux_compliance_remediate_km_wants_install
+              or (__linux_compliance_remediate_km_first_install is not none
+                  and __linux_compliance_remediate_km_first_install.argument
+                      in __linux_compliance_remediate_modprobe_disabling_commands
+                  and __linux_compliance_remediate_km_checked_install))
+         and (not __linux_compliance_remediate_km_wants_blacklist
+              or (__linux_compliance_remediate_km_blacklisted and __linux_compliance_remediate_km_checked_blacklist)) }}
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_km_content: >-
+      {{ __linux_compliance_remediate_km_header ~ __linux_compliance_remediate_newline
+         ~ '# Switching the rule or the ' ~ __linux_compliance_remediate_family.name
+         ~ ' topic off removes this file.' ~ __linux_compliance_remediate_newline
+         ~ (__linux_compliance_remediate_km_lines | join(__linux_compliance_remediate_newline))
+         ~ __linux_compliance_remediate_newline }}
+    __linux_compliance_remediate_km_status: >-
+      {{ 'method_changed' if __linux_compliance_remediate_km_entry_method not in [none, 'dropin']
+         else 'not_directory' if not (__linux_compliance_remediate_km_directory_stat.isdir | default(false))
+         else 'modprobe_missing' if not __linux_compliance_remediate_km_available
+         else 'config_unreadable' if not __linux_compliance_remediate_km_consistent
+         else 'not_regular_file' if __linux_compliance_remediate_km_stat.stat.exists
+              and not __linux_compliance_remediate_km_stat.stat.isreg
+         else 'not_owned' if __linux_compliance_remediate_km_existing is not none
+              and not __linux_compliance_remediate_km_existing.startswith(__linux_compliance_remediate_km_header)
+         else 'overridden' if __linux_compliance_remediate_km_overriding
+         else 'compliant' if __linux_compliance_remediate_km_satisfied_elsewhere
+         else 'pending' }}
+    __linux_compliance_remediate_km_existing_text: "{{ __linux_compliance_remediate_km_existing }}"
+  tags:
+    - always
+
+- name: Kernel modules | Decide between compliant and applied and name the reason of a refusal
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_km_content_sha256: "{{ __linux_compliance_remediate_km_content | hash('sha256') }}"
+    __linux_compliance_remediate_km_status: >-
+      {{ __linux_compliance_remediate_km_status if __linux_compliance_remediate_km_status != 'pending'
+         else 'compliant' if __linux_compliance_remediate_km_existing_text == __linux_compliance_remediate_km_content
+         else 'applied' }}
+    __linux_compliance_remediate_km_reason: >-
+      {{ {'method_changed': 'the ledger entry was recorded by the ' ~ __linux_compliance_remediate_km_entry_method
+                            ~ ' method; clean it up first',
+          'modprobe_missing': 'modprobe is not installed, so nothing reads '
+                              ~ __linux_compliance_remediate_modprobe_directory ~ ': '
+                              ~ __linux_compliance_remediate_km_problem,
+          'config_unreadable': 'kmod does not read the modprobe configuration as the family found it: '
+                               ~ __linux_compliance_remediate_km_problem,
+          'not_directory': __linux_compliance_remediate_modprobe_directory
+                           ~ ' is missing, a symbolic link or not a directory; kmod creates it',
+          'not_regular_file': __linux_compliance_remediate_rule.parameters.path
+                              ~ ' is a symbolic link or another non-regular file',
+          'not_owned': __linux_compliance_remediate_rule.parameters.path
+                       ~ ' exists without the header of the collection',
+          'overridden': 'modprobe runs the first install command that matches '
+                        ~ __linux_compliance_remediate_rule.parameters.module ~ ', install '
+                        ~ ((__linux_compliance_remediate_km_first_install or {}).token | default('') | truncate(64))
+                        ~ ' ' ~ ((__linux_compliance_remediate_km_first_install or {}).argument | default('')
+                                 | truncate(128))
+                        ~ ' in ' ~ (__linux_compliance_remediate_km_first_install or {}).path | default('')
+                        ~ ', read before the drop-in; the collection does not edit that file'}
+         [__linux_compliance_remediate_km_status] | default(none) }}
+  tags:
+    - always
+
+- name: Kernel modules | Record that the drop-in did not exist and what it will hold before writing it
+  freesecdev.linux_compliance.control_state:
+    action: record
+    rule_id: "{{ __linux_compliance_remediate_rule.rule_id }}"
+    family: "{{ __linux_compliance_remediate_rule.family }}"
+    revert_strategy: "{{ __linux_compliance_remediate_rule.revert_strategy }}"
+    prior_values:
+      - name: method
+        value: dropin
+      - name: dropin
+        value: null
+      - name: dropin_sha256
+        value: "{{ __linux_compliance_remediate_km_content_sha256 }}"
+    collection_version: "{{ __linux_compliance_remediate_collection_version }}"
+  register: __linux_compliance_remediate_km_record
+  when:
+    - __linux_compliance_remediate_km_status == 'applied'
+    - __linux_compliance_remediate_rule.ledger_entry is none
+  tags:
+    - always
+
+- name: Kernel modules | Write the drop-in, mode 0644, owned by root, without following a symbolic link
+  ansible.builtin.copy:
+    content: "{{ __linux_compliance_remediate_km_content }}"
+    dest: "{{ __linux_compliance_remediate_rule.parameters.path }}"
+    follow: false
+    force: true
+    mode: "0644"
+    owner: root
+    group: root
+  register: __linux_compliance_remediate_km_write
+  when: __linux_compliance_remediate_km_status == 'applied'
+  tags:
+    - always
+
+- name: Kernel modules | Keep the recorded prior state and record the new content when the drop-in changed
+  freesecdev.linux_compliance.control_state:
+    action: record
+    rule_id: "{{ __linux_compliance_remediate_rule.rule_id }}"
+    family: "{{ __linux_compliance_remediate_rule.family }}"
+    revert_strategy: "{{ __linux_compliance_remediate_rule.revert_strategy }}"
+    prior_values: >-
+      {{ __linux_compliance_remediate_km_entry
+         | combine({'dropin_sha256': __linux_compliance_remediate_km_content_sha256})
+         | dict2items(key_name='name', value_name='value') }}
+    collection_version: "{{ __linux_compliance_remediate_collection_version }}"
+    replace: true
+  register: __linux_compliance_remediate_km_rerecord
+  when:
+    - __linux_compliance_remediate_km_status == 'applied'
+    - __linux_compliance_remediate_km_entry_method == 'dropin'
+    - >-
+      __linux_compliance_remediate_km_entry.dropin_sha256 | default(none)
+      != __linux_compliance_remediate_km_content_sha256
+  tags:
+    - always
+
+- name: Kernel modules | Add the result of the rule
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_results: >-
+      {{ __linux_compliance_remediate_results + [{
+           'rule_id': __linux_compliance_remediate_rule.rule_id,
+           'family': __linux_compliance_remediate_rule.family,
+           'action': 'apply',
+           'status': __linux_compliance_remediate_km_status,
+           'reason': __linux_compliance_remediate_km_reason,
+           'changed': (__linux_compliance_remediate_km_write is changed)
+                      or (__linux_compliance_remediate_km_rerecord is changed),
+           'message': __linux_compliance_remediate_rule.parameters.path ~ ': ' ~ __linux_compliance_remediate_km_status
+                      ~ ((' (' ~ __linux_compliance_remediate_km_reason ~ '; nothing was changed)')
+                         if __linux_compliance_remediate_km_reason else '')
+         }] }}
+  tags:
+    - always

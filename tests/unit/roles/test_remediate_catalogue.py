@@ -19,6 +19,7 @@ from tools.roles import generate_toggles
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 ROLE = REPOSITORY_ROOT / "roles" / "remediate"
 PROFILE_VALUE_PARAMETERS = {"value_id", "profile_values"}
+KERNEL_MODULE_PARAMETERS = {"method", "module", "path", "install", "blacklist"}
 FAMILY_PARAMETERS: dict[str, list[set[str]]] = {
     "file_permissions": [{"path", "max_mode"}],
     "banners": [
@@ -50,6 +51,9 @@ FAMILY_PARAMETERS: dict[str, list[set[str]]] = {
         {"method", "path", "type", "attribute", "max_mode"},
         {"method", "path", "type", "attribute", "id"},
     ],
+    "filesystem_modules": [KERNEL_MODULE_PARAMETERS],
+    "protocol_modules": [KERNEL_MODULE_PARAMETERS],
+    "wireless_modules": [KERNEL_MODULE_PARAMETERS],
 }
 SYSCTL_PARAMETERS: list[set[str]] = [
     {"key", "path", "datatype", "value", "accepted"},
@@ -60,12 +64,14 @@ SYSCTL_PARAMETERS: list[set[str]] = [
 ]
 for _family in ("sysctl", "ipv4_parameters", "ipv6_parameters"):
     FAMILY_PARAMETERS[_family] = SYSCTL_PARAMETERS
+KERNEL_MODULE_FAMILIES = ["filesystem_modules", "protocol_modules", "wireless_modules"]
 NATIVE_FAMILIES = [
     "file_permissions",
     "sysctl",
     "banners",
     "ipv4_parameters",
     "ipv6_parameters",
+    *KERNEL_MODULE_FAMILIES,
     "ssh",
     "pwquality",
     "login_defs",
@@ -74,6 +80,7 @@ NATIVE_FAMILIES = [
 DISRUPTIVE_NATIVE_FAMILIES = [
     "ipv4_parameters",
     "ipv6_parameters",
+    *KERNEL_MODULE_FAMILIES,
     "ssh",
     "pwquality",
     "login_defs",
@@ -364,12 +371,58 @@ def test_native_kernel_parameter_rules_write_one_drop_in_each_with_a_value_the_c
 
 def test_the_task_files_are_only_family_files_and_their_helpers() -> None:
     families = {str(family["name"]) for family in registry()}
+    umbrellas = {str(family["umbrella"]) for family in registry() if "umbrella" in family}
     role_files = {"main", "dispatch", "internal_variables"}
-    assert not families & role_files
+    assert not (families | umbrellas) & role_files
     for path in sorted((ROLE / "tasks").glob("*.yml")):
         stem = path.stem
-        helper = any(stem.startswith(f"{family}_") for family in families)
+        helper = any(stem.startswith(f"{name}_") for name in families | umbrellas)
         assert stem in role_files or stem in families or helper, stem
+
+
+def test_native_kernel_module_rules_write_one_drop_in_per_module_below_modprobe_d() -> None:
+    modules = [rule for rule in native() if rule["family"] in KERNEL_MODULE_FAMILIES]
+    assert len(modules) == 21
+    role_vars = load(ROLE / "vars" / "main.yml")
+    pattern = re.compile(str(role_vars["__linux_compliance_remediate_modprobe_module_pattern"]))
+    assert role_vars["__linux_compliance_remediate_modprobe_families"] == KERNEL_MODULE_FAMILIES
+    directories = cast(
+        "dict[str, list[str]]", role_vars["__linux_compliance_remediate_modprobe_read_directories"]
+    )
+    manifest = load(REPOSITORY_ROOT / "content" / "manifest.yml")
+    streams = cast("list[dict[str, object]]", manifest["datastreams"])
+    assert set(directories) == {str(stream["benchmark_id"]) for stream in streams}
+    assert directories["xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04"] == [
+        "/etc/modprobe.d",
+        "/run/modprobe.d",
+        "/usr/local/lib/modprobe.d",
+        "/usr/lib/modprobe.d",
+        "/lib/modprobe.d",
+    ]
+    assert directories["xccdf_org.ssgproject.content_benchmark_RHEL-9"] == [
+        "/etc/modprobe.d",
+        "/run/modprobe.d",
+        "/usr/lib/modprobe.d",
+        "/lib/modprobe.d",
+    ]
+    paths: list[str] = []
+    for rule in modules:
+        parameters = cast("dict[str, object]", rule["parameters"])
+        module = str(parameters["module"])
+        assert rule["revert_strategy"] == "recorded_value"
+        assert rule["disruptive"] is True
+        assert parameters["method"] == "dropin"
+        assert pattern.fullmatch(module), module
+        assert parameters["path"] == f"/etc/modprobe.d/freesecdev-{module}.conf"
+        assert parameters["install"] == "/bin/false"
+        assert parameters["blacklist"] is True
+        paths.append(str(parameters["path"]))
+    assert len(paths) == len(set(paths))
+    usb = toggles.rule_toggle_name(
+        "xccdf_org.ssgproject.content_rule_kernel_module_usb-storage_disabled"
+    )
+    assert usb == "linux_compliance_rule_kernel_module_usb_storage_disabled_enabled"
+    assert usb in {str(rule["toggle"]) for rule in modules}
 
 
 def test_the_recorded_collection_version_matches_galaxy() -> None:
@@ -447,6 +500,13 @@ def test_with_the_opt_in_only_the_native_rules_are_applied_and_the_rest_not_impl
         "file_permissions",
         "sysctl",
         "banners",
+    ]
+    kernel = plan(allow_disruptive=["kernel_modules"])
+    assert [family["name"] for family in cast("list[dict[str, object]]", kernel["families"])] == [
+        "file_permissions",
+        "sysctl",
+        "banners",
+        *KERNEL_MODULE_FAMILIES,
     ]
     allowed = plan(allow_disruptive=DISRUPTIVE_NATIVE_FAMILIES)
     assert cast("dict[str, int]", allowed["summary"])["apply"] == len(native())

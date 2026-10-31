@@ -116,3 +116,34 @@ __linux_compliance_remediate_sysctl_side_effects:
     - net.ipv4.conf.all.accept_redirects
   net.ipv4.conf.all.forwarding:
     - net.ipv4.conf.all.accept_redirects
+__linux_compliance_remediate_modprobe_families:
+  - filesystem_modules
+  - protocol_modules
+  - wireless_modules
+__linux_compliance_remediate_modprobe_directory: /etc/modprobe.d
+__linux_compliance_remediate_modprobe_read_directories:
+  xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04:
+    - /etc/modprobe.d
+    - /run/modprobe.d
+    - /usr/local/lib/modprobe.d
+    - /usr/lib/modprobe.d
+    - /lib/modprobe.d
+  xccdf_org.ssgproject.content_benchmark_RHEL-9:
+    - /etc/modprobe.d
+    - /run/modprobe.d
+    - /usr/lib/modprobe.d
+    - /lib/modprobe.d
+__linux_compliance_remediate_modprobe_checked_directories:
+  - /etc/modprobe.d
+  - /run/modprobe.d
+  - /usr/lib/modprobe.d
+__linux_compliance_remediate_modprobe_read_patterns:
+  - "*.conf"
+  - "*.alias"
+__linux_compliance_remediate_modprobe_checked_name: '^.*\.conf$'
+__linux_compliance_remediate_modprobe_module_pattern: '^[a-z0-9][a-z0-9_-]{0,63}$'
+__linux_compliance_remediate_modprobe_disabling_commands:
+  - /bin/false
+  - /bin/true
+__linux_compliance_remediate_modprobe_checked_install: '(?m)^\s*install\s+{module}\s+(/bin/false|/bin/true)$'
+__linux_compliance_remediate_modprobe_checked_blacklist: '(?m)^blacklist\s+{module}$'

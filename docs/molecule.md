@@ -77,8 +77,8 @@ package versions:
 
 | Image | Packages |
 |---|---|
-| `ubuntu` | `python3=3.12.3-0ubuntu2.1`, `openscap-scanner=1.3.9+dfsg-1.1ubuntu2` (the version that `oscap-integration` pins), `cron=3.0pl1-184ubuntu2`, `python3-apt=2.7.7ubuntu5.3` (for `package_facts` in the toggle lifecycle), `libpam-pwquality=1.4.5-3build1` (libpwquality and its `pwquality.conf`, so that the `pwquality` lifecycle runs on Ubuntu as on Rocky Linux, where the library is part of `pam`), `sudo=1.9.15p5-3ubuntu5.24.04.4` (`/etc/sudoers`, `/etc/sudoers.d` and `visudo` for the `sudo` lifecycle), `openssh-server=1:9.6p1-3ubuntu13.20` and the directory `/run/sshd` (so that the `ssh` lifecycle can test the configuration with `sshd -t`, which refuses to run without its privilege separation directory; no sshd runs) |
-| `rhel_compatible` | `openscap-scanner-1:1.3.14-1.el9_8.rocky.0.1`, `cronie-1.5.7-16.el9`, `sudo-1.9.17p2-3.el9_8.3` (for the `sudo` lifecycle), `openssh-server-9.9p1-13.el9_8.rocky.0.1` with host keys from `ssh-keygen -A` (the package creates them only when the service first starts, and `sshd -t` refuses to run without one); Python 3.9 comes with the base image |
+| `ubuntu` | `python3=3.12.3-0ubuntu2.1`, `openscap-scanner=1.3.9+dfsg-1.1ubuntu2` (the version that `oscap-integration` pins), `cron=3.0pl1-184ubuntu2`, `python3-apt=2.7.7ubuntu5.3` (for `package_facts` in the toggle lifecycle), `libpam-pwquality=1.4.5-3build1` (libpwquality and its `pwquality.conf`, so that the `pwquality` lifecycle runs on Ubuntu as on Rocky Linux, where the library is part of `pam`), `sudo=1.9.15p5-3ubuntu5.24.04.4` (`/etc/sudoers`, `/etc/sudoers.d` and `visudo` for the `sudo` lifecycle), `openssh-server=1:9.6p1-3ubuntu13.20` and the directory `/run/sshd` (so that the `ssh` lifecycle can test the configuration with `sshd -t`, which refuses to run without its privilege separation directory; no sshd runs), `kmod=31+20240202-2ubuntu7.2` (`/etc/modprobe.d` and its vendor files for the kernel module lifecycles; no module is ever loaded) |
+| `rhel_compatible` | `openscap-scanner-1:1.3.14-1.el9_8.rocky.0.1`, `cronie-1.5.7-16.el9`, `sudo-1.9.17p2-3.el9_8.3` (for the `sudo` lifecycle), `openssh-server-9.9p1-13.el9_8.rocky.0.1` with host keys from `ssh-keygen -A` (the package creates them only when the service first starts, and `sshd -t` refuses to run without one), `kmod-28-11.el9` (`/etc/modprobe.d` for the kernel module lifecycles); Python 3.9 comes with the base image |
 
 `cron` and `cronie` provide `/etc/crontab` with mode `0644`, the starting point of the reference rule. When a
 distribution archive drops a pinned version, the image build fails and the pin must be updated by hand; no Renovate
@@ -719,6 +719,23 @@ owner and group of `/etc/sudoers` and `/etc/sudoers.d`), from a loosened `/etc/s
 administrator sets afterwards is kept as `modified_since_apply`, the recorded `0640` and not a default is restored, and
 a directory mode put back by hand is `restored` without a write.
 
+The kernel module topics ([ADR 0028](adr/0028-native-kernel-module-drop-ins.md)) run with the profiles that select
+their rules (`profiles` in the declaration): `filesystem_modules` with `cis_level2_server` on Ubuntu and `cis` on Rocky
+Linux, `protocol_modules` with `cis_level2_server` and `stig`, and `wireless_modules` with `bsi` on Rocky Linux only.
+The group `changes` of `filesystem_modules` (both platforms), `shared/tasks/lifecycle_kernel_modules_regressions.yml`,
+puts a vendor file in `/usr/lib/modprobe.d` that disables hfsplus behind a link to a directory of the same name in
+`/etc/modprobe.d` (which modprobe skips), one that disables usb-storage but is masked by a link to `/dev/null`,
+`00-site-hfs.conf`, read before the collection's drop-ins, that lets hfs load again, and a file of the administrator
+at the udf drop-in's path before the apply (`compliant`, `applied`, `overridden` and `not_owned`),
+records every entry as if another method had written it (`method_changed` at apply and cleanup, every drop-in kept),
+adds a file read first that lets jffs2 load through the pattern `jff*` after the apply (`overridden`, nothing
+changed), changes the cramfs drop-in
+by hand and removes the freevxfs one (`modified_since_apply` kept, `restored` without a write), and finally puts the
+cramfs drop-in back and cleans it up. A last step writes four site files, read before the drop-ins, that only kmod's own
+reader reads right (`install \*freevxfs`, `ins\tall udf`, a line ending in `\\` before `install jffs2`, and
+`install cr[]a[a]mfs`), and expects those four rules `overridden` and the others `applied`. Every kernel module rule is limited to systems with a kernel, so the scans in
+the containers report them `notapplicable`; the drop-ins and their checksums are the evidence.
+
 The `ssh` topic ([ADR 0023](adr/0023-native-ssh-server-configuration.md)) runs two pre-states, both with real
 scans (the customised one on Ubuntu only, `audit: [ubuntu]`, because every rule is `notapplicable` on Rocky
 Linux): the as-built configuration, and a customised one with two site drop-ins: `00-admin.conf`, which sshd reads
@@ -875,12 +892,13 @@ growth of the suite, while a hung run is still cancelled long before the merge q
 
 With `sudo` (FREES-175) the regressions moved out of the cycle legs: `make molecule-matrix` adds one leg per regression
 group that a declaration lists and platform it runs on, with the mode `regressions-<group>`, after the two toggle
-modes of the topic, so 24 cycle legs and 19 regression legs (`pwquality` `changes`, `ssh` `changes` and `vendor`,
-`sudo` `changes` and `profiles`, `login_defs` `changes`, `refusals`, `values` and `profiles` on both platforms, `sudo` `files` on
-Ubuntu). The kernel parameter topics (FREES-107) add 12 cycle legs and the two `ipv4_parameters` `changes` legs to
-the Docker matrix, and the `ipv4_parameters` `runtime` group, which requires libvirt, a leg per platform to the
-libvirt matrix. `tests/unit/tools/test_molecule_matrix.py` checks that every declared group gets its legs with the
-drivers it requires, `make lint-lifecycle` checks the groups, and the harness fails a regression leg whose
+modes of the topic, so 34 cycle legs and 21 regression legs (`pwquality` `changes`, `ssh` `changes` and
+`vendor`, `sudo` `changes` and `profiles`, `login_defs` `changes`, `refusals`, `values` and `profiles`,
+`filesystem_modules` `changes` on both platforms, `sudo` `files` on Ubuntu; `wireless_modules` runs on Rocky Linux
+only). The kernel parameter topics (FREES-107) add 12 cycle legs and the two `ipv4_parameters` `changes`
+legs to the Docker matrix, and the `ipv4_parameters` `runtime` group, which requires libvirt, a leg per
+platform to the libvirt matrix. `tests/unit/tools/test_molecule_matrix.py` checks that every declared group
+gets its legs with the drivers it requires, `make lint-lifecycle` checks the groups, and the harness fails a regression leg whose
 group did not run. Before the split the `sudo` cycle legs carried up to four minutes of regressions each and took 14 to
 19 minutes on slow runners.
 
@@ -1007,6 +1025,7 @@ pre_states:
 | `audit` | no | `applied_outcomes`: outcomes accepted after apply in addition to `pass` and `fixed`, only `notapplicable`, with a `reason` |
 | `pre_states` | no | The states each cycle starts from, each with a unique `name`, `audit` (run real scans in its cycles: `true`, or a list of the platforms on which to run them), `modes` (the toggle modes in which its cycles run, `topic`, `rule` or both; the default is both; every driver of the topic must run a pre-state in each mode, and a leg counts its topic as proven only after a cycle of its own mode ran), `files` (mode, owner or group of declared files, the `content` of a declared file that the pre-state adds as root and removes after the cycle, or `lines`: a list of `regexp` and `line` that `lineinfile` sets in a declared file whose `rewritten` is true, as an administrator would, and whose content the harness puts back after the cycle; `content` and `lines` exclude each other), `unchanged` (rules of the topic, by short identifier, that the pre-state already satisfies with the `status` `compliant`, that are `notapplicable`, that an earlier setting leaves `overridden` or that an interface's own value refuses as `interface_override` (FREES-107; their scan outcome is not checked), optionally with `platforms`), `applied` (expectations that replace those of the declaration in this pre-state, by item) and `requires` (the drivers that can set it, see below); the default is the as-built state with scans |
 | `unselected_platforms` | no | Platforms whose profile selects no native rule of the topic, each with `platform` and `reason`; it may not list every platform |
+| `profiles` | no | Per platform, a profile of that platform's pinned datastream that the cycles and regressions of the topic run with instead of the platform's own (`molecule_images.<platform>.profile`), each with `platform`, `profile` (the short identifier, which `content/manifest.yml` must list for the datastream) and `reason`; for a topic whose rules the platform's own profile does not select (the kernel module topics, FREES-190). The harness switches `molecule_profile`, runs the `discover` role for that profile, and switches back after the topic; every scan then expects the reference rule only when that profile selects it. `tests/unit/tools/test_content_golden_lifecycle_profiles.py` refuses a profile that selects fewer of the topic's native rules than the platform's own profile, and declarations whose cycles together miss a native rule of the topic that some pinned profile selects. A platform under `unselected_platforms` cannot have one |
 | `regressions` | no | Named groups of regression task files, each with a unique `name` (lower case), `files` (file names of `shared/tasks` that `shared/tasks/lifecycle_regressions.yml` includes), optional `platforms` and optional `requires` (the drivers that run it, `docker` when left out; a group that requires libvirt runs only where a libvirt cycle of its topic runs); each group gets one CI leg per platform and driver, mode `regressions-<name>` |
 | `requires` | no | The drivers whose scenarios run the cycles of the topic, `docker` or `libvirt`; without it, the cycles of a pre-state without `requires` run in the Docker scenarios ([driver requirements](molecule-libvirt.md#driver-requirements-of-a-topic)) |
 
@@ -1041,8 +1060,9 @@ No topic can gain a native rule without its lifecycle test:
 
 ### Disruptive topics
 
-`pwquality` and `ssh` are the disruptive families with native rules; the others (`pam`, `sssd`, `sudo`, `faillock`
-and the rest that the registry flags) have none yet. A disruptive topic is opted in by its declaration:
+`pwquality`, `ssh`, `sudo` and the kernel module topics (`filesystem_modules`, `protocol_modules`,
+`wireless_modules`) are the disruptive families with native rules; the others (`pam`, `sssd`, `faillock` and the rest
+that the registry flags) have none yet. A disruptive topic is opted in by its declaration:
 `disruptive: true`, which must match the registry, and a `containment` note. The harness then passes `linux_compliance_remediate_allow_disruptive` with
 that one family, for that topic's runs only, both for apply and for cleanup (ADR 0011). The breakage stays in the
 container:
@@ -1077,9 +1097,11 @@ Not meaningful in a container, and therefore not covered by these scenarios:
 
 - Boot loader and Secure Boot controls (GRUB, kernel command line).
 - Mount options, partitions and file system layout.
-- Running kernel parameters and kernel modules. The persistent half of the kernel parameter topics, the drop-ins
-  below `/etc/sysctl.d`, is proven in the containers with `linux_compliance_remediate_sysctl_runtime: false`; the
-  running values only in the libvirt scenarios.
+- Running kernel parameters, and loading or unloading kernel modules. The persistent half of the kernel
+  parameter topics, the drop-ins below `/etc/sysctl.d`, is proven in the containers with
+  `linux_compliance_remediate_sysctl_runtime: false`, the running values only in the libvirt scenarios; the
+  modprobe drop-ins of the kernel module topics are files and are proven in the containers; `modprobe`
+  itself is not.
 - Services that need systemd as PID 1, and anything that restarts services.
 - Firewall rules (nftables, iptables, ufw, firewalld), network configuration and the network stack.
 - PAM, SSH daemon and sudo behaviour that depends on a real login, and auditd.
