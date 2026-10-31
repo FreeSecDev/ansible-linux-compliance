@@ -1,0 +1,70 @@
+---
+- name: Snapshot | Record paths, ownership, modes, sizes, times and content of every entry
+  ansible.builtin.set_fact:
+    snapshot_lines: >-
+      {%- for entry in snapshot_entries | sort(attribute='path') -%}
+      {%- set entry_sum = entry.checksum | default(find_sums[entry.path] | default('')) -%}
+      {{ entry.path }}|{{ entry.mode }}|{{ entry.uid }}|{{ entry.gid }}|
+      {{- 'volatile-directory' if entry.path in snapshot_volatile_directories | default([])
+      else 'volatile-contents' if entry.path is match(contract_snapshot_volatile_contents)
+      else entry.size ~ '|volatile-times|' ~ entry_sum
+      if entry.path is match(contract_snapshot_volatile_times)
+      else entry.size ~ '|' ~ entry.mtime ~ '|' ~ entry.ctime ~ '|' ~ entry_sum }}
+      {{ '\n' }}
+      {%- endfor -%}
+    snapshot_count: "{{ snapshot_entries | length }}"
+
+- name: Lifecycle broad lines | Normalise the instance state, leaving out only the listed differences
+  ansible.builtin.set_fact:
+    lifecycle_broad_text: >-
+      {%- set declared = lifecycle_broad_declared | list -%}
+      {%- set rewritten = lifecycle_broad_rewritten | default([]) | list -%}
+      {%- set parents = declared | map('dirname') | unique | list -%}
+      {%- set sums = lifecycle_broad_raw.checksums | default({}) -%}
+      {%- set ignored_trees = '^(' ~ (lifecycle_broad_ignored_trees | map('regex_escape') | join('|')) ~ ')(/|$)' -%}
+      {%- set volatile_trees = '^(' ~ (lifecycle_broad_volatile_sysctl_trees | map('regex_escape') | join('|'))
+      ~ ')(/|$)' -%}
+      {%- for entry in lifecycle_broad_raw.files | sort(attribute='path') -%}
+      {%- if entry.path not in lifecycle_broad_ignored_paths and entry.path is not match(ignored_trees) -%}
+      {%- set volatile = entry.path is match(contract_snapshot_volatile_contents) -%}
+      {%- set times = '-|-' if volatile or entry.path in declared or entry.path in parents
+      or entry.path is match(contract_snapshot_volatile_times) else entry.mtime ~ '|' ~ entry.ctime -%}
+      file|{{ entry.path }}|{{ 'link' if entry.islnk else 'file' if entry.isreg else 'directory' if entry.isdir
+      else 'other' }}|{{ entry.mode }}|{{ entry.uid }}|{{ entry.gid }}|{{ '-' if volatile else entry.size }}|
+      {{- '-' if volatile or entry.path in rewritten else entry.inode }}|
+      {{- times }}|{{ '-' if volatile else entry.checksum | default(sums[entry.path] | default('')) }}{{ '\n' }}
+      {%- endif -%}
+      {%- endfor -%}
+      {%- for entry in lifecycle_broad_raw.sysctl | sort(attribute='path') -%}
+      {%- if entry.path not in lifecycle_broad_volatile_sysctl and entry.path is not match(volatile_trees) -%}
+      sysctl|{{ entry.path }}|{{ entry.checksum | default(sums[entry.path] | default('')) }}{{ '\n' }}
+      {%- endif -%}
+      {%- endfor -%}
+      {%- for name, versions in lifecycle_broad_raw.packages | dictsort -%}
+      package|{{ name }}|{{ versions | map('dictsort') | map('to_json') | sort | join(',') }}{{ '\n' }}
+      {%- endfor -%}
+      {%- for name, entry in lifecycle_broad_raw.users | dictsort -%}
+      user|{{ name }}|{{ entry | to_json }}{{ '\n' }}
+      {%- endfor -%}
+      {%- for name, entry in lifecycle_broad_raw.groups | dictsort -%}
+      group|{{ name }}|{{ entry | to_json }}{{ '\n' }}
+      {%- endfor -%}
+      {%- if lifecycle_broad_raw.services is none -%}
+      services|no service manager{{ '\n' }}
+      {%- else -%}
+      {%- for name, entry in lifecycle_broad_raw.services | dictsort -%}
+      service|{{ name }}|{{ entry.state | default('') }}|{{ entry.status | default('') }}{{ '\n' }}
+      {%- endfor -%}
+      {%- endif -%}
+
+- name: Lifecycle broad lines | Turn the normalised state into a sorted list
+  ansible.builtin.set_fact:
+    lifecycle_broad_lines: >-
+      {{ (lifecycle_broad_text | default('', true)).split('\n') | reject('equalto', '') | sort }}
+
+- name: Record case | Keep the rendered lines of the case
+  ansible.builtin.set_fact:
+    record_output: >-
+      {{ record_output | default({}) | combine({record_case.name: {
+           'snapshot_lines': snapshot_lines, 'snapshot_count': snapshot_count | int,
+           'instance_lines': lifecycle_broad_lines}}) }}

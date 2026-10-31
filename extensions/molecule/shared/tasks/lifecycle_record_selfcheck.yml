@@ -1,0 +1,100 @@
+---
+- name: Lifecycle record self-check | Write a declared file below /etc and one below /usr
+  ansible.builtin.copy:
+    content: "{{ lifecycle_record_selfcheck_before }}"
+    dest: "{{ item }}"
+    mode: "0644"
+    owner: root
+    group: root
+  loop: "{{ lifecycle_record_selfcheck_declared }}"
+
+- name: Lifecycle record self-check | Record the whole instance, as a cycle does before it keeps the record
+  ansible.builtin.include_tasks:
+    file: lifecycle_broad.yml
+
+- name: Lifecycle record self-check | Keep the record, as the next cycle does instead of taking its own
+  ansible.builtin.set_fact:
+    lifecycle_record_selfcheck_kept:
+      record: "{{ lifecycle_broad_record }}"
+      snapshot: "{{ lifecycle_broad_snapshot }}"
+
+- name: Lifecycle record self-check | After the kept record, add a file and rewrite the declared one below /etc
+  ansible.builtin.copy:
+    content: "{{ item.content }}"
+    dest: "{{ item.path }}"
+    mode: "0644"
+    owner: root
+    group: root
+  loop:
+    - path: "{{ lifecycle_record_selfcheck_stray }}"
+      content: "{{ lifecycle_record_selfcheck_before }}"
+    - path: "{{ lifecycle_record_selfcheck_declared[0] }}"
+      content: "{{ lifecycle_record_selfcheck_after }}"
+  loop_control:
+    label: "{{ item.path }}"
+
+- name: Lifecycle record self-check | Record the whole instance again
+  ansible.builtin.include_tasks:
+    file: lifecycle_broad.yml
+
+- name: Lifecycle record self-check | Assert that the kept record and its snapshot catch both changes
+  ansible.builtin.assert:
+    that:
+      - lifecycle_broad_record.digest != lifecycle_record_selfcheck_kept.record.digest
+      - lifecycle_broad_snapshot.digest != lifecycle_record_selfcheck_kept.snapshot.digest
+      - lifecycle_record_selfcheck_changed | map('split', '|') | map(attribute=1) | unique | sort
+        == [lifecycle_record_selfcheck_declared[0], lifecycle_record_selfcheck_stray] | sort
+    fail_msg: >-
+      A change made after the kept record was not caught exactly: the entries that differ are
+      {{ lifecycle_record_selfcheck_changed }}.
+    quiet: true
+  vars:
+    lifecycle_record_selfcheck_changed: >-
+      {{ lifecycle_broad_record.lines.split('\n')
+         | symmetric_difference(lifecycle_record_selfcheck_kept.record.lines.split('\n')) }}
+
+- name: Lifecycle record self-check | Give the file below /etc its content back and rewrite the one below /usr
+  ansible.builtin.copy:
+    content: "{{ item.content }}"
+    dest: "{{ item.path }}"
+    mode: "0644"
+    owner: root
+    group: root
+  loop:
+    - path: "{{ lifecycle_record_selfcheck_declared[0] }}"
+      content: "{{ lifecycle_record_selfcheck_before }}"
+    - path: "{{ lifecycle_record_selfcheck_declared[1] }}"
+      content: "{{ lifecycle_record_selfcheck_after }}"
+  loop_control:
+    label: "{{ item.path }}"
+
+- name: Lifecycle record self-check | Remove the added file
+  ansible.builtin.file:
+    path: "{{ lifecycle_record_selfcheck_stray }}"
+    state: absent
+
+- name: Lifecycle record self-check | Record the whole instance once more
+  ansible.builtin.include_tasks:
+    file: lifecycle_broad.yml
+
+- name: Lifecycle record self-check | Assert that only the content of the file below /usr differs, through its checksum
+  ansible.builtin.assert:
+    that:
+      - lifecycle_record_selfcheck_changed | map('split', '|') | map(attribute=1) | unique | list
+        == [lifecycle_record_selfcheck_declared[1]]
+      - lifecycle_record_selfcheck_changed | map('split', '|') | map(attribute=6) | unique | list | length == 1
+      - lifecycle_record_selfcheck_changed | map('split', '|') | map(attribute=10) | unique | list | length == 2
+    fail_msg: >-
+      The same-size rewrite of the declared file below /usr was not caught through its checksum alone, or the other
+      file did not get its record back: the entries that differ are {{ lifecycle_record_selfcheck_changed }}.
+    quiet: true
+  vars:
+    lifecycle_record_selfcheck_changed: >-
+      {{ lifecycle_broad_record.lines.split('\n')
+         | symmetric_difference(lifecycle_record_selfcheck_kept.record.lines.split('\n')) }}
+
+- name: Lifecycle record self-check | Remove the declared files
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop: "{{ lifecycle_record_selfcheck_declared }}"

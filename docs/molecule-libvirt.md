@@ -152,7 +152,9 @@ The GitHub-hosted runner lacks QEMU and libvirt. `tools/molecule/libvirt-host.pi
   is downloaded again.
 - `install` (`make molecule-libvirt-host-install`) checks every pinned file again and installs nothing if one is
   missing or differs. It skips the packages that the runner already has installed (`ii`) in the pinned or a later
-  version, copies the others into a temporary directory of its own, checks the copies and installs them with
+  version, copies the others with `sudo install -o root -m 0644` into a directory that `sudo mktemp -d` creates for root in
+  the sticky `/tmp`, so that the runner user can neither change a copy nor swap the directory, checks the copies
+  there as root (`sudo sha256sum --check`, size and owner) and installs them with
   `apt-get` from those verified copies alone: with no source list and an empty list directory, `apt`
   resolves the dependencies from the installed packages and these files and cannot download anything, so an
   unverified file never reaches `dpkg`. It then checks that every `require` package is installed (`ii`) in its exact version. It refuses to run

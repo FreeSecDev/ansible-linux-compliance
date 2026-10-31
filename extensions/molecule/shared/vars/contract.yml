@@ -143,6 +143,8 @@ contract_snapshot_paths:
   - /var/lib/linux_compliance
   - /var/lib/freesecdev
 
+contract_snapshot_metadata_paths:
+  - /usr
 contract_snapshot_volatile_times: '^/var/lib/rpm/rpmdb\.sqlite-(shm|wal)$'
 contract_snapshot_volatile_contents_by_driver:
   docker: []
@@ -156,3 +158,14 @@ contract_snapshot_volatile_contents_by_driver:
 contract_snapshot_volatile_contents: >-
   {{ '^(' ~ (contract_snapshot_volatile_contents_by_driver[molecule_target.driver] | join('|')) ~ ')$'
   if contract_snapshot_volatile_contents_by_driver[molecule_target.driver] | length > 0 else '^$' }}
+contract_find_sources:
+  walk: "{{ find_whole.files }}"
+  walk_excluded: "{{ find_under }}"
+  extra: "{{ find_listed.files if find_aborted | length > 0 else find_extra }}"
+  metadata: "{{ find_metadata.files | default([]) }}"
+  checksums: "{{ find_sums | combine(find_metadata_sums) }}"
+contract_snapshot_options:
+  paths:
+  volatile_directories: "{{ snapshot_volatile_directories | default([]) }}"
+  volatile_contents: "{{ contract_snapshot_volatile_contents }}"
+  volatile_times: "{{ contract_snapshot_volatile_times }}"

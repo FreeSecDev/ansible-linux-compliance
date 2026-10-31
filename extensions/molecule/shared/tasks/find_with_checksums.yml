@@ -146,3 +146,52 @@
     - find_known is mapping
     - find_aborted | length == 0
     - find_known.extra | length > 0
+
+- name: Find with checksums | List every entry below the paths whose metadata stands for their content
+  ansible.builtin.find:
+    paths: "{{ find_metadata_paths }}"
+    file_type: any
+    recurse: true
+    hidden: true
+    follow: false
+    get_checksum: false
+  register: find_metadata
+  when: find_metadata_paths | default([]) | length > 0
+
+- name: Find with checksums | Name the watched directories below those paths
+  ansible.builtin.set_fact:
+    find_metadata_watched: >-
+      {{ find_watched_directories | default([])
+         | select('match', '^(' ~ (find_metadata_paths | map('regex_escape') | join('|')) ~ ')(/|$)') | list
+         if find_metadata_paths | default([]) | length > 0 else [] }}
+
+- name: Find with checksums | Take the checksum of every file of those directories that its owner may read
+  ansible.builtin.find:
+    paths: "{{ find_metadata_watched }}"
+    file_type: file
+    recurse: false
+    hidden: true
+    follow: false
+    mode: "0400"
+    exact_mode: false
+    get_checksum: true
+    checksum_algorithm: "{{ find_checksum_algorithm }}"
+  register: find_metadata_summed
+  when: find_metadata_watched | length > 0
+
+- name: Find with checksums | Refuse a listing without content, or its checksums, that stopped early
+  ansible.builtin.assert:
+    that:
+      - find_metadata.skipped_paths | default({}) | length == 0
+      - find_metadata_summed.skipped_paths | default({}) | length == 0
+    fail_msg: >-
+      The listing of {{ find_metadata_paths | default([]) }} or the checksums of {{ find_metadata_watched }} stopped
+      early in {{ find_metadata.skipped_paths | default({}) | combine(find_metadata_summed.skipped_paths
+      | default({})) }}, so a changed entry there could go unseen.
+    quiet: true
+
+- name: Find with checksums | Keep the checksums of the watched files below those paths
+  ansible.builtin.set_fact:
+    find_metadata_sums: >-
+      {{ dict(find_metadata_summed.files | default([]) | map(attribute='path')
+              | zip(find_metadata_summed.files | default([]) | map(attribute='checksum'))) }}
