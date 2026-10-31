@@ -103,8 +103,8 @@ the family it came from, so the split changes nothing that the allow-list gates.
 | 36 | `ssh` | none | SSH server and client | yes | sshd settings can lock out every remote operator | 63 | 34 | 29 |
 | 37 | `pam` | none | PAM stack, pam_unix, password hashing and the PAM packages | yes | The module stack and the password hashing settings can lock out every user, including root | 15 | 0 | 15 |
 | 38 | `pwquality` | `pam` | Password quality (pam_pwquality) | yes | Password quality rules in the PAM stack can reject every password change, including root's | 19 | 14 | 5 |
-| 39 | `pwhistory` | `pam` | Password reuse (pam_pwhistory) | yes | Password history rules in the PAM stack can reject password changes and break automated rotation | 7 | 0 | 7 |
-| 40 | `faillock` | `pam` | Account lock-out after failed logins (pam_faillock, pam_faildelay) | yes | Lock-out after failed logins can lock out every user, including root | 14 | 0 | 14 |
+| 39 | `pwhistory` | `pam` | Password reuse (pam_pwhistory) | yes | Password history rules in the PAM stack can reject password changes and break automated rotation | 7 | 3 | 4 |
+| 40 | `faillock` | `pam` | Account lock-out after failed logins (pam_faillock, pam_faildelay) | yes | Lock-out after failed logins can lock out every user, including root | 14 | 8 | 6 |
 | 41 | `password_aging` | `accounts` | Password ageing of existing accounts and account inactivity | yes | Maximum password ages and inactivity settings can expire the passwords of operators and service accounts | 5 | 0 | 5 |
 | 42 | `login_defs` | `accounts` | Account defaults in /etc/login.defs (password ageing and length, umask, home directories, login delay) | yes | The defaults apply to every password that shadow-utils sets and every account it creates, and on Ubuntu pam_umask takes the umask of every login session from them; a maximum password age expires passwords and a stricter umask changes the modes of the files that users and applications create | 7 | 7 | 0 |
 | 43 | `root_access` | `accounts` | Root logins, su, UID 0 accounts and the root PATH | yes | Restricting root logins, su and system account shells can lock out administrators and break services | 19 | 0 | 19 |
@@ -121,7 +121,7 @@ the family it came from, so the split changes nothing that the allow-list gates.
 | 54 | `mount_options` | `mounts` | Mount options (nodev, noexec, nosuid) | yes | noexec and nosuid on shared, temporary or remote file systems can break running software | 34 | 0 | 34 |
 | 55 | `partitioning` | `mounts` | Separate partitions and disk encryption | yes | Partitioning and encryption are irreversible and need a reinstall or a maintenance window | 12 | 0 | 12 |
 | 56 | `bootloader` | none | Boot loader and firmware | yes | A wrong boot configuration can leave the host unbootable | 45 | 0 | 45 |
-|  | All |  |  |  |  | 1203 | 102 | 1101 |
+|  | All |  |  |  |  | 1203 | 113 | 1090 |
 
 ## Umbrellas
 
@@ -478,7 +478,7 @@ or datastreams is one catalogue entry with one toggle.
 | `partitioning` | 2 | 2 | 7 | 7 | 1 |
 | `bootloader` | 4 | 4 | 4 | 4 | 3 |
 | All families | 408 | 399 | 510 | 507 | 239 |
-| Native remediation | 54 | 55 | 63 | 63 | 25 |
+| Native remediation | 56 | 57 | 66 | 66 | 30 |
 
 ### `rhel9` (content 0.1.82)
 
@@ -541,7 +541,7 @@ or datastreams is one catalogue entry with one toggle.
 | `partitioning` | 7 | 7 | 6 | 0 | 8 | 1 | 0 | 0 | 7 | 2 | 2 | 7 | 1 | 0 | 1 | 0 | 1 | 0 | 7 | 7 |
 | `bootloader` | 21 | 21 | 12 | 0 | 16 | 7 | 7 | 7 | 7 | 7 | 7 | 7 | 13 | 0 | 4 | 0 | 13 | 7 | 9 | 9 |
 | All families | 310 | 388 | 227 | 40 | 192 | 153 | 101 | 140 | 401 | 295 | 288 | 395 | 139 | 94 | 131 | 146 | 139 | 252 | 481 | 477 |
-| Native remediation | 16 | 16 | 15 | 7 | 20 | 21 | 16 | 20 | 55 | 46 | 47 | 55 | 15 | 9 | 10 | 18 | 15 | 30 | 46 | 46 |
+| Native remediation | 20 | 20 | 19 | 11 | 20 | 25 | 18 | 22 | 61 | 51 | 52 | 61 | 18 | 9 | 10 | 22 | 18 | 34 | 51 | 51 |
 
 ## Mapping
 

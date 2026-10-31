@@ -1,0 +1,137 @@
+---
+- name: Pwhistory step | Read the ledger before the step
+  freesecdev.linux_compliance.control_state:
+    action: list
+  register: pwr_ledger_before
+
+- name: Pwhistory step | Pretend that another method recorded the entry of the rule that the step names
+  freesecdev.linux_compliance.control_state:
+    action: record
+    rule_id: "{{ item.rule_id }}"
+    family: pwhistory
+    revert_strategy: recorded_value
+    prior_values: >-
+      {{ item.prior_values | items2dict(key_name='name', value_name='value')
+         | combine({'method': 'dropin'}) | dict2items(key_name='name', value_name='value') }}
+    collection_version: "{{ item.collection_version }}"
+    replace: true
+  loop: >-
+    {{ pwr_ledger_before.entries | selectattr('rule_id', 'equalto', pwr_prefix ~ pwr_step.method) | list
+       if pwr_step.method is defined else [] }}
+  loop_control:
+    label: "{{ item.rule_id }}"
+
+- name: Pwhistory step | Keep the entry of the rule that the step records with another method
+  ansible.builtin.set_fact:
+    pwr_method_entries: >-
+      {{ pwr_ledger_before.entries | selectattr('rule_id', 'equalto', pwr_prefix ~ pwr_step.method) | list }}
+  when: pwr_step.method is defined
+
+- name: Pwhistory step | Change pwhistory.conf by hand, as an administrator would
+  ansible.builtin.lineinfile:
+    path: "{{ pwr_conf }}"
+    regexp: "{{ pwr_step.edit.regexp }}"
+    line: "{{ pwr_step.edit.line | default(omit) }}"
+    state: "{{ 'absent' if pwr_step.edit.absent | default(false) else 'present' }}"
+  when: pwr_step.edit is defined
+
+- name: Pwhistory step | Write the pwhistory.conf of the step, as an administrator would
+  ansible.builtin.copy:
+    content: "{{ pwr_step.conf }}"
+    dest: "{{ pwr_conf }}"
+    follow: false
+    mode: "{{ pwr_original_stats.results[0].stat.mode }}"
+    owner: root
+    group: root
+  when: pwr_step.conf is defined
+
+- name: Pwhistory step | Write the service file of the step
+  ansible.builtin.copy:
+    content: "{{ pwr_step.service }}"
+    dest: "{{ pwr_service }}"
+    follow: false
+    mode: "0644"
+    owner: root
+    group: root
+  when: pwr_step.service is defined
+
+- name: Pwhistory step | Remove the service file when the step has none
+  ansible.builtin.file:
+    path: "{{ pwr_service }}"
+    state: absent
+  when: pwr_step.service is not defined
+
+- name: Pwhistory step | Give system-auth the module line of the step, or its content as built
+  ansible.builtin.copy:
+    content: >-
+      {{ pwr_original.results[1].content | b64decode
+         ~ ((pwr_step.stack ~ pwr_newline) if pwr_step.stack is defined else '') }}
+    dest: "{{ pwr_stack }}"
+    follow: false
+    mode: "{{ pwr_original_stats.results[1].stat.mode }}"
+    owner: root
+    group: root
+
+- name: Pwhistory step | Set the rule toggles of the step
+  ansible.builtin.set_fact:
+    "{{ item.0 }}": "{{ item.1 }}"
+  loop: "{{ [pwr_root_toggle, pwr_password_toggle, pwr_system_toggle] | zip(pwr_step.toggles) | list }}"
+
+- name: Pwhistory step | Run the topic
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+    lifecycle_family: pwhistory
+
+- name: Pwhistory step | Read pwhistory.conf after the step
+  ansible.builtin.slurp:
+    src: "{{ pwr_conf }}"
+  register: pwr_after
+
+- name: Pwhistory step | Read the ledger after the step
+  freesecdev.linux_compliance.control_state:
+    action: list
+  register: pwr_ledger_step
+
+- name: Pwhistory step | Check the status of each rule, the file and the ledger after the step
+  vars:
+    pwr_expected: >-
+      {{ dict([pwr_root, pwr_password, pwr_system] | zip(pwr_step.statuses))
+         | dict2items | rejectattr('value', 'equalto', 'none') | items2dict }}
+  ansible.builtin.assert:
+    that:
+      - lifecycle_results | items2dict(key_name='rule_id', value_name='status') == pwr_expected
+      - >-
+        lifecycle_results | rejectattr('status', 'in', ['applied', 'compliant', 'restored'])
+        | selectattr('reason', 'none') | list == []
+      - >-
+        lifecycle_results | selectattr('status', 'in', ['applied', 'restored']) | rejectattr('changed') | list
+        == []
+      - >-
+        lifecycle_results | rejectattr('status', 'in', ['applied', 'restored']) | selectattr('changed') | list
+        == []
+      - pwr_after.content | b64decode == pwr_step.text
+      - >-
+        pwr_ledger_step.entries | selectattr('rule_id', 'in', lifecycle_rule_ids) | map(attribute='rule_id') | sort
+        == pwr_step.recorded | map('regex_replace', '^', pwr_prefix) | sort
+    fail_msg: >-
+      {{ pwr_label }}, {{ pwr_step.name }}: {{ lifecycle_results }}; file
+      {{ pwr_after.content | b64decode | to_json }}; ledger
+      {{ pwr_ledger_step.entries | selectattr('rule_id', 'in', lifecycle_rule_ids) | map(attribute='rule_id') }}
+    quiet: true
+
+- name: Pwhistory step | Give the entry the method that recorded it
+  freesecdev.linux_compliance.control_state:
+    action: record
+    rule_id: "{{ item.rule_id }}"
+    family: pwhistory
+    revert_strategy: recorded_value
+    prior_values: >-
+      {{ item.prior_values | items2dict(key_name='name', value_name='value')
+         | dict2items(key_name='name', value_name='value') }}
+    collection_version: "{{ item.collection_version }}"
+    replace: true
+  loop: "{{ pwr_method_entries if pwr_step.restore_method | default(false) else [] }}"
+  loop_control:
+    label: "{{ item.rule_id }}"

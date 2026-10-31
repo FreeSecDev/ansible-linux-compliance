@@ -322,7 +322,7 @@ stricter mode such as `0400` is kept and only the excess bits are removed. Its s
 Besides the reference family, these topics are native
 ([ADR 0021](adr/0021-native-banners-pwquality-and-profile-values.md), [ADR 0022](adr/0022-native-sudo-drop-ins.md),
 [ADR 0023](adr/0023-native-ssh-server-configuration.md), [ADR 0024](adr/0024-native-login-defs.md),
-[ADR 0028](adr/0028-native-kernel-module-drop-ins.md)).
+[ADR 0027](adr/0027-native-faillock-pwhistory.md), [ADR 0028](adr/0028-native-kernel-module-drop-ins.md)).
 Their rules use the profile's own values, which `make catalogue` reads from the pinned datastreams into the rule
 parameters (`value_id`, `profile_values`); a rule whose content and profile the catalogue holds no value for fails the
 family before anything changes. A rule whose check exports its value names it with `profile_value` in
@@ -540,6 +540,54 @@ the `pam_unix` hashing of the PAM stack), `no_shelllogin_for_systemaccounts` (it
 the rules of `password_aging` that change existing accounts in `/etc/shadow` (password hashes that cannot be recorded,
 no exact revert, and immediate expiry of existing passwords).
 
+### Account lock-out and password reuse
+
+`faillock` and `pwhistory` are disruptive (umbrella `pam`), so they are applied and cleaned up only with `faillock`,
+`pwhistory` or `pam` in `linux_compliance_remediate_allow_disruptive`
+([ADR 0027](adr/0027-native-faillock-pwhistory.md)). Each rule writes one line into the file that the PAM module reads
+and that the content's check reads on that platform; `tests/unit/tools/test_content_golden_pam_conf.py` checks this
+against the OVAL of both datastreams. The PAM stack is only read, never edited. The filter
+`freesecdev.linux_compliance.pam_conf_decision` decides each rule the way `pam_faillock`, `pam_pwhistory` and libpam
+read the file and the service files of `/etc/pam.d`, `/usr/lib/pam.d` and `/usr/share/pam.d`, and computes the exact
+new text, which the role writes with `ansible.builtin.copy` after a SHA-256 re-check, every other byte unchanged;
+`pam_conf_restore` computes the text of the cleanup the same way. `tests/unit/tools/test_pam_conf_oracle.py` checks
+the filter against what the real readers of both images read (`make pam-reader-verdicts`).
+
+| Rules | What is applied | Record and cleanup |
+|---|---|---|
+| `accounts_passwords_pam_faillock_deny`, `_unlock_time`, `_interval`, `_root_unlock_time` | `deny = <n>`, `unlock_time = <n>`, `fail_interval = <n>` or `root_unlock_time = <n>` in `/etc/security/faillock.conf`, with the profile's value (`var_accounts_passwords_pam_faillock_deny`, `_unlock_time`, `_fail_interval`, `_root_unlock_time`); a stricter value already set is kept, a time above 604800 (which `pam_faillock` ignores) is replaced, and a required `unlock_time` of `0` (never) is met only by `0` | `recorded_value` of `method` (`line`), `setting_line` (the prior physical line, or `null`), `written_line`, the file's `mode`, `owner`, `group` and `sha256`, and `baseline_sha256` (the file before the family's first write); cleanup writes the prior line back in its place or removes the line, while the setting is still the line written, and the last rule of the file restores only when the result has `baseline_sha256` |
+| `accounts_passwords_pam_faillock_deny_root`, `_even_deny_root_or_root_unlock_time`, `_audit`, `_silent` | The flag `even_deny_root` (both root rules share the line, because `root_unlock_time` alone does not lock root), `audit` or `silent` in `faillock.conf` | As above |
+| `accounts_password_pam_pwhistory_remember_password_auth`, `_remember_system_auth` (RHEL 9) | `remember = <var_password_pam_remember>` in `/etc/security/pwhistory.conf`; both rules share the line | As above; the first rule writes the line and records the prior state, the second records the same prior state |
+| `accounts_password_pam_pwhistory_enforce_for_root` (RHEL 9) | The flag `enforce_for_root` in `pwhistory.conf` | As above |
+
+The statuses that refuse to act, with nothing changed and the entry kept, each with a reason: `notapplicable` (the file
+does not exist), `not_regular_file` (a symbolic link or not a regular file), `unsupported_value` (the profile requires a
+time above 604800 seconds, which `pam_faillock` ignores, or a `deny` above 65535), `unreadable_stack` (libpam reads a
+service file that the collection does not read as it does: an include of a file outside the PAM directories, a NUL
+byte or a line of 1023 bytes or more), `overridden` (a `pam_faillock` or `pam_pwhistory` line of a service file that
+libpam opens, in any case, across continued lines and split as `_pam_StrTok` splits it, carries `conf=` or sets the
+option, which pam takes over the file), `unreadable_file` (a NUL byte or a line of 1023 bytes or more, on which
+`pam_faillock` fails, or a file that is not UTF-8), `unreadable_value` (`deny` above 65535, which pam wraps at 16
+bits, or a control character that the ledger does not record), `changed_during_run` (the file changed between the
+read and the write),
+`hidden_setting` (pam reads a line of the setting that the collection would not edit: a vertical tab, form feed or
+carriage return around the key, or the key in another case for `pam_pwhistory`), `duplicate_setting` (the setting is on
+more than one line), `stricter_setting` (`unlock_time` or `root_unlock_time` is `0`, never, while the profile requires
+seconds; the line is kept), `method_changed`, and at cleanup `modified_since_apply`, `invalid_record`, `target_absent`,
+`not_regular_file`, `changed_during_run` and `restore_mismatch` (the last rule of the file would not give back the
+recorded SHA-256, for example after a comment was added by hand elsewhere in the file). A
+setting that is already as before at cleanup, such as a line removed by hand or the shared `remember` line that the
+other rule restored, is `restored` without a write (FREES-173). The settings take effect only where the stack loads
+`pam_faillock` or `pam_pwhistory`, and the content's checks pass only then; the Molecule regressions load such a stack
+for one run, and a container scan reports the rules `notapplicable` (their group is limited to
+`system_with_kernel`). Kept `audit_only`, with the reasons in ADR 0027: the rules
+that put the modules into the stack (`accounts_passwords_pam_faillock_enabled`, `account_password_pam_faillock_password_auth`,
+`account_password_pam_faillock_system_auth`; authselect and pam-auth-update are not exactly revertable and need the
+lock-out guard of FREES-181), the Ubuntu pwhistory rules (their checks read only the `common-password` line),
+`accounts_passwords_pam_faildelay_delay`, `accounts_passwords_pam_faillock_dir` and
+`account_password_selinux_faillock_dir` (a tally directory with the `faillog_t` SELinux context), and the `pam_unix`
+`remember` rules of `pam` and `user_accounts`.
+
 ### Kernel modules
 
 `filesystem_modules`, `protocol_modules` and `wireless_modules` (umbrella `kernel_modules`) are disruptive, so they are
@@ -673,6 +721,9 @@ already controls the host. A remediated rule is not proof that the control passe
 | `tests/unit/tools/test_profile_values.py` | The profile value reader against synthetic datastreams: values, defaults, refinements and exports, that the `fix` elements of the content are never kept, digest and safety refusals, oversized values, chunking, grouping per profile, pinned `profile_value_id` values, and every error of the generator integration, including the removed `profile_value_source`. Without content: no catalogue entry sets `profile_value_source`, and the generated `timestamp_timeout` keeps 15 for CIS, 0 for the STIG and 5 for CCN and PCI DSS. 100% line and branch coverage | `make test-coverage` |
 | `tests/unit/tools/test_check_repo_rules_own_remediation.py` | The repository guard of ADR 0025 with mutation cases: Python outside `tests/unit/` that names the XCCDF `fix` element in a string or bytes constant, as a path, namespace, wildcard, suffix test, markup or regular expression (including the removed fix reader and the ElementTree and lxml forms), files that are ComplianceAsCode or OpenSCAP remediation content, invocations of the scanner's remediation (also across line continuations, and `usg fix`) and of scripts it provides in makefiles, workflows, tasks, scripts, Jinja templates, container files and Python, the exact pinned exceptions, that adding a path form to a pinned file is refused, and that only the pinned constants name the element in the repository | `make test-coverage`, `make lint-repo` |
 | `tests/unit/tools/test_content_golden_native.py`, sudo | With the pinned content: every sudo drop-in is read by every check of its rule on both platforms, satisfies the check's pattern and state for every profile value (and matches none of its `none_exist` patterns), every attribute rule restricts the path and the mode bits that the OVAL checks, and the pinned `xccdf_org.ssgproject.content_value_var_sudo_timestamp_timeout` exists in both datastreams, is not exported by the check, and gives every selecting profile its value (15 for CIS, 0 for the STIG, 5 for CCN and PCI DSS) | `make test-content-golden`, CI job `test-suites` |
+| `tests/unit/tools/test_content_golden_pam_conf.py` | With the pinned content: every line that a native faillock or pwhistory rule writes satisfies the object and the comparison of every check that reads `faillock.conf` or `pwhistory.conf` on both platforms, the commented line does not, the compared value is the catalogue's, `stack_checked` is true exactly when the check reads the module line of the PAM stack and the filter's stack detector finds every module line that the check finds, every stack file of a check is a file of `/etc/pam.d`, which the role reads whole, no other catalogued rule reads either file, and the Ubuntu pwhistory rules read only `common-password` | `make test-content-golden`, CI job `test-suites` |
+| `tests/unit/tools/test_pam_conf_oracle.py`, `test_pam_reader_corpus.py`, `tests/unit/plugins/filter/test_pam_conf.py` | Against `tests/fixtures/pam_conf/reader_verdicts.json`, which `make pam-reader-verdicts` builds from the readers of the pam source packages that the Molecule images install: the filter reads all 1506 cases (CR, VT, FF and NUL, case, duplicates, long lines, continued and bracketed module lines, `conf=`, a fuzz corpus and the file after each change) exactly as both readers do, the module lines yield the arguments that libpam passes, and no decision is `compliant` or `applied` while a real reader reads the file looser than the profile requires; the reviewed refusals; the table is exactly what the generator assembles. 100% line and branch coverage | `make test-coverage`, CI job `test-suites` |
+| `tests/playbooks/remediate-pam-conf-check.yml` | Against localhost in check mode with the Ubuntu 24.04 STIG and the RHEL 9 CIS workstation level 2 rules of `faillock` and `pwhistory` allow-listed: every rule gets exactly one result, `changed` exactly when it is `applied`, every refusal has a reason and both files are unchanged; a rule without its profile value fails before any change; the family files and the three `pam_conf_*` helpers refuse to run without the opt-in | `make test-remediate-check`, CI job `test-playbooks` |
 | `tests/playbooks/remediate-native-check.yml`, sudo | A sudo rule without a profile value fails before any sudoers file is read, and every sudo family file and helper refuses to run without the opt-in. The sudo rules are not run against localhost, because `/etc/sudoers` is readable only by root | `make test-remediate-check`, CI job `test-playbooks` |
 | `tests/unit/tools/test_content_golden_login_defs.py` | With the pinned content: every native login_defs rule reads only `/etc/login.defs` (and, for `CREATE_HOME`, `/etc/login.defs.d/*.defs`) with the pinned object pattern, its comparison is the operation of the check's state and its value the external variable of the check, on both platforms; and every selected rule whose check reads `/etc/login.defs` is native or one of the two documented `audit_only` rules | `make test-content-golden`, CI job `test-suites` |
 | `tests/playbooks/remediate-login-defs-check.yml` | Against localhost in check mode: with the Ubuntu 24.04 CIS level 2, RHEL 9 STIG and RHEL 9 ANSSI enhanced profiles every login_defs rule gets exactly one result, `changed` exactly when it is `applied`, a reason for every refusal, and `/etc/login.defs` is unchanged; a rule without a profile value fails before login.defs is read; the family file and helpers refuse to run without the opt-in; a ledger entry of another method or without one, a written line of another setting, a prior line over two lines and a malformed mode are refused and kept | `make test-remediate-check`, CI job `test-playbooks` |

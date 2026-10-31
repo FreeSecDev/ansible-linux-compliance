@@ -1,0 +1,158 @@
+---
+- name: Faillock stack | Refuse to run unless the faillock topic has just run its cycles
+  ansible.builtin.assert:
+    that:
+      - lifecycle_topic.family == 'faillock'
+      - lifecycle_rule_ids | length == 2
+      - lifecycle_allow_disruptive == ['faillock']
+    fail_msg: >-
+      The faillock stack regressions reuse the facts of the faillock lifecycle, which must have just run; the topic
+      was {{ lifecycle_topic.family | default('none') }}.
+    quiet: true
+
+- name: Faillock stack | Name the rules, the toggles and the PAM stack that loads pam_faillock on this platform
+  ansible.builtin.set_fact:
+    stack_label: faillock with pam_faillock in the PAM stack
+    stack_toggles: "{{ lifecycle_rules | map(attribute='toggle') | list }}"
+    stack_deny: xccdf_org.ssgproject.content_rule_accounts_passwords_pam_faillock_deny
+    stack_unlock: xccdf_org.ssgproject.content_rule_accounts_passwords_pam_faillock_unlock_time
+    stack_conf: /etc/security/faillock.conf
+    stack_service: /etc/pam.d/fsd-regression-faillock
+    stack_files: >-
+      {{ {'ubuntu': ['/etc/pam.d/common-auth', '/etc/pam.d/common-account'],
+          'rhel_compatible': ['/etc/pam.d/system-auth', '/etc/pam.d/password-auth']}[lifecycle_platform] }}
+    stack_ubuntu_auth: |
+      auth    requisite    pam_faillock.so preauth{deny}
+      auth    [success=2 default=ignore]    pam_unix.so nullok
+      auth    [default=die]    pam_faillock.so authfail
+      auth    requisite    pam_deny.so
+      auth    required    pam_permit.so
+      auth    optional    pam_faillock.so authsucc
+    stack_ubuntu_account: |
+      account    required    pam_faillock.so
+      account    [success=1 new_authtok_reqd=done default=ignore]    pam_unix.so
+      account    requisite    pam_deny.so
+      account    required    pam_permit.so
+    stack_rhel: |
+      auth        required      pam_env.so
+      auth        required      pam_faillock.so preauth{deny}
+      auth        sufficient    pam_unix.so try_first_pass nullok
+      auth        required      pam_faillock.so authfail
+      auth        required      pam_deny.so
+
+      account     required      pam_faillock.so
+      account     required      pam_unix.so
+
+      password    requisite     pam_pwquality.so try_first_pass local_users_only retry=3 authtok_type=
+      password    sufficient    pam_unix.so try_first_pass use_authtok nullok sha512 shadow
+      password    required      pam_deny.so
+
+      session     optional      pam_keyinit.so revoke
+      session     required      pam_limits.so
+      -session     optional      pam_systemd.so
+      session     [success=1 default=ignore] pam_succeed_if.so service in crond quiet use_uid
+      session     required      pam_unix.so
+
+- name: Faillock stack | Name the stack files with the content that enables pam_faillock, with and without deny
+  ansible.builtin.set_fact:
+    stack_contents: >-
+      {{ {'ubuntu': [stack_ubuntu_auth, stack_ubuntu_account],
+          'rhel_compatible': [stack_rhel, stack_rhel]}[lifecycle_platform] }}
+
+- name: Faillock stack | Take the state of the whole instance before the stack regressions
+  ansible.builtin.include_tasks:
+    file: lifecycle_broad.yml
+
+- name: Faillock stack | Remember the state of the whole instance before the stack regressions
+  ansible.builtin.set_fact:
+    stack_broad_before: "{{ lifecycle_broad_record }}"
+
+- name: Faillock stack | Read faillock.conf and the PAM stack files as built
+  ansible.builtin.slurp:
+    src: "{{ item }}"
+  loop: "{{ [stack_conf] + stack_files }}"
+  register: stack_original
+
+- name: Faillock stack | Inspect the PAM stack files as built
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+  loop: "{{ stack_files }}"
+  register: stack_original_stats
+
+- name: Faillock stack | Run the topic with pam_faillock in the stack, then with deny on its module line
+  ansible.builtin.include_tasks:
+    file: lifecycle_faillock_stack_case.yml
+  loop:
+    - name: pam_faillock in the stack
+      deny: ""
+      statuses:
+        - applied
+        - applied
+    - name: pam_faillock in the stack with deny on its module line
+      deny: " deny=3"
+      statuses:
+        - overridden
+        - applied
+    - name: pam_faillock in the stack with conf= on its module line, which redirects every setting
+      deny: " conf=/etc/security/faillock-other.conf"
+      statuses:
+        - overridden
+        - overridden
+    - name: deny on a continued module line with an upper-case type in a service file of its own
+      deny: ""
+      service: "AUTH required pam_faillock.so preauth \\\n    deny=3\n"
+      statuses:
+        - overridden
+        - applied
+    - name: a bracketed control glued to the module path, which libpam splits after the bracket
+      deny: ""
+      service: "auth [default=die]pam_faillock.so deny=3\n"
+      statuses:
+        - overridden
+        - applied
+    - name: an include of an absolute path that the collection does not read refuses both rules
+      deny: ""
+      service: "auth include /etc/security/fsd-site-auth\n"
+      statuses:
+        - unreadable_stack
+        - unreadable_stack
+  loop_control:
+    loop_var: stack_case
+    label: "{{ stack_case.name }}"
+
+- name: Faillock stack | Give the PAM stack files their content, mode and ownership as built back
+  ansible.builtin.copy:
+    content: "{{ item.0.content | b64decode }}"
+    dest: "{{ item.1 }}"
+    follow: false
+    mode: "{{ item.2.stat.mode }}"
+    owner: root
+    group: root
+  loop: "{{ stack_original.results[1:] | zip(stack_files, stack_original_stats.results) | list }}"
+  loop_control:
+    label: "{{ item.1 }}"
+
+- name: Faillock stack | Read the ledger after the stack regressions
+  freesecdev.linux_compliance.control_state:
+    action: list
+  register: stack_ledger_after
+
+- name: Faillock stack | Check that the ledger records no rule of the topic any more
+  ansible.builtin.assert:
+    that:
+      - stack_ledger_after.entries | selectattr('rule_id', 'in', lifecycle_rule_ids) | list == []
+    fail_msg: "{{ stack_label }}: the ledger still holds {{ stack_ledger_after.entries }}"
+    quiet: true
+
+- name: Faillock stack | Assert that the whole instance is back to its state before the stack regressions
+  ansible.builtin.include_tasks:
+    file: lifecycle_broad_compare.yml
+  vars:
+    lifecycle_label: faillock stack regressions
+    lifecycle_broad_step: the stack regressions
+    lifecycle_broad_reference: "{{ stack_broad_before }}"
+
+- name: Faillock stack | Record that this regression file ran to its end
+  ansible.builtin.set_fact:
+    lifecycle_regression_files_run: "{{ lifecycle_regression_files_run + ['lifecycle_faillock_stack.yml'] }}"

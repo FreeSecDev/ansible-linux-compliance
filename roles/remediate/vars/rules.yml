@@ -739,6 +739,89 @@ __linux_compliance_remediate_rules:
             - stig_gui
           value:
             - "-1"
+  - rule_id: "xccdf_org.ssgproject.content_rule_accounts_password_pam_pwhistory_enforce_for_root"
+    family: pwhistory
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_accounts_password_pam_pwhistory_enforce_for_root_enabled
+    runbook: null
+    parameters:
+      setting: "enforce_for_root"
+      comparison: "present"
+      stack_checked: false
+  - rule_id: "xccdf_org.ssgproject.content_rule_accounts_password_pam_pwhistory_remember_password_auth"
+    family: pwhistory
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_accounts_password_pam_pwhistory_remember_password_auth_enabled
+    runbook: null
+    parameters:
+      setting: "remember"
+      comparison: "at_least"
+      stack_checked: true
+      value_id: "var_password_pam_remember"
+      profile_values:
+        - datastream: "rhel9"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
+          profiles:
+            - ccn_advanced
+            - ccn_basic
+            - ccn_intermediate
+          value:
+            - "20"
+        - datastream: "rhel9"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
+          profiles:
+            - cis
+            - cis_server_l1
+            - cis_workstation_l1
+            - cis_workstation_l2
+          value:
+            - "24"
+        - datastream: "rhel9"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
+          profiles:
+            - "pci-dss"
+          value:
+            - "4"
+  - rule_id: "xccdf_org.ssgproject.content_rule_accounts_password_pam_pwhistory_remember_system_auth"
+    family: pwhistory
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_accounts_password_pam_pwhistory_remember_system_auth_enabled
+    runbook: null
+    parameters:
+      setting: "remember"
+      comparison: "at_least"
+      stack_checked: true
+      value_id: "var_password_pam_remember"
+      profile_values:
+        - datastream: "rhel9"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
+          profiles:
+            - ccn_advanced
+            - ccn_basic
+            - ccn_intermediate
+          value:
+            - "20"
+        - datastream: "rhel9"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
+          profiles:
+            - cis
+            - cis_server_l1
+            - cis_workstation_l1
+            - cis_workstation_l2
+          value:
+            - "24"
+        - datastream: "rhel9"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
+          profiles:
+            - "pci-dss"
+          value:
+            - "4"
   - rule_id: "xccdf_org.ssgproject.content_rule_accounts_password_pam_pwquality_retry"
     family: pwquality
     disruptive: true
@@ -840,6 +923,224 @@ __linux_compliance_remediate_rules:
             - "pci-dss"
           value:
             - "7"
+  - rule_id: "xccdf_org.ssgproject.content_rule_accounts_passwords_pam_faillock_audit"
+    family: faillock
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_accounts_passwords_pam_faillock_audit_enabled
+    runbook: null
+    parameters:
+      setting: "audit"
+      comparison: "present"
+      stack_checked: true
+  - rule_id: "xccdf_org.ssgproject.content_rule_accounts_passwords_pam_faillock_deny"
+    family: faillock
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_accounts_passwords_pam_faillock_deny_enabled
+    runbook: null
+    parameters:
+      setting: "deny"
+      comparison: "at_most"
+      stack_checked: true
+      value_id: "var_accounts_passwords_pam_faillock_deny"
+      profile_values:
+        - datastream: "ubuntu2404"
+          content_sha256: "c4da7bea2e285326d692ade7c06c9f87750c0d6bd0e850a74c78220b893cb393"
+          profiles:
+            - cis_level1_server
+            - cis_level1_workstation
+            - cis_level2_server
+            - cis_level2_workstation
+          value:
+            - "4"
+        - datastream: "ubuntu2404"
+          content_sha256: "c4da7bea2e285326d692ade7c06c9f87750c0d6bd0e850a74c78220b893cb393"
+          profiles:
+            - stig
+          value:
+            - "3"
+        - datastream: "rhel9"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
+          profiles:
+            - anssi_bp28_enhanced
+            - anssi_bp28_high
+            - anssi_bp28_intermediary
+            - anssi_bp28_minimal
+            - cui
+            - ism_o
+            - ospp
+            - stig
+            - stig_gui
+          value:
+            - "3"
+        - datastream: "rhel9"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
+          profiles:
+            - ccn_advanced
+          value:
+            - "8"
+        - datastream: "rhel9"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
+          profiles:
+            - cis
+            - cis_server_l1
+            - cis_workstation_l1
+            - cis_workstation_l2
+          value:
+            - "5"
+        - datastream: "rhel9"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
+          profiles:
+            - "pci-dss"
+          value:
+            - "10"
+  - rule_id: "xccdf_org.ssgproject.content_rule_accounts_passwords_pam_faillock_deny_root"
+    family: faillock
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_accounts_passwords_pam_faillock_deny_root_enabled
+    runbook: null
+    parameters:
+      setting: "even_deny_root"
+      comparison: "present"
+      stack_checked: true
+  - rule_id: "xccdf_org.ssgproject.content_rule_accounts_passwords_pam_faillock_even_deny_root_or_root_unlock_time"
+    family: faillock
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_accounts_passwords_pam_faillock_even_deny_root_or_root_unlock_time_enabled
+    runbook: null
+    parameters:
+      setting: "even_deny_root"
+      comparison: "present"
+      stack_checked: true
+  - rule_id: "xccdf_org.ssgproject.content_rule_accounts_passwords_pam_faillock_interval"
+    family: faillock
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_accounts_passwords_pam_faillock_interval_enabled
+    runbook: null
+    parameters:
+      setting: "fail_interval"
+      comparison: "at_least"
+      stack_checked: true
+      value_id: "var_accounts_passwords_pam_faillock_fail_interval"
+      profile_values:
+        - datastream: "ubuntu2404"
+          content_sha256: "c4da7bea2e285326d692ade7c06c9f87750c0d6bd0e850a74c78220b893cb393"
+          profiles:
+            - stig
+          value:
+            - "900"
+        - datastream: "rhel9"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
+          profiles:
+            - anssi_bp28_enhanced
+            - anssi_bp28_high
+            - anssi_bp28_intermediary
+            - anssi_bp28_minimal
+            - cui
+            - ism_o
+            - ospp
+            - stig
+            - stig_gui
+          value:
+            - "900"
+  - rule_id: "xccdf_org.ssgproject.content_rule_accounts_passwords_pam_faillock_root_unlock_time"
+    family: faillock
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_accounts_passwords_pam_faillock_root_unlock_time_enabled
+    runbook: null
+    parameters:
+      setting: "root_unlock_time"
+      comparison: "at_least"
+      stack_checked: true
+      value_id: "var_accounts_passwords_pam_faillock_root_unlock_time"
+      profile_values:
+        - datastream: "ubuntu2404"
+          content_sha256: "c4da7bea2e285326d692ade7c06c9f87750c0d6bd0e850a74c78220b893cb393"
+          profiles:
+            - cis_level2_server
+            - cis_level2_workstation
+          value:
+            - "60"
+  - rule_id: "xccdf_org.ssgproject.content_rule_accounts_passwords_pam_faillock_silent"
+    family: faillock
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_accounts_passwords_pam_faillock_silent_enabled
+    runbook: null
+    parameters:
+      setting: "silent"
+      comparison: "present"
+      stack_checked: true
+  - rule_id: "xccdf_org.ssgproject.content_rule_accounts_passwords_pam_faillock_unlock_time"
+    family: faillock
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_accounts_passwords_pam_faillock_unlock_time_enabled
+    runbook: null
+    parameters:
+      setting: "unlock_time"
+      comparison: "at_least"
+      stack_checked: true
+      value_id: "var_accounts_passwords_pam_faillock_unlock_time"
+      profile_values:
+        - datastream: "ubuntu2404"
+          content_sha256: "c4da7bea2e285326d692ade7c06c9f87750c0d6bd0e850a74c78220b893cb393"
+          profiles:
+            - cis_level1_server
+            - cis_level1_workstation
+            - cis_level2_server
+            - cis_level2_workstation
+          value:
+            - "900"
+        - datastream: "ubuntu2404"
+          content_sha256: "c4da7bea2e285326d692ade7c06c9f87750c0d6bd0e850a74c78220b893cb393"
+          profiles:
+            - stig
+          value:
+            - "0"
+        - datastream: "rhel9"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
+          profiles:
+            - anssi_bp28_enhanced
+            - anssi_bp28_high
+            - anssi_bp28_intermediary
+            - anssi_bp28_minimal
+            - cis
+            - cis_server_l1
+            - cis_workstation_l1
+            - cis_workstation_l2
+          value:
+            - "900"
+        - datastream: "rhel9"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
+          profiles:
+            - ccn_advanced
+            - cui
+            - ism_o
+            - ospp
+            - stig
+            - stig_gui
+          value:
+            - "0"
+        - datastream: "rhel9"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
+          profiles:
+            - "pci-dss"
+          value:
+            - "1800"
   - rule_id: "xccdf_org.ssgproject.content_rule_accounts_umask_etc_login_defs"
     family: login_defs
     disruptive: true
@@ -3127,27 +3428,16 @@ __linux_compliance_remediate_audit_only:
     - "xccdf_org.ssgproject.content_rule_package_pam_pwquality_installed"
   pwhistory:
     - "xccdf_org.ssgproject.content_rule_accounts_password_pam_pwhistory_enabled"
-    - "xccdf_org.ssgproject.content_rule_accounts_password_pam_pwhistory_enforce_for_root"
     - "xccdf_org.ssgproject.content_rule_accounts_password_pam_pwhistory_enforce_root"
     - "xccdf_org.ssgproject.content_rule_accounts_password_pam_pwhistory_remember"
-    - "xccdf_org.ssgproject.content_rule_accounts_password_pam_pwhistory_remember_password_auth"
-    - "xccdf_org.ssgproject.content_rule_accounts_password_pam_pwhistory_remember_system_auth"
     - "xccdf_org.ssgproject.content_rule_accounts_password_pam_pwhistory_use_authtok"
   faillock:
     - "xccdf_org.ssgproject.content_rule_account_password_pam_faillock_password_auth"
     - "xccdf_org.ssgproject.content_rule_account_password_pam_faillock_system_auth"
     - "xccdf_org.ssgproject.content_rule_account_password_selinux_faillock_dir"
     - "xccdf_org.ssgproject.content_rule_accounts_passwords_pam_faildelay_delay"
-    - "xccdf_org.ssgproject.content_rule_accounts_passwords_pam_faillock_audit"
-    - "xccdf_org.ssgproject.content_rule_accounts_passwords_pam_faillock_deny"
-    - "xccdf_org.ssgproject.content_rule_accounts_passwords_pam_faillock_deny_root"
     - "xccdf_org.ssgproject.content_rule_accounts_passwords_pam_faillock_dir"
     - "xccdf_org.ssgproject.content_rule_accounts_passwords_pam_faillock_enabled"
-    - "xccdf_org.ssgproject.content_rule_accounts_passwords_pam_faillock_even_deny_root_or_root_unlock_time"
-    - "xccdf_org.ssgproject.content_rule_accounts_passwords_pam_faillock_interval"
-    - "xccdf_org.ssgproject.content_rule_accounts_passwords_pam_faillock_root_unlock_time"
-    - "xccdf_org.ssgproject.content_rule_accounts_passwords_pam_faillock_silent"
-    - "xccdf_org.ssgproject.content_rule_accounts_passwords_pam_faillock_unlock_time"
   password_aging:
     - "xccdf_org.ssgproject.content_rule_accounts_password_set_max_life_existing"
     - "xccdf_org.ssgproject.content_rule_accounts_password_set_max_life_root"

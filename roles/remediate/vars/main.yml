@@ -48,6 +48,18 @@ __linux_compliance_remediate_sudo_option_pattern: '^[a-z_]{1,32}$'
 __linux_compliance_remediate_sudo_include_pattern: '(?m)^[ \t]*[@#]includedir[ \t]+/etc/sudoers\.d/?[ \t]*$'
 __linux_compliance_remediate_sudo_backslash: '\'
 __linux_compliance_remediate_sudo_read_name: '^[^.]*[^.~]$'
+__linux_compliance_remediate_faillock_conf: /etc/security/faillock.conf
+__linux_compliance_remediate_pwhistory_conf: /etc/security/pwhistory.conf
+__linux_compliance_remediate_pam_directories:
+  - /etc/pam.d
+  - /usr/lib/pam.d
+  - /usr/share/pam.d
+__linux_compliance_remediate_security_conf_setting_pattern: '^[a-z][a-z_]{1,31}$'
+__linux_compliance_remediate_security_conf_number_pattern: '^(0|[1-9][0-9]{0,8})$'
+__linux_compliance_remediate_security_conf_comparisons:
+  - present
+  - at_most
+  - at_least
 __linux_compliance_remediate_modprobe_families:
   - filesystem_modules
   - protocol_modules
