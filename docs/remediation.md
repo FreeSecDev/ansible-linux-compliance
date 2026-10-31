@@ -313,7 +313,7 @@ stricter mode such as `0400` is kept and only the excess bits are removed. Its s
 
 Besides the reference family, these topics are native
 ([ADR 0021](adr/0021-native-banners-pwquality-and-profile-values.md), [ADR 0022](adr/0022-native-sudo-drop-ins.md),
-[ADR 0023](adr/0023-native-ssh-server-configuration.md), [ADR 0025](adr/0025-native-kernel-module-drop-ins.md)).
+[ADR 0023](adr/0023-native-ssh-server-configuration.md), [ADR 0028](adr/0028-native-kernel-module-drop-ins.md)).
 Their rules use the profile's own values, which `make catalogue` reads from the pinned datastreams into the rule
 parameters (`value_id`, `profile_values`); a rule whose content and profile the catalogue holds no value for fails the
 family before anything changes. A rule whose check accepts a range and leaves the exact value to the content's fix
@@ -489,7 +489,7 @@ run `/usr/bin/sudo`) and `package_sudo_installed` (package state).
 
 `filesystem_modules`, `protocol_modules` and `wireless_modules` (umbrella `kernel_modules`) are disruptive, so they are
 applied and cleaned up only with the family or `kernel_modules` in `linux_compliance_remediate_allow_disruptive`
-([ADR 0025](adr/0025-native-kernel-module-drop-ins.md)). Every rule of both pinned contents requires a line
+([ADR 0028](adr/0028-native-kernel-module-drop-ins.md)). Every rule of both pinned contents requires a line
 `install <module> /bin/false` (or `/bin/true`) and a line `blacklist <module>` in a `.conf` file of the modprobe
 directories, and reads nothing of the running kernel; `tests/unit/tools/test_content_golden_kernel_modules.py` checks
 this against the OVAL of both datastreams.
@@ -518,7 +518,7 @@ A drop-in removed by hand is the recorded prior state at cleanup: the rule is `r
 written (FREES-173). The family never runs `modprobe`, never unloads a loaded module and never rebuilds the initramfs,
 because no pinned check reads either and neither has an exact revert: a module that is loaded stays loaded until the
 next boot, and a module that the initramfs loads early in the boot can still load there until the initramfs is rebuilt
-(ADR 0025). No rule of the three topics stays `audit_only`.
+(ADR 0028). No rule of the three topics stays `audit_only`.
 
 ## Results
 

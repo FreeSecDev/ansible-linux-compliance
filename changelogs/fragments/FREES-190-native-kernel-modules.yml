@@ -9,7 +9,7 @@ minor_changes:
     ledger; switching a rule or the topic off removes exactly that drop-in and never overwrites a later change
     (``modified_since_apply``). A module that another file already disables is ``compliant`` without a drop-in, and an
     ``install`` command of another file that ``modprobe`` reads first is reported ``overridden`` and left alone. No
-    module is unloaded and no initramfs is rebuilt (ADR 0025). The topics stay disruptive and need their family or
+    module is unloaded and no initramfs is rebuilt (ADR 0028). The topics stay disruptive and need their family or
     ``kernel_modules`` in ``linux_compliance_remediate_allow_disruptive``.
 trivial:
   - >-

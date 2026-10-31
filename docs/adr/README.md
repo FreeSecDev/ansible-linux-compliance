@@ -25,6 +25,6 @@
 | [0021](0021-native-banners-pwquality-and-profile-values.md) | Native banners and password quality, with profile values from the pinned content | proposed |
 | [0022](0022-native-sudo-drop-ins.md) | Native sudo remediation through validated drop-ins | proposed |
 | [0023](0023-native-ssh-server-configuration.md) | Native SSH server configuration through validated drop-ins | proposed |
-| [0025](0025-native-kernel-module-drop-ins.md) | Native kernel module remediation through modprobe drop-ins | proposed |
+| [0028](0028-native-kernel-module-drop-ins.md) | Native kernel module remediation through modprobe drop-ins | proposed |
 
 Proposed ADRs are accepted through the pull request that introduces their first implementation.

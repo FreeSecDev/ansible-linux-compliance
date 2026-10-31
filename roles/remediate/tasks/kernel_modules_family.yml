@@ -49,7 +49,7 @@
       {{ __linux_compliance_remediate_km_rule.rule_id }} cannot be written: a kernel module rule needs the method
       dropin, a module name matching {{ __linux_compliance_remediate_modprobe_module_pattern }}, the drop-in
       {{ __linux_compliance_remediate_modprobe_directory }}/freesecdev-<module>.conf, and an install command out of
-      {{ __linux_compliance_remediate_modprobe_disabling_commands }}, a blacklist line, or both (ADR 0025). No
+      {{ __linux_compliance_remediate_modprobe_disabling_commands }}, a blacklist line, or both (ADR 0028). No
       modprobe configuration was changed.
     quiet: true
   loop: "{{ __linux_compliance_remediate_family.cleanup + __linux_compliance_remediate_family.apply }}"

@@ -1,4 +1,4 @@
-# 0025. Native kernel module remediation through modprobe drop-ins
+# 0028. Native kernel module remediation through modprobe drop-ins
 
 - **Status:** proposed
 - **Date:** 2026-10-30

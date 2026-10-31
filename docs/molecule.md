@@ -535,7 +535,7 @@ owner and group of `/etc/sudoers` and `/etc/sudoers.d`), from a loosened `/etc/s
 administrator sets afterwards is kept as `modified_since_apply`, the recorded `0640` and not a default is restored, and
 a directory mode put back by hand is `restored` without a write.
 
-The kernel module topics ([ADR 0025](adr/0025-native-kernel-module-drop-ins.md)) run with the profiles that select
+The kernel module topics ([ADR 0028](adr/0028-native-kernel-module-drop-ins.md)) run with the profiles that select
 their rules (`profiles` in the declaration): `filesystem_modules` with `cis_level2_server` on Ubuntu and `cis` on Rocky
 Linux, `protocol_modules` with `cis_level2_server` and `stig`, and `wireless_modules` with `bsi` on Rocky Linux only.
 The group `changes` of `filesystem_modules` (both platforms), `shared/tasks/lifecycle_kernel_modules_regressions.yml`,
