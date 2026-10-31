@@ -101,6 +101,7 @@
   loop: "{{ lifecycle_added_files }}"
   loop_control:
     label: "{{ item.path }}"
+
 - name: Lifecycle cycle | Read the declared files whose lines the pre-state sets, to put them back after the cycle
   ansible.builtin.slurp:
     src: "{{ item.path }}"

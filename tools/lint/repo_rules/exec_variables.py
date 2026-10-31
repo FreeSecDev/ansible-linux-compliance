@@ -131,6 +131,7 @@ PLAYBOOK_PYTHON_FILES: Final[tuple[str, ...]] = (
     "tests/playbooks/inventory/verify-forged.yml",
     "tests/playbooks/remediate-check-mode.yml",
     "tests/playbooks/remediate-disruptive.yml",
+    "tests/playbooks/remediate-login-defs-check.yml",
     "tests/playbooks/remediate-native-check.yml",
     "tests/playbooks/remediate-pam-conf-check.yml",
     "tests/playbooks/remediate-skip-always.yml",

@@ -16,10 +16,10 @@ expectation, an expectation or a pre-state for an item that is not declared, an 
 attribute or platform, a malformed mode, a ``rewritten`` flag that is not a boolean, a
 pre-state that leaves a rule ``unchanged`` that is not a native rule of the topic or with a
 status other than ``compliant``, ``notapplicable`` or ``overridden``, a pre-state file whose
-``content`` is not a non-empty text or that also sets an owner or group, a pre-state ``applied``
-override that the top-level ``applied`` would refuse, pre-state ``lines`` (``regexp`` and ``line``
-on one line each) of a file that ``state.files`` does not declare ``rewritten`` (FREES-185), or
-``unselected_platforms`` that name
+``content`` is not a non-empty text or that also sets an owner or group, pre-state ``lines``
+(``regexp`` and ``line`` on one line each) of a file that ``state.files`` does not declare
+``rewritten`` or of an entry that also sets ``content`` (FREES-185), a pre-state ``applied``
+override that the top-level ``applied`` would refuse, or ``unselected_platforms`` that name
 every platform, which would let the topic run nowhere. A topic therefore cannot gain a native rule
 without its lifecycle test, and the harness cannot silently skip a declared expectation or a
 topic. The harness repeats the coverage check at run time and fails on a platform that skips
@@ -420,7 +420,7 @@ class Declaration:
             elif len(set(item) & {"mode", "owner", "group", "lines"}) == 0:
                 self.error(f"{where} sets no mode, owner or group")
             if "lines" in item:
-                self._pre_state_file_lines(item, key, where)
+                _pre_state_file_lines(self, item, where, key)
             mode = item.get("mode")
             if "mode" in item and (not isinstance(mode, str) or MODE.fullmatch(mode) is None):
                 self.error(f"{where} needs a four-digit octal mode string")
@@ -451,17 +451,6 @@ class Declaration:
             self.pre_state_modes.append(TOGGLE_MODES)
             return
         self.pre_state_modes.append(frozenset(modes))
-
-    def _pre_state_file_lines(self, item: dict[str, object], key: str | None, where: str) -> None:
-        """Check the lines that a pre-state sets in a declared file that the topic rewrites."""
-        _pre_state_lines(self, item["lines"], where)
-        if "content" in item:
-            self.error(f"{where} cannot both add a file with content and set lines of it")
-        if key is not None and key not in self.rewritten:
-            self.error(
-                f"{where} sets lines of {key}, which state.files must declare rewritten: "
-                "the harness puts its content back with a new inode after the cycle"
-            )
 
     def _pre_state_content(self, item: dict[str, object], where: str) -> None:
         """Check a file that the pre-state writes, as root, before a cycle and removes after it."""
@@ -596,6 +585,23 @@ class Declaration:
                 self.pre_state_unchanged(item["unchanged"], what)
             if "applied" in item and self._expectations(item["applied"], f"{what}.applied") == 0:
                 self.error(f"{what}.applied declares no expectation; leave it out instead")
+
+
+def _pre_state_file_lines(
+    declaration: Declaration, item: dict[str, object], where: str, key: str | None
+) -> None:
+    """Check the lines of a pre-state file entry, which edit a declared, rewritten file."""
+    if "content" in item:
+        declaration.error(
+            f"{where} sets both content and lines: content writes a file that does not "
+            "exist, lines edit one that does"
+        )
+    _pre_state_lines(declaration, item["lines"], where)
+    if key is not None and key not in declaration.rewritten:
+        declaration.error(
+            f"{where} sets lines of {key}, which state.files must declare rewritten: "
+            "the harness puts its content back with a new inode after the cycle"
+        )
 
 
 def _pre_state_lines(declaration: Declaration, value: object, what: str) -> None:

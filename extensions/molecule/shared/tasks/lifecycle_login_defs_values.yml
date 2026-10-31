@@ -1,0 +1,180 @@
+---
+- name: Login defaults values | Refuse to run unless the login_defs topic has just run its cycles
+  ansible.builtin.assert:
+    that:
+      - lifecycle_topic.family == 'login_defs'
+      - lifecycle_rule_ids | length > 0
+      - lifecycle_allow_disruptive == ['login_defs']
+    fail_msg: >-
+      The login_defs value forms reuse the facts of the login_defs lifecycle, which must have just run; the topic was
+      {{ lifecycle_topic.family | default('none') }}.
+    quiet: true
+
+- name: Login defaults values | Name the rules, the toggles and the cases of the value forms
+  ansible.builtin.set_fact:
+    ldf_label: login_defs value forms
+    ldf_toggles: "{{ lifecycle_rules | map(attribute='toggle') | list }}"
+    ldf_max: xccdf_org.ssgproject.content_rule_accounts_maximum_age_login_defs
+    ldf_warn: xccdf_org.ssgproject.content_rule_accounts_password_warn_age_login_defs
+    ldf_umask: xccdf_org.ssgproject.content_rule_accounts_umask_etc_login_defs
+
+- name: Login defaults values | Take the state of the whole instance before the value forms
+  ansible.builtin.include_tasks:
+    file: lifecycle_broad.yml
+
+- name: Login defaults values | Remember the state of the whole instance before the value forms
+  ansible.builtin.set_fact:
+    ldf_broad_before: "{{ lifecycle_broad_lines }}"
+
+- name: Login defaults values | Read login.defs as built
+  ansible.builtin.slurp:
+    src: /etc/login.defs
+  register: ldf_original
+
+- name: Login defaults values | Inspect login.defs as built
+  ansible.builtin.stat:
+    path: /etc/login.defs
+    follow: false
+  register: ldf_original_stat
+
+- name: Login defaults values | Name the text as built and the value forms of the cases
+  ansible.builtin.set_fact:
+    ldf_text: "{{ ldf_original.content | b64decode }}"
+    ldf_cases:
+      - name: zero-padded values that shadow-utils reads with base 0 (090 does not parse, 010 is 8)
+        text: >-
+          {{ ldf_original.content | b64decode
+             | regex_replace('(?m)^PASS_MAX_DAYS[ \t].*$', 'PASS_MAX_DAYS 090')
+             | regex_replace('(?m)^PASS_WARN_AGE[ \t].*$', 'PASS_WARN_AGE 010') }}
+        expected:
+          max: applied
+          warn: applied
+          umask: applied
+        lines:
+          - PASS_MAX_DAYS 90
+          - PASS_WARN_AGE 10
+      - name: a maximum age read as octal 245, a hexadecimal umask and a warning age that does not parse
+        text: >-
+          {{ ldf_original.content | b64decode
+             | regex_replace('(?m)^PASS_MAX_DAYS[ \t].*$', 'PASS_MAX_DAYS 0365')
+             | regex_replace('(?m)^UMASK[ \t].*$', 'UMASK 0x3f')
+             | regex_replace('(?m)^PASS_WARN_AGE[ \t].*$', 'PASS_WARN_AGE 9x') }}
+        expected:
+          max: applied
+          warn: applied
+          umask: unreadable_value
+        lines:
+          - PASS_MAX_DAYS 245
+          - PASS_WARN_AGE 7
+          - UMASK 0x3f
+      - name: a quoted maximum age, a five-digit umask and a seven-digit warning age, which the readers take as stricter
+        text: >-
+          {{ ldf_original.content | b64decode
+             | regex_replace('(?m)^PASS_MAX_DAYS[ \t].*$', 'PASS_MAX_DAYS "30"')
+             | regex_replace('(?m)^UMASK[ \t].*$', 'UMASK 00077')
+             | regex_replace('(?m)^PASS_WARN_AGE[ \t].*$', 'PASS_WARN_AGE 1234567') }}
+        expected:
+          max: unreadable_value
+          warn: unreadable_value
+          umask: unreadable_value
+      - name: a signed maximum age, a quoted umask and a long hexadecimal warning age
+        text: >-
+          {{ ldf_original.content | b64decode
+             | regex_replace('(?m)^PASS_MAX_DAYS[ \t].*$', 'PASS_MAX_DAYS +30')
+             | regex_replace('(?m)^UMASK[ \t].*$', 'UMASK "077"')
+             | regex_replace('(?m)^PASS_WARN_AGE[ \t].*$', 'PASS_WARN_AGE 0x10000') }}
+        expected:
+          max: unreadable_value
+          warn: unreadable_value
+          umask: unreadable_value
+      - name: a blank and a second quote before the number, which shadow-utils skips and reads as 30
+        text: >-
+          {{ ldf_original.content | b64decode
+             | regex_replace('(?m)^PASS_MAX_DAYS[ \t].*$', 'PASS_MAX_DAYS " 30"')
+             | regex_replace('(?m)^PASS_WARN_AGE[ \t].*$', 'PASS_WARN_AGE ""30') }}
+        expected:
+          max: unreadable_value
+          warn: unreadable_value
+          umask: applied
+      - name: an empty quoted maximum age and a quoted -1, which shadow-utils reads as no limit
+        text: >-
+          {{ ldf_original.content | b64decode
+             | regex_replace('(?m)^PASS_MAX_DAYS[ \t].*$', 'PASS_MAX_DAYS ""')
+             | regex_replace('(?m)^PASS_WARN_AGE[ \t].*$', 'PASS_WARN_AGE "-1"') }}
+        expected:
+          max: applied
+          warn: applied
+          umask: applied
+        lines:
+          - PASS_MAX_DAYS 365
+          - PASS_WARN_AGE 7
+      - name: no limit (-1) and a warning age without a value, which the profile's values make stricter
+        text: >-
+          {{ ldf_original.content | b64decode
+             | regex_replace('(?m)^PASS_MAX_DAYS[ \t].*$', 'PASS_MAX_DAYS -1')
+             | regex_replace('(?m)^PASS_WARN_AGE[ \t].*$', 'PASS_WARN_AGE') }}
+        expected:
+          max: applied
+          warn: applied
+          umask: applied
+        lines:
+          - PASS_MAX_DAYS 365
+          - PASS_WARN_AGE 7
+      - name: a seven-digit maximum age and a warning age of 0, which the profile's values make stricter
+        text: >-
+          {{ ldf_original.content | b64decode
+             | regex_replace('(?m)^PASS_MAX_DAYS[ \t].*$', 'PASS_MAX_DAYS 1234567')
+             | regex_replace('(?m)^PASS_WARN_AGE[ \t].*$', 'PASS_WARN_AGE 0') }}
+        expected:
+          max: applied
+          warn: applied
+          umask: applied
+        lines:
+          - PASS_MAX_DAYS 365
+          - PASS_WARN_AGE 7
+
+- name: Login defaults values | Switch every rule of the topic on
+  ansible.builtin.set_fact:
+    "{{ item }}": true
+  loop: "{{ ldf_toggles }}"
+
+- name: Login defaults values | Run every value form through an apply and a cleanup
+  ansible.builtin.include_tasks:
+    file: lifecycle_login_defs_case.yml
+  loop: "{{ ldf_cases }}"
+  loop_control:
+    loop_var: ldf_case
+    label: "{{ ldf_case.name }}"
+
+- name: Login defaults values | Give login.defs its content as built back
+  ansible.builtin.copy:
+    content: "{{ ldf_text }}"
+    dest: /etc/login.defs
+    follow: false
+    mode: "{{ ldf_original_stat.stat.mode }}"
+    owner: root
+    group: root
+
+- name: Login defaults values | Read the ledger after the value forms
+  freesecdev.linux_compliance.control_state:
+    action: list
+  register: ldf_ledger_after
+
+- name: Login defaults values | Check that the ledger records no rule of the topic any more
+  ansible.builtin.assert:
+    that:
+      - ldf_ledger_after.entries | selectattr('rule_id', 'in', lifecycle_rule_ids) | list == []
+    fail_msg: "{{ ldf_label }}: the ledger still holds {{ ldf_ledger_after.entries }}"
+    quiet: true
+
+- name: Login defaults values | Assert that the whole instance is back to its state before the value forms
+  ansible.builtin.include_tasks:
+    file: lifecycle_broad_compare.yml
+  vars:
+    lifecycle_label: login_defs value forms
+    lifecycle_broad_step: the value forms
+    lifecycle_broad_reference: "{{ ldf_broad_before }}"
+
+- name: Login defaults values | Record that this regression file ran to its end
+  ansible.builtin.set_fact:
+    lifecycle_regression_files_run: "{{ lifecycle_regression_files_run + ['lifecycle_login_defs_values.yml'] }}"

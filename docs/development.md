@@ -73,7 +73,7 @@ overriding them.
 | `lint-python` | implemented | Ruff lint, Ruff format check, Pylint (`tools`, `tests`, `plugins`) |
 | `lint-yaml` | implemented | `yamllint --strict` |
 | `lint-actions` | implemented | actionlint |
-| `lint-repo` | implemented | `tools/lint/check_repo_rules.py` on every tracked and new file, including symbolic links and files without a suffix; it refuses compiled module files (`.so`, `.pyd`, `.pyc`, `.pyo`, `.fwork`, any case) and code outside `plugins/` in a location from which Ansible loads code (FREES-156) |
+| `lint-repo` | implemented | `tools/lint/check_repo_rules.py` on every tracked and new file, including symbolic links and files without a suffix; it refuses compiled module files (`.so`, `.pyd`, `.pyc`, `.pyo`, `.fwork`, any case) and code outside `plugins/` in a location from which Ansible loads code (FREES-156), and anything that would use the scanner's remediation: Python outside `tests/unit/`, `docs/` and `changelogs/` that names XCCDF `fix` elements, committed ComplianceAsCode or OpenSCAP remediation content, and invocations of the scanner's remediation or of scripts it provides ([ADR 0025](adr/0025-own-ansible-remediation-only.md), FREES-188) |
 | `lint-skills` | implemented | `tools/skills/validate_skills.py` |
 | `security` | implemented | Bandit (`tools`, `plugins`), Checkov on `infra/`, gitleaks history scan, zizmor (pedantic persona) |
 | `aws-bootstrap` | implemented | Renders and runs the one-time interactive AWS account bootstrap ([docs/aws/bootstrap.md](aws/bootstrap.md)); never run by CI |
@@ -85,9 +85,14 @@ overriding them.
 | `name-sets` | implemented | Probes Python 3.9 to 3.15 (`uv python find`) and regenerates `tools/lint/name_sets.json` and the name-set constants of the guard |
 | `test-sanity` | implemented | `ansible-test sanity --local` on the temporary collection tree, no Docker; installs Python 3.9 to 3.14 with `uv python install` |
 | `test-ansible-units` | implemented | `ansible-test units --venv` on Python 3.9, 3.12 and 3.14, no Docker |
-| `molecule-dependencies` | implemented | Installs the pinned `extensions/molecule/requirements.yml` collections into `build/collections` |
+| `molecule-dependencies` | implemented | Installs the collections of `extensions/molecule/collections.pins` into `build/collections` with `ansible-galaxy --offline`, from files whose SHA-256 and size match the pins; outside GitHub Actions it runs `molecule-collections-fetch` first ([Molecule](molecule.md#galaxy-collections)) |
+| `molecule-collections-fetch` | implemented | Downloads the pinned collection artifacts from Galaxy with bounded retries into `build/molecule-collections`, checks each one and reuses verified files; the only target that contacts Galaxy |
+| `molecule-collections-lock` | implemented | Writes `extensions/molecule/collections.pins` from Galaxy's metadata for the exact versions of `extensions/molecule/requirements.yml`; run it after Renovate raises a version |
+| `molecule-images-build` | implemented | Builds or reuses each Docker instance image with bounded, timed attempts, verifies it against its inputs label and the pinned base layers, saves it to `build/molecule-images` and records its image ID (the CI job `molecule-images`) |
+| `molecule-images-plan` | implemented | Prints `<image>=<tag>` for each Docker instance image, for `$GITHUB_OUTPUT` |
+| `molecule-images-ids` | implemented | Prints the verified `<image>=<image ID>` pairs that the Docker legs check |
 | `molecule-content` | implemented | Fetches and verifies the pinned `ubuntu2404` and `rhel9` datastreams into `build/content` for the Molecule scenarios |
-| `test-molecule-docker` | implemented | `molecule-dependencies`, `molecule-content`, then `molecule test` for `docker-ubuntu`, `docker-rhel-compatible` and their toggle lifecycle scenarios `docker-ubuntu-lifecycle` and `docker-rhel-compatible-lifecycle` (stops at the first failure), then `test-molecule-docker-selftest` unless `MOLECULE_DOCKER_SELFTEST=false`. The lifecycle runs every native topic in both toggle modes unless `MOLECULE_LIFECYCLE_TOPIC` and `MOLECULE_LIFECYCLE_MODE` select one; needs a running Docker daemon, see [Molecule](molecule.md) |
+| `test-molecule-docker` | implemented | `molecule-dependencies`, `molecule-content`, the instance images of the selected scenarios (built or reused locally; in GitHub Actions only loaded from `build/molecule-images` and checked against `MOLECULE_IMAGE_IDS`), then `molecule test` for `docker-ubuntu`, `docker-rhel-compatible` and their toggle lifecycle scenarios `docker-ubuntu-lifecycle` and `docker-rhel-compatible-lifecycle` (stops at the first failure), then `test-molecule-docker-selftest` unless `MOLECULE_DOCKER_SELFTEST=false`. The lifecycle runs every native topic in both toggle modes unless `MOLECULE_LIFECYCLE_TOPIC` and `MOLECULE_LIFECYCLE_MODE` select one; needs a running Docker daemon, see [Molecule](molecule.md) |
 | `molecule-matrix` | implemented | `tools/roles/molecule_matrix.py`: prints the CI matrix of the toggle lifecycle legs as one line of JSON, one leg per Molecule platform, native topic and toggle mode ([Molecule](molecule.md#ci-legs)) |
 | `test-molecule-docker-selftest` | implemented | Real guard bypass attempts and the label-based destroy fallback against containers of the `docker-selftest` scenario, see [Molecule](molecule.md#self-test-against-real-containers) |
 | `package` | implemented | `ansible-galaxy collection build` repacked with a canonical `FILES.json`, into `dist/`, plus `dist/SHA256SUMS` |
@@ -386,7 +391,8 @@ Configuration relaxations, each with its reason:
 
 ## Pull request workflow
 
-`.github/workflows/ci.yml` runs on `pull_request` to `main`, `push` to `main` and `merge_group`.
+`.github/workflows/ci.yml` runs on `pull_request` to `main`, `push` to `main`, `merge_group`, a daily `schedule` and
+`workflow_dispatch` (a manual run of the full matrix from the Actions tab or `gh workflow run ci`).
 
 | Job | Make target |
 |---|---|
@@ -399,13 +405,13 @@ Configuration relaxations, each with its reason:
 | `collection` | `make test-sanity test-ansible-units package-check` |
 | `iac` | `tools/iac/install-tofu.sh`, then `make lint-iac` |
 | `molecule-docker` | `make test-molecule-docker MOLECULE_DOCKER_SELFTEST=false` for `docker-ubuntu` and `docker-rhel-compatible`, and `make test-molecule-docker-selftest` for `docker-selftest`, one matrix entry each |
-| `molecule-plan` | `make -s molecule-matrix`: one leg per Molecule platform, native topic and toggle mode, derived from the catalogue, as the job output `matrix` |
-| `molecule-lifecycle` | `make test-molecule-docker MOLECULE_DOCKER_SELFTEST=false` with the `docker-<platform>-lifecycle` scenario, `MOLECULE_LIFECYCLE_TOPIC` and `MOLECULE_LIFECYCLE_MODE` of each leg of `molecule-plan` ([Molecule](molecule.md#ci-legs)) |
+| `molecule-plan` | `make -s molecule-matrix` for each driver: one leg per Molecule platform, native topic and toggle mode, derived from the catalogue. For a pull request or merge group, the base revision's `tools/molecule/plan-lifecycle.sh`, read with `git show` and run with `bash`, runs the base revision's `make molecule-affected` and keeps only the legs of the affected topics and the legs without a topic; push, schedule and dispatch, and any failure, keep the full matrices. Outputs `matrix`, `libvirt`, `scope` (`full` or `affected`) and `lifecycle_legs` ([Molecule](molecule.md#affected-legs-on-pull-requests)) |
+| `molecule-lifecycle` | runs when `lifecycle_legs` is not `0`: `make test-molecule-docker MOLECULE_DOCKER_SELFTEST=false` with the `docker-<platform>-lifecycle` scenario, `MOLECULE_LIFECYCLE_TOPIC` and `MOLECULE_LIFECYCLE_MODE` of each leg of `molecule-plan` ([Molecule](molecule.md#ci-legs)) |
 | `scc-changes` | the base revision's `tools/scc/needs-smoke.sh`, read with `git show` and run with `bash`: `scc=false` only for a pull request or merge group whose diff touches no SCC path (renames count as a deletion and an addition); `true` for push, schedule and dispatch, and fails closed to `true`. A change to the filter takes effect only after it merges. Also the base revision's `tools/scc/expiry-state.sh` on the base and head `scc.pins`: `expiry=expired` only for a pull request or merge group in which both pins name the same SCC release and both are past their hard stop, otherwise `expiry=current` |
 | `scc-smoke` | runs unless `scc-changes` output `scc=false` or `expiry=expired`; restores the verified SCC download from the Actions cache (key: SHA-256 of `extensions/ci/scc/scc.pins`; skipped for a pull request from a fork), then `make scc-smoke`, `make scc-integration` and `make scc-own-expiry-check`; `contents: read` only, the image and the exported debug log stay on the runner |
 | `ci-gate` | none; fails unless every needed job succeeded |
 
-`ci-gate` needs every job above, runs with `if: always()` and is the only check that branch protection should require. It accepts a skipped `scc-smoke` only for a `pull_request` or `merge_group` whose `scc-changes` output is exactly `scc=false` or exactly `expiry=expired`, and it compares the event name and the outputs exactly, not as substrings; on `push` to `main` and the daily `schedule` the smoke test always runs. A skip for `expiry=expired` is named in the warning annotation "SCC not built or run": once the pinned SCC is past its hard stop and no newer pin exists, pull requests and merge groups keep flowing, SCC is neither built nor run, and `main` stays red until the pin is bumped ([ADR 0019](adr/0019-scc-scanner-backend-and-ci-image.md#amendment-2026-10-30-release-watch-and-expiry-fallback-frees-176)). Job names
+`ci-gate` needs every job above, runs with `if: always()` and is the only check that branch protection should require. It accepts a skipped `scc-smoke` only for a `pull_request` or `merge_group` whose `scc-changes` output is exactly `scc=false` or exactly `expiry=expired`, and it compares the event name and the outputs exactly, not as substrings; on `push` to `main` and the daily `schedule` the smoke test always runs. A skip for `expiry=expired` is named in the warning annotation "SCC not built or run": once the pinned SCC is past its hard stop and no newer pin exists, pull requests and merge groups keep flowing, SCC is neither built nor run, and `main` stays red until the pin is bumped ([ADR 0019](adr/0019-scc-scanner-backend-and-ci-image.md#amendment-2026-10-30-release-watch-and-expiry-fallback-frees-176)). It accepts the `molecule-plan` scope `affected` only for a `pull_request` or `merge_group`, and a skipped `molecule-lifecycle` only when that plan has exactly zero lifecycle legs ([ADR 0011](adr/0011-control-toggles-and-cleanup.md#amendment-2026-10-30-only-the-affected-lifecycle-legs-on-pull-requests-frees-189)). Job names
 are stable, so the required check name `ci-gate` does not change. Runs for pull requests cancel superseded
 runs; runs on `main` and merge groups are never cancelled. `docs` is part of `make ci` locally and is
 added as a job together with the documentation pipeline (FREES-80).
@@ -437,7 +443,8 @@ signature and attestations as described in the runner repository's `docs/image-b
   ([dependency management](dependency-management.md)).
 - Molecule and `requests` are pinned to exact versions in `pyproject.toml` and `uv.lock` like the other Python tools.
   The `community.docker` collection is pinned in `extensions/molecule/requirements.yml` (Renovate owns Galaxy
-  collections) and the container image digests live in `extensions/molecule/shared/vars/versions.yml`. The
+  collections), with the SHA-256 of every artifact in `extensions/molecule/collections.pins`; after a Renovate update
+  run `make molecule-collections-lock` and commit both files. The container image digests live in `extensions/molecule/shared/vars/versions.yml`. The
   distribution packages of the instance images are pinned to exact versions in the Dockerfiles under
   `extensions/molecule/shared/images/` and updated by hand.
 - GitHub Actions are pinned to full commit SHAs with a `# vX.Y.Z` annotation.

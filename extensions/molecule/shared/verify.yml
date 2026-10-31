@@ -39,6 +39,7 @@
       - "{{ molecule_evidence_directory }}"
     linux_compliance_banners_enabled: false
     linux_compliance_faillock_enabled: false
+    linux_compliance_login_defs_enabled: false
     linux_compliance_pwquality_enabled: false
     linux_compliance_pwhistory_enabled: false
     linux_compliance_ssh_enabled: false

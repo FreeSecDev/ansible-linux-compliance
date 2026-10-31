@@ -80,15 +80,20 @@ SCAP datastream with `oscap` ([audit guide](../audit.md), [ADR 0004](../adr/0004
   A change of the pin is a reviewed pull request. A local user cannot swap the copy, and T-AUDIT-1 stops a swap of the
   source.
 - **Not remediation:** the scripts are XCCDF checks, not `fix` elements. `--remediate` is refused by the process
-  policy, so [ADR 0003](../adr/0003-native-module-remediation.md) (no upstream Bash fixes) still holds. ADR 0003 is about
+  policy, so [ADR 0003](../adr/0003-native-module-remediation.md) (no upstream Bash fixes) still holds, and
+  `make lint-repo` refuses Python that reads `fix` elements and any committed upstream remediation content
+  ([ADR 0025](../adr/0025-own-ansible-remediation-only.md)). ADR 0003 is about
   what changes a host; SCE checks are meant to read it, but nothing technical confines them to reading.
-- **Option to disable:** the pinned `oscap` 1.3.9 has no command-line option to disable SCE. SCE is the auto-loaded
+- **Option to disable:** the pinned `oscap` 1.3.9 has no command-line option to disable SCE (the source lines are
+  cited in [ADR 0025](../adr/0025-own-ansible-remediation-only.md), Security implications). SCE is the auto-loaded
   plugin `libopenscap_sce.so.25`, shipped in `libopenscap25t64` with the library itself. The undocumented variable
   `OSCAP_CHECK_ENGINE_PLUGIN_DIR` would redirect its `dlopen`, but the process helper does not pass it and redirecting
   root's library loading would add a code-loading path. Without SCE, the 16 SCE-only rules of `cis_level1_server` are
   `notchecked` (13 firewall rules and 3 file-system-wide ownership and permission rules); the other 392 rules are
   unaffected. An operator who does not want to run any SCE script can list those rules in `disabled_rules`: the
-  tailoring file deselects them, their scripts do not run, and they are reported as `disabled`.
+  tailoring file deselects them, their scripts do not run, and they are reported as `disabled`. That is not the
+  default, so the owner's requirement that ComplianceAsCode code never runs is not yet met for SCE;
+  [FREES-191](https://vidlunnia.atlassian.net/browse/FREES-191) tracks it.
 - **Residual:** the pinned content and its 81 scripts are trusted as a whole, like the OVAL definitions, which
   `oscap` also evaluates as root. A content update is therefore a change to code that runs as root: its review covers
   the SCE scripts that changed, not only the digest.
@@ -339,8 +344,7 @@ installed in the test virtual machines (FREES-61)
   them.
 - **Failure:** a modified `.deb` runs its maintainer scripts as root on the runner, or a modified image or scanner
   package changes what the virtual machine proves.
-- **Mitigation:** a cache entry is only a speed-up and its contents are never trusted. Every file is checked against a
-  SHA-256 and size pinned in a reviewed file of this repository (`tools/molecule/libvirt-host.pins`,
+- **Mitigation:** every file is checked against a SHA-256 and size pinned in a reviewed file of this repository (`tools/molecule/libvirt-host.pins`,
   `extensions/molecule/shared/images/cloud-images.pins`) after it is restored and before it is used:
   `tools/molecule/libvirt-host-packages.sh` checks every host package in place, copies the ones it installs into a
   private directory, checks the copies and installs only those, with `apt-get` given no package source so that it can
@@ -350,9 +354,60 @@ installed in the test virtual machines (FREES-61)
   host package pins come from the signed index of the snapshot, the image pins from the vendors' signed checksum
   files. A pull request from a fork neither restores nor saves either cache, as for SCC (T-SCC-1). The install
   refuses to run outside a GitHub-hosted runner.
-- **Residual:** a poisoned entry can only cost a download. A pin change is trusted through review: a reviewer who
+- **Residual:** the checks catch a corrupt or stale entry, which then costs only a download. They do not stop a crafted
+  entry: `actions/cache` (v6.1.0) extracts a restored entry with `tar -xf … -P`, which keeps absolute and `../` member
+  names, so an entry can write any file the runner user can write, `tools/molecule/*.sh` and the `Makefile` included,
+  before the checks run. The boundary is who can write an entry in a scope that a run restores; see T-MOLECULE-1,
+  which applies to these caches too. A pin change is trusted through review: a reviewer who
   accepts a wrong digest accepts the file. The runner image itself, and the packages that it already has in the
   pinned version or later, are trusted as the runner is. No update bot refreshes the pins (FREES-81).
+
+## Molecule CI inputs
+
+The `molecule-images` and `molecule-collections` jobs of `ci.yml` prepare the Docker instance images and the Galaxy
+collections once per run (FREES-182, FREES-184). They restore two kinds of Actions cache: `build/molecule-images/<image>`
+(the archive of an instance image, key `molecule-image-<image>-<tag>-<ISO week>`) and
+`build/molecule-collections` (the collection artifacts, key `galaxy-collections-<hash of the pins>`). They pass on two
+run artifacts, `molecule-images` and `molecule-collections`, which every Docker leg, every libvirt leg and `lint`
+download ([Molecule guide](../molecule.md#images-and-collections-built-once-per-run),
+[ADR 0009](../adr/0009-molecule-layout-and-drivers.md)).
+
+### T-MOLECULE-1: a planted cache entry or artifact changes what the Molecule legs prove
+
+- **Asset:** the integrity of the Molecule results that gate merges. The jobs hold `contents: read` and no secrets, so
+  no credential or write token is reachable.
+- **Attacker:** whoever can write an Actions cache entry in a scope that a run restores. A pull request from a branch
+  of this repository writes only to its own `refs/pull/<n>/merge` scope, which only that pull request reads. A
+  `merge_group` run reads its queue ref and `main`. A `main` entry can be written by any code that runs in any
+  workflow run on `main` (push or schedule), for example a compromised pinned dependency that reaches the runtime
+  token; it takes no push to `main`. Such a writer can plant an entry under a key that has not been written yet, or
+  after the original was evicted (seven days without use, or the 10 GB limit).
+- **Failure:** `actions/cache` (v6.1.0) restores with `tar -xf … -P`, which keeps absolute and `../` member names, so a
+  crafted entry can write any file the runner user can write, `tools/molecule/instance-images.sh`,
+  `tools/molecule/galaxy-collections.sh` and the `Makefile` included, before the job's checks run. Or it simply holds
+  an image with the right label on the pinned base layers and other layers on top. `molecule-images` then publishes
+  that image and its ID, and every Docker leg that loads it, on `main`, in the merge queue and in pull requests,
+  accepts it while the key lasts; a planted collection is installed the same way.
+- **Mitigation:**
+  - The checks in the job are corruption and staleness checks, not a boundary against a cache writer. A collection
+    file must match the SHA-256 and size of `extensions/molecule/collections.pins`. A restored image must carry
+    `org.freesecdev.molecule.inputs=<tag>` on exactly the layers of the base pulled by digest, and its archive must load
+    that one image and nothing else. Unlike the collections and the libvirt files, **the image cache has no content
+    pin**: builds are not reproducible, so a matching label on the base layers says nothing about the layers on top.
+  - The image cache key carries the ISO week of the run, so a planted image entry is restored at most until the week
+    ends; a scheduled run never saves an image entry, and a push to `main` saves one only on a miss.
+  - The job always writes the archive it shares anew from the verified image, so the legs never receive
+    the cache's bytes, and a leg refuses an archive that loads any other image.
+  - A pull request from a fork neither restores nor saves these caches, as for SCC (T-SCC-1).
+  - Within a run, `actions/download-artifact` checks each artifact's digest, every Docker leg checks each image ID
+    against the job output of `molecule-images`, which no other job can change, and every consumer of the
+    collections checks every file against the pins again. Every job of a run executes the same commit, so another job
+    of the run adds no trust beyond that commit's.
+- **Residual:** a writer of the `main` cache scope gets arbitrary file writes in every job that restores a cache of
+  this repository (SCC, libvirt, images, collections), and with the image cache can make the Docker legs pass or fail
+  at will until the week's key changes. The real boundary is write access to the `main` cache scope. Owner: the lead
+  architect, whose acceptance is recorded on FREES-182 (raised in the review of PR #71). Restoring the image cache only in `pull_request` and `merge_group` runs, or dropping
+  it (a hit saves about 24 seconds), remain options if that boundary weakens.
 
 ## Report inputs on the controller
 

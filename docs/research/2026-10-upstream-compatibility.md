@@ -11,7 +11,7 @@ Verified on 2026-10-25. Version numbers come from GitHub Releases/tags API, PyPI
 
 | # | Area | Recommendation |
 |---|------|----------------|
-| 1 | Content source | Pin ComplianceAsCode/content **v0.1.82** (BSD-3-Clause). Ship per-profile playbooks from the release zip; do not treat Ubuntu 26.04 as supported yet (only a hidden "default" profile). |
+| 1 | Content source | Pin ComplianceAsCode/content **v0.1.82** (BSD-3-Clause). Use only the datastreams of the release zip, to audit; never ship or run its per-profile playbooks or Bash scripts ([ADR 0025](../adr/0025-own-ansible-remediation-only.md)); do not treat Ubuntu 26.04 as supported yet (only a hidden "default" profile). |
 | 1 | Rocky/Alma | No Rocky product exists in SSG; AlmaLinux has `almalinux9` only (no Alma 10). Rocky/Alma 10 mapping is UNVERIFIED; plan to test the `rhel10` datastream against them and document the CPE caveat. |
 | 2 | Scanner | OpenSCAP **1.4.6** upstream. Distros lag: Ubuntu 24.04 = 1.3.9, 26.04 = 1.4.3 (both universe), Debian 13 = 1.4.2, RHEL 10 = 1.4.3, RHEL 9 = 1.3.13. Support the 1.3 and 1.4 lines. Do not depend on Canonical USG (Ubuntu Pro). |
 | 3 | Ansible | Target **ansible-core 2.21** (2.20 as floor for CI matrix); controller Python 3.12-3.14. `ansible-lint` 26.10.1. Sanity ignores live in `tests/sanity/ignore-X.Y.txt`. |
@@ -31,7 +31,7 @@ Verified on 2026-10-25. Version numbers come from GitHub Releases/tags API, PyPI
 Implication: pin by tag and by the published `.sha512`; expect a ~3 month refresh cycle.
 
 **Release assets** (`scap-security-guide-0.1.82.{zip,tar.gz,tar.bz2}` plus `.sha512` files): the zip contains `ssg-<product>-ds.xml` datastreams, `ansible/<product>-playbook-<profile>.yml` (284 files) and `bash/` remediation scripts. Source: asset list from the release above, contents inspected from the zip.
-Implication: yes, per-profile Ansible playbooks are shipped, but they are generated artifacts; the collection should consume the datastream/`oscap xccdf generate fix` or the playbooks, and verify the sha512.
+Implication: per-profile Ansible playbooks are shipped, but they are generated artifacts. Superseded by [ADR 0003](../adr/0003-native-module-remediation.md) and [ADR 0025](../adr/0025-own-ansible-remediation-only.md): the collection consumes only the datastreams, to audit, verifies the sha512, and never uses the playbooks, the Bash scripts, the `fix` elements or `oscap xccdf generate fix`.
 
 **Licence:** BSD-3-Clause (LICENSE header "SPDX license identifier: BSD-3-Clause", Red Hat copyright). Source: <https://raw.githubusercontent.com/ComplianceAsCode/content/master/LICENSE>. (GitHub's API reports NOASSERTION only because of the SPDX header format.)
 Implication: compatible with redistributing/wrapping in an Apache/GPL/MIT collection with attribution.

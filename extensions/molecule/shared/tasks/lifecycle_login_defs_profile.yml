@@ -1,0 +1,156 @@
+---
+- name: Login defaults profile | Name the rules and the toggles of the profile
+  ansible.builtin.set_fact:
+    ldo_rule_ids: "{{ ldo_case.rules | map('regex_replace', '^', ldo_prefix) | sort }}"
+    ldo_toggles: >-
+      {{ ldo_case.rules | map('regex_replace', '^', 'linux_compliance_rule_') | map('regex_replace', '$', '_enabled')
+         | list }}
+    ldo_text: >-
+      {{ ldo_original.content | b64decode
+         | regex_replace('(?m)^CREATE_HOME[ \t].*$', ldo_case.home | default('\g<0>')) }}
+
+- name: Login defaults profile | Write the login.defs that the profile starts from
+  ansible.builtin.copy:
+    content: "{{ ldo_text }}"
+    dest: /etc/login.defs
+    follow: false
+    mode: "{{ ldo_original_stat.stat.mode }}"
+    owner: root
+    group: root
+
+- name: Login defaults profile | Inspect login.defs before the rules of the profile run
+  ansible.builtin.stat:
+    path: /etc/login.defs
+    follow: false
+    get_checksum: true
+    checksum_algorithm: sha256
+  register: ldo_before
+
+- name: Login defaults profile | Switch the rules of the profile on
+  ansible.builtin.set_fact:
+    "{{ item }}": true
+  loop: "{{ ldo_toggles }}"
+
+- name: Login defaults profile | Pretend that the discover role verified the profile, which selects the rules
+  ansible.builtin.set_fact:
+    linux_compliance_remediate_profile: "{{ ldo_case.profile }}"
+    linux_compliance_discovered: >-
+      {{ ldo_profile | combine({'profile_id': 'xccdf_org.ssgproject.content_profile_' ~ ldo_case.profile,
+                                'rule_ids': ldo_rule_ids}) }}
+
+- name: Login defaults profile | Apply the rules of the profile in check mode
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: true
+    lifecycle_family: login_defs
+    lifecycle_rule_ids: "{{ ldo_rule_ids }}"
+
+- name: Login defaults profile | Inspect login.defs after check mode
+  ansible.builtin.stat:
+    path: /etc/login.defs
+    follow: false
+    get_checksum: true
+    checksum_algorithm: sha256
+  register: ldo_checked
+
+- name: Login defaults profile | Check that check mode reported every change and made none
+  ansible.builtin.assert:
+    that:
+      - lifecycle_results | map(attribute='rule_id') | list == ldo_rule_ids
+      - lifecycle_results | map(attribute='status') | unique | list == ['applied']
+      - lifecycle_results | rejectattr('changed') | list == []
+      - ldo_checked.stat.checksum == ldo_before.stat.checksum
+    fail_msg: "{{ ldo_label }}, {{ ldo_case.profile }}, check mode: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Login defaults profile | Apply the rules of the profile
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+    lifecycle_family: login_defs
+    lifecycle_rule_ids: "{{ ldo_rule_ids }}"
+
+- name: Login defaults profile | Read the ledger after the apply of the profile
+  freesecdev.linux_compliance.control_state:
+    action: list
+  register: ldo_ledger
+
+- name: Login defaults profile | Read login.defs after the apply of the profile
+  ansible.builtin.slurp:
+    src: /etc/login.defs
+  register: ldo_applied
+
+- name: Login defaults profile | Check that every line of the profile is set once, with its value, and recorded
+  vars:
+    ldo_applied_text: "{{ ldo_applied.content | b64decode }}"
+    ldo_newline: "\n"
+    ldo_counts: >-
+      {%- set counts = [] -%}
+      {%- for line in ldo_case.lines -%}
+      {%- set _ = counts.append(ldo_applied_text
+            | regex_findall('(?mi)^[ \t]*' ~ (line.split(' ') | first) ~ '(?:[ \t].*)?$') | length) -%}
+      {%- endfor -%}
+      {{ counts }}
+  ansible.builtin.assert:
+    that:
+      - lifecycle_results | map(attribute='status') | unique | list == ['applied']
+      - >-
+        ldo_ledger.entries | selectattr('rule_id', 'in', ldo_rule_ids) | map(attribute='rule_id') | sort
+        == ldo_rule_ids
+      - ldo_case.lines | reject('in', ldo_applied_text.split(ldo_newline)) | list == []
+      - ldo_counts | unique | list == [1]
+    fail_msg: "{{ ldo_label }}, {{ ldo_case.profile }}, apply: {{ lifecycle_results }}, counts {{ ldo_counts }}"
+    quiet: true
+
+- name: Login defaults profile | Apply the rules of the profile again
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+    lifecycle_family: login_defs
+    lifecycle_rule_ids: "{{ ldo_rule_ids }}"
+
+- name: Login defaults profile | Check that the second apply found every rule compliant
+  ansible.builtin.assert:
+    that:
+      - lifecycle_results | map(attribute='status') | unique | list == ['compliant']
+      - lifecycle_results | selectattr('changed') | list == []
+    fail_msg: "{{ ldo_label }}, {{ ldo_case.profile }}, second apply: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Login defaults profile | Switch the rules of the profile off
+  ansible.builtin.set_fact:
+    "{{ item }}": false
+  loop: "{{ ldo_toggles }}"
+
+- name: Login defaults profile | Clean up the rules of the profile
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+    lifecycle_family: login_defs
+    lifecycle_rule_ids: "{{ ldo_rule_ids }}"
+
+- name: Login defaults profile | Inspect login.defs after the cleanup of the profile
+  ansible.builtin.stat:
+    path: /etc/login.defs
+    follow: false
+    get_checksum: true
+    checksum_algorithm: sha256
+  register: ldo_after
+
+- name: Login defaults profile | Check that every rule was restored and login.defs is byte for byte as before
+  ansible.builtin.assert:
+    that:
+      - lifecycle_results | map(attribute='rule_id') | list == ldo_rule_ids
+      - lifecycle_results | map(attribute='status') | unique | list == ['restored']
+      - ldo_after.stat.checksum == ldo_before.stat.checksum
+    fail_msg: "{{ ldo_label }}, {{ ldo_case.profile }}, cleanup: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Login defaults profile | Switch the rules of the profile on again
+  ansible.builtin.set_fact:
+    "{{ item }}": true
+  loop: "{{ ldo_toggles }}"

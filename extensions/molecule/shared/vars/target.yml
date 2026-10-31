@@ -18,6 +18,7 @@ molecule_other_native_topics:
   - banners
   - faillock
   - pwhistory
+  - login_defs
   - pwquality
   - ssh
   - sudo

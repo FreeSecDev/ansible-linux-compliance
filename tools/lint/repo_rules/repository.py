@@ -43,6 +43,7 @@ from tools.lint.repo_rules.load_locations import (
     repository_path,
 )
 from tools.lint.repo_rules.names import FILE_IO_IMPORTERS, SHEBANG_PREFIX
+from tools.lint.repo_rules.own_remediation import own_remediation_findings
 from tools.lint.repo_rules.rendered_files import NUL, rendered_file_findings
 from tools.lint.repo_rules.yaml_text import check_document_start, check_yaml_comments
 
@@ -122,7 +123,8 @@ def check_file(
         for violation in _rendered_violations(path, data, relative)
         if violation not in found
     ]
-    return [*violations, *found, *rendered]
+    own = own_remediation_findings(path, relative, data)
+    return [*violations, *found, *rendered, *own]
 
 
 def _is_executed(relative: Path | None) -> bool:

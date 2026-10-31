@@ -458,6 +458,7 @@ def test_the_repository_declarations_pass_against_the_repository_catalogue(tmp_p
         "pwquality",
         "pwhistory",
         "faillock",
+        "login_defs",
         "sudo",
     ]
     assert errors == []
@@ -950,7 +951,7 @@ def test_regression_groups_are_planned_on_the_platforms_whose_docker_scenario_ru
     }
 
 
-def test_the_repository_declares_regression_groups_of_every_native_topic() -> None:
+def test_the_repository_declares_regression_groups_for_pwquality_ssh_and_sudo() -> None:
     found = lifecycle.regression_platforms(REPOSITORY_ROOT)
     assert found["pwquality"] == {"changes": frozenset({"ubuntu", "rhel_compatible"})}
     assert found["sudo"] == {
@@ -968,8 +969,14 @@ def test_the_repository_declares_regression_groups_of_every_native_topic() -> No
         "profiles": frozenset({"ubuntu", "rhel_compatible"}),
     }
     assert found["pwhistory"] == {"changes": frozenset({"rhel_compatible"})}
+    assert found["login_defs"] == {
+        "changes": frozenset({"ubuntu", "rhel_compatible"}),
+        "refusals": frozenset({"ubuntu", "rhel_compatible"}),
+        "values": frozenset({"ubuntu", "rhel_compatible"}),
+        "profiles": frozenset({"ubuntu", "rhel_compatible"}),
+    }
     assert found["file_permissions"] == {}
-    assert len(lifecycle.dispatched_regressions(REPOSITORY_ROOT)) == 13
+    assert len(lifecycle.dispatched_regressions(REPOSITORY_ROOT)) == 17
 
 
 @pytest.mark.parametrize(
@@ -1151,20 +1158,20 @@ def test_a_pre_state_may_set_lines_of_a_rewritten_file(tmp_path: Path) -> None:
             "pre_states[0].files[0].lines[0] needs a regexp on one line",
         ),
         (
+            lines_state([LINE], "/etc/cron.d/x"),
+            "pre_states[0].files[0] sets lines of /etc/cron.d/x, which state.files must declare",
+        ),
+        (
             changed(
                 state=REWRITTEN_STATE,
                 pre_states=[
                     {
                         "name": "a",
-                        "files": [{"path": "/etc/crontab", "lines": [LINE], "content": "x"}],
+                        "files": [{"path": "/etc/crontab", "lines": [LINE], "content": "x\n"}],
                     }
                 ],
             ),
-            "pre_states[0].files[0] cannot both add a file with content and set lines of it",
-        ),
-        (
-            lines_state([LINE], "/etc/cron.d/x"),
-            "pre_states[0].files[0] sets lines of /etc/cron.d/x, which state.files must declare",
+            "pre_states[0].files[0] sets both content and lines",
         ),
     ],
 )

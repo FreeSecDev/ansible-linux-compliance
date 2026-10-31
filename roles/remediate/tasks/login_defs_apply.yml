@@ -1,0 +1,298 @@
+---
+- name: Login defaults | Refuse to set a setting that the dispatcher did not plan
+  ansible.builtin.assert:
+    that:
+      - linux_compliance_remediate_enabled is boolean
+      - linux_compliance_remediate_enabled
+      - __linux_compliance_remediate_family is mapping
+      - __linux_compliance_remediate_family.name == 'login_defs'
+      - __linux_compliance_remediate_rule is mapping
+      - __linux_compliance_remediate_rule.family == 'login_defs'
+      - >-
+        __linux_compliance_remediate_rule.parameters.setting
+        is match(__linux_compliance_remediate_login_defs_setting_pattern)
+      - __linux_compliance_remediate_rule.parameters.comparison in __linux_compliance_remediate_ld_value_patterns
+      - __linux_compliance_remediate_ld_values[__linux_compliance_remediate_rule.rule_id] is string
+      - __linux_compliance_remediate_plan is defined
+      - __linux_compliance_remediate_plan is mapping
+      - __linux_compliance_remediate_plan.enabled is true
+      - >-
+        __linux_compliance_remediate_rule in
+        ((__linux_compliance_remediate_plan.families
+         | selectattr('name', 'equalto', 'login_defs') | list | first | default({}))).apply | default([])
+    fail_msg: >-
+      login_defs_apply.yml runs only for a rule that the remediate dispatcher planned to apply, with
+      linux_compliance_remediate_enabled true. No change was made to the host.
+    quiet: true
+  tags:
+    - always
+
+- name: Login defaults | Read the method and the values that the ledger entry of the rule records
+  vars:
+    __linux_compliance_remediate_ld_recorded: >-
+      {{ (__linux_compliance_remediate_rule.ledger_entry.prior_values | default([])
+          | items2dict(key_name='name', value_name='value'))
+         if __linux_compliance_remediate_rule.ledger_entry is mapping else {} }}
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_ld_entry: "{{ __linux_compliance_remediate_ld_recorded }}"
+    __linux_compliance_remediate_ld_entry_method: >-
+      {{ none if __linux_compliance_remediate_rule.ledger_entry is not mapping
+         else __linux_compliance_remediate_ld_recorded.method | default('unknown') }}
+  tags:
+    - always
+
+- name: Login defaults | Inspect login.defs with its SHA-256 before changing it, without following a link
+  ansible.builtin.stat:
+    path: "{{ __linux_compliance_remediate_login_defs }}"
+    follow: false
+    get_checksum: true
+    checksum_algorithm: sha256
+    get_mime: false
+    get_attributes: false
+  register: __linux_compliance_remediate_ld_stat
+  tags:
+    - always
+
+- name: Login defaults | Read login.defs
+  ansible.builtin.slurp:
+    src: "{{ __linux_compliance_remediate_login_defs }}"
+  register: __linux_compliance_remediate_ld_current
+  when: __linux_compliance_remediate_ld_stat.stat.isreg | default(false)
+  tags:
+    - always
+
+- name: Login defaults | Find the lines that set the setting in any case, and the drop-ins that set it as well
+  vars:
+    __linux_compliance_remediate_ld_setting: "{{ __linux_compliance_remediate_rule.parameters.setting }}"
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_ld_regexp: >-
+      {{ '(?i)^[ \t]*' ~ __linux_compliance_remediate_ld_setting ~ '(?:[ \t]|$)' }}
+    __linux_compliance_remediate_ld_found: >-
+      {{ ((__linux_compliance_remediate_ld_current.content | b64decode)
+          | regex_findall('(?im)^[ \t]*' ~ __linux_compliance_remediate_ld_setting ~ '(?:[ \t].*)?$'))
+         if __linux_compliance_remediate_ld_current is not skipped else [] }}
+    __linux_compliance_remediate_ld_overriding: >-
+      {{ (__linux_compliance_remediate_ld_dropin_texts | dict2items
+          | selectattr('value', 'search', '(?im)^[ \t]*' ~ __linux_compliance_remediate_ld_setting ~ '(?:[ \t]|$)')
+          | map(attribute='key') | list)
+         if __linux_compliance_remediate_rule.parameters.reads_dropins | default(false) else [] }}
+    __linux_compliance_remediate_ld_strict: >-
+      {{ '^[ \t]*' ~ __linux_compliance_remediate_ld_setting ~ '[ \t]+('
+         ~ ('0|[1-9][0-9]{0,5}' if __linux_compliance_remediate_rule.parameters.comparison in ['at_most', 'at_least']
+            else '0[0-7]{2}' if __linux_compliance_remediate_rule.parameters.comparison == 'umask'
+            else __linux_compliance_remediate_ld_values[__linux_compliance_remediate_rule.rule_id])
+         ~ ')[ \t]*$' }}
+    __linux_compliance_remediate_ld_token_pattern: >-
+      {{ '(?i)^[ \t]*' ~ __linux_compliance_remediate_ld_setting ~ '[ \t]+([^ \t#]+)' }}
+  tags:
+    - always
+
+- name: Login defaults | Read the value of the one line in the strict form and its first word as an administrator set it
+  vars:
+    __linux_compliance_remediate_ld_one: >-
+      {{ __linux_compliance_remediate_ld_found | first
+         if __linux_compliance_remediate_ld_found | length == 1 else '' }}
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_ld_set: >-
+      {{ __linux_compliance_remediate_ld_one | regex_replace(__linux_compliance_remediate_ld_strict, '\1')
+         if __linux_compliance_remediate_ld_one is match(__linux_compliance_remediate_ld_strict) else none }}
+    __linux_compliance_remediate_ld_token: >-
+      {{ __linux_compliance_remediate_ld_one
+         | regex_replace(__linux_compliance_remediate_ld_token_pattern ~ '.*$', '\1')
+         if __linux_compliance_remediate_ld_one is match(__linux_compliance_remediate_ld_token_pattern) else '' }}
+    __linux_compliance_remediate_ld_quoted: "{{ __linux_compliance_remediate_ld_one is search('\"') }}"
+    __linux_compliance_remediate_ld_getdef: >-
+      {{ __linux_compliance_remediate_ld_one
+         | regex_replace('(?i)^[ \t]*' ~ __linux_compliance_remediate_rule.parameters.setting
+                         ~ '[ \t]+[ \t"]*([^ \t#"]*).*$', '\1')
+         if __linux_compliance_remediate_ld_one
+            is match('(?i)^[ \t]*' ~ __linux_compliance_remediate_rule.parameters.setting ~ '[ \t]+')
+         else '' }}
+  tags:
+    - always
+
+- name: Login defaults | Decide whether the setting satisfies the content's check and the value to write, never looser
+  vars:
+    __linux_compliance_remediate_ld_comparison: "{{ __linux_compliance_remediate_rule.parameters.comparison }}"
+    __linux_compliance_remediate_ld_required: >-
+      {{ __linux_compliance_remediate_ld_values[__linux_compliance_remediate_rule.rule_id] }}
+    __linux_compliance_remediate_ld_readings: >-
+      {%- set token = __linux_compliance_remediate_ld_token -%}
+      {%- set readings = [] -%}
+      {%- if token is match('^[0-9]{1,6}$') -%}
+      {%- set _ = readings.append(token | int) -%}
+      {%- endif -%}
+      {%- if token is match('^0[0-7]{1,6}$') -%}
+      {%- set _ = readings.append(token | int(base=8)) -%}
+      {%- endif -%}
+      {%- if token is match('^0[xX][0-9a-fA-F]{1,4}$') -%}
+      {%- set _ = readings.append(token[2:] | int(base=16)) -%}
+      {%- endif -%}
+      {{ readings }}
+    __linux_compliance_remediate_ld_bits: >-
+      {%- set required = __linux_compliance_remediate_ld_required | int(base=8) -%}
+      {%- set actual = (__linux_compliance_remediate_ld_token
+            if __linux_compliance_remediate_ld_token
+               is match(__linux_compliance_remediate_login_defs_umask_read_pattern)
+            else '0') | int(base=8) -%}
+      {%- set state = namespace(missing=0, union=0) -%}
+      {%- for bit in [256, 128, 64, 32, 16, 8, 4, 2, 1] -%}
+      {%- if (required // bit) % 2 == 1 and (actual // bit) % 2 == 0 -%}
+      {%- set state.missing = state.missing + 1 -%}
+      {%- endif -%}
+      {%- if (required // bit) % 2 == 1 or (actual // bit) % 2 == 1 -%}
+      {%- set state.union = state.union + bit -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {{ {'missing': state.missing, 'union': '%03o' | format(state.union)} }}
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_ld_satisfied: >-
+      {{ __linux_compliance_remediate_ld_set is not none
+         and ((__linux_compliance_remediate_ld_comparison == 'at_most'
+               and __linux_compliance_remediate_ld_set | int <= __linux_compliance_remediate_ld_required | int)
+              or (__linux_compliance_remediate_ld_comparison == 'at_least'
+                  and __linux_compliance_remediate_ld_set | int >= __linux_compliance_remediate_ld_required | int)
+              or (__linux_compliance_remediate_ld_comparison == 'umask'
+                  and __linux_compliance_remediate_ld_bits.missing == 0)
+              or __linux_compliance_remediate_ld_comparison == 'equal') }}
+    __linux_compliance_remediate_ld_unreadable: >-
+      {{ __linux_compliance_remediate_ld_token | length > 0
+         and ((__linux_compliance_remediate_ld_comparison == 'umask'
+               and __linux_compliance_remediate_ld_token
+                   is not match(__linux_compliance_remediate_login_defs_umask_read_pattern))
+              or (__linux_compliance_remediate_ld_comparison in ['at_most', 'at_least']
+                  and __linux_compliance_remediate_ld_readings | length == 0
+                  and __linux_compliance_remediate_ld_token
+                      is match(__linux_compliance_remediate_login_defs_base0_pattern)
+                  and __linux_compliance_remediate_ld_token is not match('^"?-')
+                  and not (__linux_compliance_remediate_ld_comparison == 'at_most'
+                           and __linux_compliance_remediate_ld_token is match('^[1-9][0-9]{6,}$')))
+              or (__linux_compliance_remediate_ld_comparison in ['at_most', 'at_least']
+                  and __linux_compliance_remediate_ld_readings | length == 0
+                  and __linux_compliance_remediate_ld_quoted
+                  and __linux_compliance_remediate_ld_getdef
+                      is match(__linux_compliance_remediate_login_defs_getdef_number_pattern))) }}
+    __linux_compliance_remediate_ld_line: >-
+      {{ __linux_compliance_remediate_rule.parameters.setting ~ ' '
+         ~ (__linux_compliance_remediate_ld_bits.union if __linux_compliance_remediate_ld_comparison == 'umask'
+            else ([__linux_compliance_remediate_ld_required | int] + __linux_compliance_remediate_ld_readings) | min
+            if __linux_compliance_remediate_ld_comparison == 'at_most'
+            else ([__linux_compliance_remediate_ld_required | int] + __linux_compliance_remediate_ld_readings) | max
+            if __linux_compliance_remediate_ld_comparison == 'at_least'
+            else __linux_compliance_remediate_ld_required) | string }}
+  tags:
+    - always
+
+- name: Login defaults | Decide whether the setting must be written
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_ld_status: >-
+      {{ 'method_changed' if __linux_compliance_remediate_ld_entry_method not in [none, 'line']
+         else 'notapplicable' if not __linux_compliance_remediate_ld_stat.stat.exists
+         else 'not_regular_file' if not __linux_compliance_remediate_ld_stat.stat.isreg
+         else 'not_directory' if __linux_compliance_remediate_ld_not_directory
+              and __linux_compliance_remediate_rule.parameters.reads_dropins | default(false)
+         else 'overridden' if __linux_compliance_remediate_ld_overriding | length > 0
+         else 'duplicate_setting' if __linux_compliance_remediate_ld_found | length > 1
+         else 'compliant' if __linux_compliance_remediate_ld_satisfied
+         else 'unreadable_value' if __linux_compliance_remediate_ld_unreadable
+         else 'applied' }}
+  tags:
+    - always
+
+- name: Login defaults | Record the prior line of the setting, the line written and the state of login.defs
+  freesecdev.linux_compliance.control_state:
+    action: record
+    rule_id: "{{ __linux_compliance_remediate_rule.rule_id }}"
+    family: "{{ __linux_compliance_remediate_rule.family }}"
+    revert_strategy: "{{ __linux_compliance_remediate_rule.revert_strategy }}"
+    prior_values:
+      - name: method
+        value: line
+      - name: setting_line
+        value: "{{ __linux_compliance_remediate_ld_found | first | default(none) }}"
+      - name: written_line
+        value: "{{ __linux_compliance_remediate_ld_line }}"
+      - name: mode
+        value: "{{ __linux_compliance_remediate_ld_stat.stat.mode }}"
+      - name: owner
+        value: "{{ __linux_compliance_remediate_ld_stat.stat.uid | string }}"
+      - name: group
+        value: "{{ __linux_compliance_remediate_ld_stat.stat.gid | string }}"
+      - name: sha256
+        value: "{{ __linux_compliance_remediate_ld_stat.stat.checksum }}"
+    collection_version: "{{ __linux_compliance_remediate_collection_version }}"
+  register: __linux_compliance_remediate_ld_record
+  when:
+    - __linux_compliance_remediate_ld_status == 'applied'
+    - __linux_compliance_remediate_rule.ledger_entry is none
+  tags:
+    - always
+
+- name: Login defaults | Write the setting with the value that the content's check accepts into login.defs
+  ansible.builtin.lineinfile:
+    path: "{{ __linux_compliance_remediate_login_defs }}"
+    regexp: "{{ __linux_compliance_remediate_ld_regexp }}"
+    line: "{{ __linux_compliance_remediate_ld_line }}"
+    state: present
+    create: false
+  register: __linux_compliance_remediate_ld_write
+  when: __linux_compliance_remediate_ld_status == 'applied'
+  tags:
+    - always
+
+- name: Login defaults | Keep the recorded prior state and record the line written again, after the write
+  freesecdev.linux_compliance.control_state:
+    action: record
+    rule_id: "{{ __linux_compliance_remediate_rule.rule_id }}"
+    family: "{{ __linux_compliance_remediate_rule.family }}"
+    revert_strategy: "{{ __linux_compliance_remediate_rule.revert_strategy }}"
+    prior_values: >-
+      {{ __linux_compliance_remediate_ld_entry | combine({'written_line': __linux_compliance_remediate_ld_line})
+         | dict2items(key_name='name', value_name='value') }}
+    collection_version: "{{ __linux_compliance_remediate_collection_version }}"
+    replace: true
+  register: __linux_compliance_remediate_ld_rerecord
+  when:
+    - __linux_compliance_remediate_ld_status == 'applied'
+    - __linux_compliance_remediate_ld_entry_method == 'line'
+    - __linux_compliance_remediate_ld_entry.written_line | default(none) != __linux_compliance_remediate_ld_line
+  tags:
+    - always
+
+- name: Login defaults | Add the result of the rule
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_results: >-
+      {{ __linux_compliance_remediate_results + [{
+           'rule_id': __linux_compliance_remediate_rule.rule_id,
+           'family': __linux_compliance_remediate_rule.family,
+           'action': 'apply',
+           'status': __linux_compliance_remediate_ld_status,
+           'reason': {
+             'method_changed': 'the ledger entry was recorded by the '
+                               ~ __linux_compliance_remediate_ld_entry_method ~ ' method; clean it up first',
+             'notapplicable': __linux_compliance_remediate_login_defs
+                              ~ ' does not exist, so shadow-utils is not installed',
+             'not_regular_file': __linux_compliance_remediate_login_defs
+                                 ~ ' is a symbolic link or not a regular file; nothing is written through it',
+             'not_directory': __linux_compliance_remediate_login_defs_directory
+                              ~ ' is a symbolic link or not a directory, so its drop-ins cannot be read',
+             'overridden': 'the drop-ins ' ~ (__linux_compliance_remediate_ld_overriding | join(', '))
+                           ~ ' set ' ~ __linux_compliance_remediate_rule.parameters.setting
+                           ~ ' as well; the collection does not change files it does not own',
+             'duplicate_setting': __linux_compliance_remediate_login_defs ~ ' sets '
+                                  ~ __linux_compliance_remediate_rule.parameters.setting ~ ' on '
+                                  ~ __linux_compliance_remediate_ld_found | length ~ ' lines',
+             'unreadable_value': 'the line ' ~ (__linux_compliance_remediate_ld_found | first | default('') | to_json)
+                                 ~ ' of ' ~ __linux_compliance_remediate_login_defs ~ ' has the value '
+                                 ~ (__linux_compliance_remediate_ld_token | to_json)
+                                 ~ ', which shadow-utils or pam_umask may read in a form that the collection cannot'
+                                 ~ ' compare, so a written value could be looser; nothing was written'
+           }[__linux_compliance_remediate_ld_status] | default(none),
+           'changed': (__linux_compliance_remediate_ld_write is changed)
+                      or (__linux_compliance_remediate_ld_rerecord is changed),
+           'message': __linux_compliance_remediate_login_defs ~ ' '
+                      ~ __linux_compliance_remediate_rule.parameters.setting ~ ': '
+                      ~ __linux_compliance_remediate_ld_status
+         }] }}
+  tags:
+    - always

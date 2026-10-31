@@ -11,20 +11,23 @@ a value and never substitutes another profile's value.
 
 :func:`read_values` verifies the pinned SHA-256 of a datastream before it parses a byte, parses
 it with the bounded parser of :mod:`xmlsafe` while it hashes it a second time, and keeps only
-four things of the XCCDF benchmark: every ``Value`` with its options (the option without a
-``selector`` is the default), the ``refine-value`` selectors of every profile, the values that
-the checks of every rule export and the values that the fixes of every rule substitute. A rule
-whose checks do not export the named value, a profile that refines it to an option the value
-does not have, a value without a default and a datastream that does not define the value are
-errors; nothing is guessed. Values are kept as written in the BSD-3-Clause content and are split
-into chunks that the catalogue can render within its line length.
+three things of the XCCDF benchmark: every ``Value`` with its options (the option without a
+``selector`` is the default), the ``refine-value`` selectors of every profile and the values that
+the checks of every rule export. A rule whose checks do not export the named value, a profile
+that refines it to an option the value does not have, a value without a default and a
+datastream that does not define the value are errors; nothing is guessed. Values are kept as
+written in the BSD-3-Clause content and are split into chunks that the catalogue can render
+within its line length.
 
-Some checks accept a range and leave the exact value to the profile's fix: the check of
-``sudo_require_reauthentication`` accepts any non-negative ``timestamp_timeout``, while the fix
-writes the profile's ``var_sudo_timestamp_timeout`` (15 minutes for CIS, 0 for the STIG). A rule
-whose catalogue entry sets ``profile_value_source: fix`` takes the value that the content's own
-fixes substitute instead (:data:`FIX_SOURCE`, FREES-175); the fixes must substitute it, and the
-profile's refinement is still the only source of the value.
+Remediation is the collection's own Ansible (ADR 0025): the reader never looks at the ``fix``
+elements of the content, whatever they contain, and the repository guard refuses Python that
+names them (FREES-188). Some checks accept a range and do not export the value that the profile
+asks for: the check of ``sudo_require_reauthentication`` accepts any non-negative
+``timestamp_timeout``. The catalogue entry of such a rule pins the XCCDF ``Value`` identifier
+itself in ``profile_value_id``, and :func:`resolve` with ``pinned`` takes the value from the
+profile's ``refine-value`` and the ``Value``'s options alone (15 minutes for CIS, 0 for the
+STIG). A golden test pins the identifier and the value of every profile that selects the rule,
+so a content update that changes either fails before it reaches a host.
 """
 
 from __future__ import annotations
@@ -49,9 +52,6 @@ DEFAULT_SELECTOR: Final[str] = ""
 MAX_VALUE_LENGTH: Final[int] = 16384
 MAX_CHUNK: Final[int] = 72
 MAX_BYTES: Final[int] = catalog.DEFAULT_MAX_BYTES
-CHECK_SOURCE: Final[str] = "check"
-FIX_SOURCE: Final[str] = "fix"
-SOURCES: Final[tuple[str, ...]] = (CHECK_SOURCE, FIX_SOURCE)
 
 _BENCHMARK: Final[str] = f"{XCCDF}Benchmark"
 _VALUE: Final[str] = f"{XCCDF}Value"
@@ -60,8 +60,6 @@ _PROFILE: Final[str] = f"{XCCDF}Profile"
 _REFINE: Final[str] = f"{XCCDF}refine-value"
 _RULE: Final[str] = f"{XCCDF}Rule"
 _EXPORT: Final[str] = f"{XCCDF}check-export"
-_FIX: Final[str] = f"{XCCDF}fix"
-_SUB: Final[str] = f"{XCCDF}sub"
 
 
 class ProfileValueError(ValueError):
@@ -70,19 +68,17 @@ class ProfileValueError(ValueError):
 
 @dataclass(frozen=True)
 class StreamValues:
-    """The values, profile refinements, check exports and fix values of one verified datastream.
+    """The values, profile refinements and check exports of one verified datastream.
 
     ``values`` maps every value identifier to its options by selector, the default under
     :data:`DEFAULT_SELECTOR`; ``refinements`` maps every profile identifier to the selector it
-    chooses per value; ``exports`` maps every rule identifier to the values its checks export;
-    ``fixes`` maps every rule identifier to the values that its fixes substitute.
+    chooses per value; ``exports`` maps every rule identifier to the values its checks export.
     """
 
     content_sha256: str
     values: dict[str, dict[str, str]]
     refinements: dict[str, dict[str, str]]
     exports: dict[str, frozenset[str]]
-    fixes: dict[str, frozenset[str]]
 
 
 @dataclass(frozen=True)
@@ -102,7 +98,6 @@ class _Collector:
         self.values: dict[str, dict[str, str]] = {}
         self.refinements: dict[str, dict[str, str]] = {}
         self.exports: dict[str, set[str]] = {}
-        self.fixes: dict[str, set[str]] = {}
         self.value_id = ""
         self.selector: str | None = None
         self.profile_id = ""
@@ -133,11 +128,8 @@ class _Collector:
         elif name == _RULE:
             self.rule_id = attributes.get("id", "")
             self.exports.setdefault(self.rule_id, set())
-            self.fixes.setdefault(self.rule_id, set())
         elif name == _EXPORT and self._inside(_RULE):
             self.exports[self.rule_id].add(attributes.get("value-id", ""))
-        elif name == _SUB and self._inside(_FIX) and self._inside(_RULE):
-            self.fixes[self.rule_id].add(attributes.get("idref", ""))
 
     def end(self, name: str, /) -> None:
         self.stack.pop()
@@ -190,7 +182,6 @@ def read_values(path: str, expected_sha256: str, max_bytes: int = MAX_BYTES) -> 
         values=collector.values,
         refinements=collector.refinements,
         exports={rule: frozenset(found) for rule, found in collector.exports.items()},
-        fixes={rule: frozenset(found) for rule, found in collector.fixes.items()},
     )
 
 
@@ -230,23 +221,22 @@ def resolve(
     streams: Sequence[StreamProfiles],
     rule_id: str,
     value_short_id: str,
-    source: str = CHECK_SOURCE,
+    *,
+    pinned: bool = False,
 ) -> list[dict[str, object]]:
     """Return the value of ``value_short_id`` for every profile that selects ``rule_id``.
 
     Each entry names the datastream and its pinned SHA-256, the sorted short identifiers of the
     profiles that share one value, and that value as chunks. Datastreams whose profiles do not
-    select the rule contribute nothing. With ``source`` :data:`CHECK_SOURCE` the rule's checks
-    must export the value, with :data:`FIX_SOURCE` its fixes must substitute it.
+    select the rule contribute nothing. Without ``pinned`` the rule's checks must export the
+    value; with it the catalogue pins the identifier (``profile_value_id``), and the datastream
+    must still define the value. The value always comes from the profile's ``refine-value`` and
+    the ``Value``'s options, never from anything else in the content.
 
     Raises:
-        ProfileValueError: When ``source`` is unknown, a datastream that selects the rule cannot
-            supply the value, or the rule's checks there do not export it (or its fixes do not
-            substitute it).
+        ProfileValueError: When a datastream that selects the rule cannot supply the value, or,
+            without ``pinned``, the rule's checks there do not export it.
     """
-    if source not in SOURCES:
-        message = f"the value source {source!r} is not one of {list(SOURCES)}"
-        raise ProfileValueError(message)
     value_id = VALUE_PREFIX + value_short_id
     entries: list[dict[str, object]] = []
     for stream in streams:
@@ -255,13 +245,8 @@ def resolve(
         )
         if not selecting:
             continue
-        if source == CHECK_SOURCE and value_id not in stream.values.exports.get(
-            rule_id, frozenset()
-        ):
+        if not pinned and value_id not in stream.values.exports.get(rule_id, frozenset()):
             message = f"{stream.name}: the checks of {rule_id} do not export {value_id}"
-            raise ProfileValueError(message)
-        if source == FIX_SOURCE and value_id not in stream.values.fixes.get(rule_id, frozenset()):
-            message = f"{stream.name}: the fixes of {rule_id} do not substitute {value_id}"
             raise ProfileValueError(message)
         grouped: dict[str, list[str]] = {}
         for profile_id in selecting:

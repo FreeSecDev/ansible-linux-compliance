@@ -23,6 +23,7 @@ NATIVE_FAMILIES = (
     "pwquality",
     "pwhistory",
     "faillock",
+    "login_defs",
     "sudo",
 )
 
