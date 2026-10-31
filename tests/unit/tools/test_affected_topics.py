@@ -200,17 +200,48 @@ def role_task_files() -> list[str]:
     )
 
 
+def registry() -> dict[str, str | None]:
+    """Return every family of the registry with its umbrella, or ``None``."""
+    data = cast(
+        "dict[str, list[dict[str, object]]]",
+        load_yaml((REPOSITORY_ROOT / generate_toggles.CATALOGUE).read_text(encoding="utf-8")),
+    )
+    return {
+        str(entry["name"]): str(entry["umbrella"]) if "umbrella" in entry else None
+        for entry in data["__linux_compliance_remediate_families"]
+    }
+
+
 def test_every_role_task_file_belongs_to_the_native_topic_of_its_name(trees: Trees) -> None:
     files = role_task_files()
     assert files
     families = native()
+    umbrella_of = registry()
+    shared = 0
     for relative in files:
         stem = Path(relative).stem
-        expected = {
-            family for family in families if stem == family or stem.startswith(family + "_")
+        named = {
+            family for family in umbrella_of if stem == family or stem.startswith(family + "_")
         }
-        assert len(expected) == 1, relative
+        expected = named
+        if not named & set(families):
+            shared += 1
+            including = [
+                family
+                for family in families
+                if umbrella_of[family] is not None and stem.startswith(f"{umbrella_of[family]}_")
+            ]
+            assert len(including) > 1, relative
+            expected = {
+                name
+                for family in including
+                for name in umbrella_of
+                if family == name or family.startswith(name + "_")
+            }
+        else:
+            assert len(named & set(families)) == 1, relative
         assert set(trees.context.classify(relative)[0]) == expected, relative
+    assert shared == 3
 
 
 def test_every_regression_file_belongs_to_the_topics_whose_groups_name_it(trees: Trees) -> None:
