@@ -509,10 +509,12 @@ with `ANSIBLE_HOME` and `ANSIBLE_COLLECTIONS_PATH` set as the `Makefile` exports
 variables the step runs every native topic in both modes. Before any topic runs, the harness refuses a selection that
 sets only one of them, names a topic without a native rule or names a mode other than `topic` and `rule`. On an instance where
 `converge` already applied a topic, the harness refuses to run, because the state before the collection is then
-unknown. `converge` and `verify` therefore prove the reference rule alone: their plays set the topic toggles of every
-other native topic to `false` (`molecule_other_native_topics` in `shared/vars/target.yml`), and their first task fails
-when that list differs from the native topics of the catalogue, so a new native topic cannot be applied by them by
-accident.
+unknown. `converge` and `verify` therefore prove the reference rule alone: their first task,
+`shared/tasks/other_topics_off.yml`, sets the topic toggle of every other native topic to `false` and fails unless
+every one of them is `false`. The list, `molecule_other_native_topics` in `shared/vars/target.yml`, is derived from
+`roles/remediate/vars/rules.yml` at run time (every family with a rule in the catalogue, without the reference
+family), so a new native topic is switched off there without an edit to these playbooks and cannot be applied by
+them by accident (FREES-195). The libvirt `converge_libvirt.yml` and `verify_libvirt.yml` include the same file.
 
 ### What it runs
 
@@ -870,12 +872,13 @@ deletion and an addition. Nothing is listed per topic by hand:
 | `extensions/molecule/shared/vars/topics/<topic>.yml` | that topic |
 | a file of `extensions/molecule/shared/tasks` | the topics whose regression groups name it, and the topics of every file that includes it; a file that no topic owns and no topic file includes plans the full matrix |
 | `extensions/molecule/shared/tasks/lifecycle_regressions.yml` | the topics of each include that was added, removed or changed; any other change plans the full matrix |
-| `roles/remediate/vars/rules.yml` | the families whose registry entry, rules or `audit_only` list changed, a changed subsystem tag and the families of the rules it gains or loses; a change to the set or order of families, to the order of unchanged families' entries or to another key plans the full matrix |
+| `roles/remediate/vars/rules.yml` | the families whose registry entry, rules or `audit_only` list changed, a family that the registry gains or loses and its umbrella, a changed subsystem tag and the families of the rules it gains or loses; a reordered family, a family listed twice, a gained or lost family that heads an umbrella, a change to the order of unchanged families' entries or to another key plans the full matrix |
+| `roles/{audit,remediate}/defaults/main.yml` | per variable: a gained, lost or changed topic toggle `linux_compliance_<topic>_enabled` with a boolean value affects every family that the toggle controls (the family, the families of the umbrella, and the families of the rules of a subsystem tag that it or its umbrella names); any other variable or value plans the full matrix |
 | `roles/remediate/vars/main.yml` | the topics of the files that use each changed key; a key that no file or a shared file uses plans the full matrix |
-| `roles/{audit,remediate}/meta/argument_specs.yml` | none when only descriptions changed, else the full matrix |
+| `roles/{audit,remediate}/meta/argument_specs.yml` | per entry point and option, without descriptions: a gained, lost or changed topic toggle option with exactly the generated `type: bool` and `default: true` affects the families that the toggle controls, as above, and so does a family or umbrella that the choices of `linux_compliance_remediate_allow_disruptive` gain or lose; a change only to descriptions affects none; anything else plans the full matrix |
 | the role guards, `roles/remediate/tasks/dispatch.yml`, `playbooks/run_start.yml`, `content/catalogue.yml` | none: they are generated or a generator's input, checked for drift by the required `lint` and `test-suites` jobs, and their effect is classified through their sources |
 | documentation, changelog fragments, unit tests and fixtures, check-mode playbooks, the reporting, lint, docs and IaC tools, the SCC and OpenSCAP image definitions, linter and bot configuration | none |
-| anything else: the shared harness and tasks, images and pins, scenarios, plugins and `module_utils`, role defaults and entry points, content pins, `tools/roles`, `tools/molecule`, `ci.yml`, the `Makefile`, the Python lock, a symbolic link, an unknown path | the full matrix |
+| anything else: the shared harness and tasks, images and pins, scenarios, plugins and `module_utils`, the other role defaults and the entry points, content pins, `tools/roles`, `tools/molecule`, `ci.yml`, the `Makefile`, the Python lock, a symbolic link, an unknown path | the full matrix |
 
 The base revision decides, as for the [SCC smoke test](adr/0019-scc-scanner-backend-and-ci-image.md):
 `molecule-plan` reads `tools/molecule/plan-lifecycle.sh` from the base revision with `git show`, and the script runs the
@@ -890,12 +893,36 @@ reason for every path.
 a skipped `molecule-lifecycle` only when such a plan has exactly zero lifecycle legs, as for a pull request that
 touches no topic. Measured examples are in the pull request of FREES-189: one topic's task file plans that topic's
 legs on both platforms (four for `banners`, nine for `sudo`), and a documentation change plans none.
+Since FREES-195 the generated toggles are classified by their entries as well ([ADR 0011](adr/0011-control-toggles-and-cleanup.md#amendment-2026-10-31-topic-files-and-generated-toggles-plan-only-their-topics-frees-195)),
+so a topic that keeps to its own files plans only its own legs (see [below](#adding-a-topic-without-touching-shared-files)).
 
 Cross-topic interactions are caught only on `main` and nightly: a change that the mapping confines to one topic can
 still break another topic's legs, through state on the instance that both inspect or the order in which topics run,
 and only the full matrix shows it, after the merge. The other residual risks are in the ADR amendment. To see what a
 branch would plan, run `make molecule-plan` (`MOLECULE_PLAN_BASE` defaults to `origin/main`); it changes nothing and
 needs the base revision's planner.
+
+### Adding a topic without touching shared files
+
+A topic pull request plans only that topic's lifecycle legs (its `topic` and `rule` legs, one leg per regression
+group, and its libvirt lifecycle legs, plus the libvirt base and self-test legs that every plan keeps) when every path
+it changes is one of these:
+
+| Change | Files |
+|---|---|
+| The remediation | `roles/remediate/tasks/<topic>.yml` and helpers named `<topic>_*.yml`; a helper with another name (for example one that several topics of an umbrella share) belongs to the topics of the files that include it |
+| The catalogue | `content/catalogue.yml` and the files that `make catalogue` regenerates from it: `roles/remediate/vars/rules.yml` (the topic's registry entry, rules and `audit_only` list), `roles/{audit,remediate}/defaults/main.yml` and `meta/argument_specs.yml` (the topic's toggle and its choice in `linux_compliance_remediate_allow_disruptive`), the role guards and `roles/remediate/tasks/dispatch.yml` |
+| Role variables | new or changed keys of `roles/remediate/vars/main.yml` that only the topic's own files use |
+| The lifecycle | the declaration `extensions/molecule/shared/vars/topics/<topic>.yml`, the regression files that its groups name and the helpers that only they include, and the topic's own includes in `extensions/molecule/shared/tasks/lifecycle_regressions.yml` |
+| Everything else of the topic | documentation under `docs/`, the role README, golden and unit tests under `tests/unit` (`make test-content-golden` runs every `tests/unit/tools/test_content_golden*.py`, so a new golden test needs no `Makefile` change), check-mode playbooks under `tests/playbooks`, the changelog fragment |
+
+Do not edit `converge.yml`, `verify.yml`, `converge_libvirt.yml`, `verify_libvirt.yml` or `shared/vars/target.yml`
+for a new topic: they switch every native topic other than the reference topic off from the catalogue at run time.
+A topic that needs something of the shared harness (a new kind of state record, a package in the instance images, a
+change to `lifecycle_topic.yml`, `lifecycle_cycle.yml` or `check_lifecycle_topics.py`, a module or `module_utils`)
+changes shared code, which plans the full matrix; put that change in a pull request of its own, ahead of the topic,
+so that it runs the full matrix once and the topic pull request after it does not. `make molecule-plan` shows the
+scope, the topics and the reason for every path before you push.
 
 ### Declaring a topic
 
