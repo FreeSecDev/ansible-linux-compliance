@@ -348,6 +348,99 @@ root through the audited process helper ([ADR 0023](../adr/0023-native-ssh-serve
   original is left alone.
 - **Residual:** a package update that rewrites a vendor file also stops the revert, which then needs a review.
 
+## Kernel parameter remediation on a managed host
+
+The `sysctl`, `ipv4_parameters` and `ipv6_parameters` families of the `remediate` role write drop-ins below
+`/etc/sysctl.d`, change conflicting lines of Ubuntu's procps files there, and the module `sysctl_runtime` writes
+running values below `/proc/sys` as root ([ADR 0029](../adr/0029-native-kernel-parameters.md), FREES-107).
+
+### Assets
+
+| Asset | Why it matters |
+|---|---|
+| The running kernel's parameters | Forwarding, reverse-path filtering, redirects and router advertisements decide whether the host stays reachable; others restrict what processes may do |
+| The prior running values in the ledger | Cleanup sets them back; a wrong record would leave the kernel changed |
+| The vendor files and their recorded lines | The collection changes package-owned files and must restore them exactly |
+
+### Trust boundaries and entry points
+
+| Entry point | Supplied by | Trust |
+|---|---|---|
+| The `read`, `probe` and `set` names of `sysctl_runtime` | The catalogue keys, the interfaces found below `/proc/sys`, and the ledger | Validated by the helper: two to eight components of a fixed alphabet, no `.` or `..` component, at most one `*` and only for reading |
+| The values of `sysctl_runtime` | The catalogue and profile values, and values read before from `/proc/sys` and recorded in the root-only ledger | At most 255 printable characters or tabs, no line break; the family checks catalogue values against the check before anything changes |
+| `/etc/sysctl.conf` and the `*.conf` files of the sysctl directories | Root, packages, administrators | Read as data; a symbolic link or non-regular file at a drop-in path is never written through |
+| `linux_compliance_remediate_allow_disruptive` | The operator | The acknowledgement that the network topics may change and revert running network parameters |
+
+### T-SYSCTL-1: a network parameter cuts the host off
+
+- **Attacker:** none; an operator applies `ip_forward` 0 on a router or container host, strict reverse-path filtering
+  on a multi-homed host, or refuses router advertisements on a host that needs them.
+- **Failure:** forwarded traffic stops, replies on another interface are dropped, or the host loses its IPv6 route.
+- **Impact:** loss of service or of remote access.
+- **Mitigation:** `ipv4_parameters` and `ipv6_parameters` are disruptive and run only with the family or `network` in
+  the allow-list, for apply and cleanup alike; every rule has its own toggle, so a container host keeps forwarding
+  while the rest applies; no rule disables IPv6; check mode reports every change and changes nothing; cleanup sets
+  every recorded running value back, for the forwarding rules flag by flag on every interface.
+- **Residual:** the values are the profile's; on a host that needs them otherwise, the operator must switch the rule
+  off. The libvirt scenarios prove that the harness stays connected, not that every network design does.
+
+### T-SYSCTL-2: `sysctl_runtime` writes outside the kernel's parameters
+
+- **Attacker:** a caller of the module who controls the names, or a local root process that mounts or links a file
+  over a parameter.
+- **Failure:** a file outside `/proc/sys` is written, or a parameter that the collection does not manage is changed.
+- **Impact:** a file written as root, or an unintended kernel setting.
+- **Mitigation:** names are validated before any path is built; the helper requires that the resolved path is the
+  path itself (no symbolic link in any component), a regular file and on the file system of `/proc/sys`, and refuses
+  otherwise. The role passes only the keys of the catalogue, the interfaces that it found and the values that its
+  ledger recorded. Every value written is read back; a value that the kernel does not keep is written back and the
+  module fails. No program runs.
+- **Residual:** root may change any parameter anyway; the module adds no capability that root lacks.
+
+### T-SYSCTL-3: a revert overwrites an administrator's change
+
+- **Attacker:** none; an administrator changes a running value, a drop-in or a vendor line after the collection
+  changed it.
+- **Failure:** cleanup sets the recorded value back over the administrator's.
+- **Impact:** a deliberate site setting is silently lost.
+- **Mitigation:** cleanup sets a running value back only while it is still the value the collection wrote, removes a
+  drop-in only with the recorded SHA-256 and writes a vendor line back only when the file still holds the line
+  written; otherwise the result is `cleanup_incomplete` with `modified_since_apply`, nothing changes and the entry is
+  kept. A value that already equals the recorded one is left alone.
+- **Residual:** an apply that finds the running value changed after an earlier apply sets it again, because the rule
+  is switched on; switching the rule off is how an administrator keeps a value of their own.
+
+### T-SYSCTL-4: a rule reports compliant while the kernel uses a looser value
+
+- **Attacker:** none, or an administrator or package that adds a configuration file; the failure is a false claim.
+- **Failure:** a real reader of the configuration (`systemd-sysctl` at boot, `sysctl --system`) writes a value other
+  than the drop-in's, or an interface keeps a looser value that the kernel combines with `all`, while the rule
+  reports `applied` or `compliant` and the scan, which reads only `all` and `default`, passes.
+- **Impact:** the host is believed hardened while redirects, source routes or reverse-path filtering are not.
+- **Mitigation:** the model of both readers (ADR 0029, section 2b) is checked against the values that the real
+  readers of the Molecule images write into a private tmpfs over `/proc/sys`, for 72 cases; a rule is `overridden`
+  unless both readers would write its value, and what the model does not follow (a file name that procps would
+  expand as a pattern, a procps key with `..`, a line at which systemd stops reading, a ufw setting other than a plain
+  one) refuses the family as `unparsed_configuration`; ufw's file counts only when ufw is enabled. With the running
+  values on, every interface's value of a combined parameter is read again after the stricter `all` value is set,
+  and a looser interface gives the rule the reason `interface_override`, naming it, instead of a plain result. With
+  the running values off, every result carries the reason `running_value_not_read`.
+- **Residual:** systemd 252 of Rocky Linux is assumed to read as systemd 255 does; the loopback interface is not
+  checked; other writers (a `sysctl.extra` credential, Docker, libvirt or systemd-networkd `IPForward=`, tuned) can
+  change a running value after the run.
+
+### T-SYSCTL-5: the reader oracle writes to the host kernel
+
+- **Attacker:** none; the generator of the reader verdicts runs `systemd-sysctl` and `sysctl --system`, which always
+  write, on cases that include non-namespaced `kernel.*` parameters.
+- **Failure:** on a container runtime whose `/proc/sys` is writable, a case is written into the host kernel.
+- **Impact:** the developer's or runner's host changes kernel parameters.
+- **Mitigation:** each container drops every capability but `CAP_SYS_ADMIN`, has no network, and refuses to run any
+  reader unless `/proc/sys` was the read-only proc mount and is now a private tmpfs in its own mount namespace; the
+  values are read back from that tmpfs. The generator never runs in CI.
+- **Residual:** `CAP_SYS_ADMIN` would allow the container to remount `/proc/sys`; only the script runs there, and it
+  does not.
+
 ## Libvirt CI caches
 
 The `molecule-libvirt` legs of `ci.yml` restore two Actions caches whose contents are installed or booted:

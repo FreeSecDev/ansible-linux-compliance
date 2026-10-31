@@ -36,6 +36,7 @@
       - linux_compliance_remediate_allow_disruptive is not mapping
       - linux_compliance_remediate_profile is string
       - linux_compliance_remediate_profile is match('^[a-z0-9][a-z0-9_]{0,127}$')
+      - linux_compliance_remediate_sysctl_runtime is boolean
     fail_msg: >-
       The remediate role received an invalid input; see meta/argument_specs.yml.
       Boolean variables must be real booleans on the command line, for example

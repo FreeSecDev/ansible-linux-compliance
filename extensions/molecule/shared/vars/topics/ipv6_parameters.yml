@@ -1,0 +1,274 @@
+---
+family: ipv6_parameters
+disruptive: true
+containment: >-
+  ipv6_parameters writes one drop-in per rule below /etc/sysctl.d and, on the virtual machines, sets the running
+  value. Router advertisements, autoconfiguration and forwarding can cut an IPv6 host or router off. The containers
+  have no network and a read-only /proc/sys, so only files change there, and the harness connects with docker exec.
+  The virtual machines are reached over IPv4 only, on the run's isolated network with a static address, so switching
+  off router advertisements and autoconfiguration cannot cut the harness off; the guard's connection test after
+  every remediate run proves that it still reaches the same machine. The allow-list names ipv6_parameters only for
+  the runs of this topic.
+audit:
+  applied_outcomes:
+    - notapplicable
+  reason: >-
+    ComplianceAsCode limits the IPv6 rules to system_with_kernel, which excludes containers, and the RHEL 9
+    datastream does not recognise Rocky Linux, so the container audits and every Rocky Linux audit report them
+    notapplicable. On the Ubuntu virtual machine every rule must pass. A rule passes as well when IPv6 is disabled;
+    the collection never disables IPv6 (tests/unit/tools/test_content_golden_sysctl.py).
+state:
+  files:
+    - path: /etc/sysctl.d
+      rewritten: true
+    - path: /etc/sysctl.d/.freesecdev-created
+      rewritten: true
+    - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv6-conf-all-accept-ra.conf
+      rewritten: true
+    - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv6-conf-all-accept-redirects.conf
+      rewritten: true
+    - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv6-conf-all-accept-source-route.conf
+      rewritten: true
+    - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv6-conf-all-forwarding.conf
+      rewritten: true
+    - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv6-conf-default-accept-ra.conf
+      rewritten: true
+    - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv6-conf-default-accept-redirects.conf
+      rewritten: true
+    - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv6-conf-default-accept-source-route.conf
+      rewritten: true
+  sysctl:
+    - name: net.ipv6.conf.all.accept_ra
+    - name: net.ipv6.conf.all.accept_redirects
+    - name: net.ipv6.conf.all.accept_source_route
+    - name: net.ipv6.conf.all.forwarding
+    - name: net.ipv6.conf.default.accept_ra
+    - name: net.ipv6.conf.default.accept_redirects
+    - name: net.ipv6.conf.default.accept_source_route
+applied:
+  files:
+    - path: /etc/sysctl.d
+      exists: true
+      type: directory
+      attributes: []
+      mode: "0755"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      platforms:
+        - rhel_compatible
+    - path: /etc/sysctl.d/.freesecdev-created
+      exists: true
+      type: file
+      attributes: []
+      mode: "0600"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+      platforms:
+        - rhel_compatible
+    - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv6-conf-all-accept-ra.conf
+      exists: true
+      type: file
+      attributes: []
+      mode: "0644"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: 94f28c75d5c717292eb6b6e6b0b9dc2522b36fda42b34c68769b4891fe31b7c5
+    - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv6-conf-all-accept-redirects.conf
+      exists: true
+      type: file
+      attributes: []
+      mode: "0644"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: b7cfcb662f195bd45a49564d5c51c96854ec52d243c853f094dcccf36bfa9908
+    - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv6-conf-all-accept-source-route.conf
+      exists: true
+      type: file
+      attributes: []
+      mode: "0644"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: faa054eecbd8a8a69e5c2e0309be22620f09c56fce2df931305b1f6b912b945b
+    - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv6-conf-all-forwarding.conf
+      exists: true
+      type: file
+      attributes: []
+      mode: "0644"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: 6656056f83c4594fead0a915dbe3a2b75c0d76c356ec08c4e00eb4ddbd8076dd
+    - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv6-conf-default-accept-ra.conf
+      exists: true
+      type: file
+      attributes: []
+      mode: "0644"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: f40e0715b2505b71469e08192b939b5052249641b06f4ef2bf1e67eabecabefd
+    - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv6-conf-default-accept-redirects.conf
+      exists: true
+      type: file
+      attributes: []
+      mode: "0644"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: 96aae2e2b9fb9b19845a40779a5fcf39d3ce1ab3e5e113c1f3f275bde7549d86
+    - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv6-conf-default-accept-source-route.conf
+      exists: true
+      type: file
+      attributes: []
+      mode: "0644"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: 2f81fa64143baed80e9dd6cb049600c9fe55bcb726de81b576bc790cba0bf086
+pre_states:
+  - name: as built
+    audit: true
+  - name: as built, with the running kernel
+    modes:
+      - rule
+    audit:
+      - ubuntu
+    requires:
+      - libvirt
+    applied: &running_kernel_applied
+      files:
+        - path: /etc/sysctl.d
+          exists: true
+          platforms:
+            - rhel_compatible
+        - path: /etc/sysctl.d/.freesecdev-created
+          exists: false
+          platforms:
+            - rhel_compatible
+        - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv6-conf-all-accept-ra.conf
+          exists: true
+          type: file
+          attributes:
+            - extents
+          mode: "0644"
+          owner: root
+          group: root
+          uid: 0
+          gid: 0
+          checksum: 94f28c75d5c717292eb6b6e6b0b9dc2522b36fda42b34c68769b4891fe31b7c5
+          platforms:
+            - ubuntu
+        - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv6-conf-all-accept-redirects.conf
+          exists: true
+          type: file
+          attributes:
+            - extents
+          mode: "0644"
+          owner: root
+          group: root
+          uid: 0
+          gid: 0
+          checksum: b7cfcb662f195bd45a49564d5c51c96854ec52d243c853f094dcccf36bfa9908
+          platforms:
+            - ubuntu
+        - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv6-conf-all-accept-source-route.conf
+          exists: true
+          type: file
+          attributes:
+            - extents
+          mode: "0644"
+          owner: root
+          group: root
+          uid: 0
+          gid: 0
+          checksum: faa054eecbd8a8a69e5c2e0309be22620f09c56fce2df931305b1f6b912b945b
+          platforms:
+            - ubuntu
+        - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv6-conf-all-forwarding.conf
+          exists: true
+          type: file
+          attributes:
+            - extents
+          mode: "0644"
+          owner: root
+          group: root
+          uid: 0
+          gid: 0
+          checksum: 6656056f83c4594fead0a915dbe3a2b75c0d76c356ec08c4e00eb4ddbd8076dd
+          platforms:
+            - ubuntu
+        - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv6-conf-default-accept-ra.conf
+          exists: true
+          type: file
+          attributes:
+            - extents
+          mode: "0644"
+          owner: root
+          group: root
+          uid: 0
+          gid: 0
+          checksum: f40e0715b2505b71469e08192b939b5052249641b06f4ef2bf1e67eabecabefd
+          platforms:
+            - ubuntu
+        - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv6-conf-default-accept-redirects.conf
+          exists: true
+          type: file
+          attributes:
+            - extents
+          mode: "0644"
+          owner: root
+          group: root
+          uid: 0
+          gid: 0
+          checksum: 96aae2e2b9fb9b19845a40779a5fcf39d3ce1ab3e5e113c1f3f275bde7549d86
+          platforms:
+            - ubuntu
+        - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv6-conf-default-accept-source-route.conf
+          exists: true
+          type: file
+          attributes:
+            - extents
+          mode: "0644"
+          owner: root
+          group: root
+          uid: 0
+          gid: 0
+          checksum: 2f81fa64143baed80e9dd6cb049600c9fe55bcb726de81b576bc790cba0bf086
+          platforms:
+            - ubuntu
+      sysctl:
+        - name: net.ipv6.conf.all.accept_ra
+          value: "0"
+        - name: net.ipv6.conf.all.accept_redirects
+          value: "0"
+        - name: net.ipv6.conf.all.accept_source_route
+          value: "0"
+        - name: net.ipv6.conf.all.forwarding
+          value: "0"
+        - name: net.ipv6.conf.default.accept_ra
+          value: "0"
+        - name: net.ipv6.conf.default.accept_redirects
+          value: "0"
+        - name: net.ipv6.conf.default.accept_source_route
+          value: "0"
+  - name: as built, with the running kernel, topic toggle
+    modes:
+      - topic
+    requires:
+      - libvirt
+    applied: *running_kernel_applied

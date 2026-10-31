@@ -422,6 +422,31 @@ each libvirt lifecycle scenario the two ownership cycles, one per CI leg (`file_
 `rule`). The ownership pre-state runs no scan: no assertion
 about it needs one, and the real scans of `converge` already show the outcome on the machine.
 
+The kernel parameter topics `sysctl`, `ipv4_parameters` and `ipv6_parameters` (FREES-107,
+[ADR 0029](adr/0029-native-kernel-parameters.md)) each have a pre-state `as built, with the running kernel` that
+requires libvirt, next to the `as built` pre-state of the Docker scenarios, which writes only the drop-ins because the
+containers' `/proc/sys` is read-only. On the machines the harness passes `linux_compliance_remediate_sysctl_runtime:
+true`, so apply sets the running value where the check rejects it: the pre-state declares the value of every kernel
+parameter of the topic after apply (`applied.sysctl`), the cleanup must give each its value before back, and the
+whole-instance comparison covers every readable parameter below `/proc/sys`, the forwarding flags and other
+per-interface values included. On Ubuntu the scans of these cycles evaluate the rules, and every rule must `pass` after
+apply. For `sysctl` and `ipv6_parameters` only the rule-toggle cycle scans: the topic-toggle cycle runs from a second
+pre-state with the same expectations, `as built, with the running kernel, topic toggle`, which declares no scans,
+because both cycles apply the same rules and the Docker cycles scan both toggles. On Rocky Linux `/etc/sysctl.d` exists as built, so the pre-state expects it unchanged and no marker.
+
+A regression group may require libvirt as well. The `runtime` group of `ipv4_parameters`
+(`shared/tasks/lifecycle_sysctl_runtime_regressions.yml`, one leg per platform) needs a running kernel that the
+collection may set. It first gives every interface but the loopback a looser `rp_filter` and `accept_redirects`
+than the rules, as a glob or the network configuration might, and checks that apply still writes both drop-ins and
+the stricter `all` values, leaves each interface's own value alone and reports both rules `applied` with the reason
+`interface_override`, naming every interface, and that cleanup sets the values before back. Then it switches
+forwarding on as a router would, with the loopback interface left out, and checks that
+apply records the global flag and every interface's flag and that cleanup gives each of them back exactly; that a
+running value changed by hand after apply is set again by the next apply while the first record is kept; and that a
+running value changed by hand to a third value makes cleanup `cleanup_incomplete` (`modified_since_apply`), with the
+drop-in and the entry kept, until the value is the one written again. It ends by setting every value it changed back
+to the value as built and with the whole-instance comparison.
+
 Running every cycle on the virtual machines as well would repeat what the Docker scenarios prove: the mode change, its
 cleanup and the whole-instance comparison do not depend on the kernel, so the extra hour per platform would add no
 evidence. A cycle that does depend on the machine declares `requires: [libvirt]` and runs there.
@@ -434,7 +459,8 @@ of `ci-gate`, which the merge queue requires within its 30-minute check timeout.
 (`tools/roles/molecule_matrix.py`) and is part of `ci-gate` too. The plan holds, per platform, the base leg
 (`libvirt-<platform>`), one lifecycle leg (`libvirt-<platform>-lifecycle` with `MOLECULE_LIFECYCLE_TOPIC` and
 `MOLECULE_LIFECYCLE_MODE`) per native topic with a cycle that requires libvirt on that platform and per toggle mode,
-and the `libvirt-selftest` leg. A new topic or pre-state that requires libvirt therefore gets its legs without a change
+one leg per regression group that requires libvirt and platform (mode `regressions-<group>`), and the
+`libvirt-selftest` leg. A new topic or pre-state that requires libvirt therefore gets its legs without a change
 to the workflow, and each leg holds one machine, one topic and one mode. Each leg:
 
 1. fails with an error annotation when `/dev/kvm` is missing, and prints it otherwise;

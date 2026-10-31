@@ -1,0 +1,1091 @@
+---
+- name: Kernel parameters | Refuse to run outside a kernel parameter family of the dispatcher
+  ansible.builtin.assert:
+    that:
+      - linux_compliance_remediate_enabled is boolean
+      - linux_compliance_remediate_enabled
+      - linux_compliance_remediate_sysctl_runtime is boolean
+      - __linux_compliance_remediate_plan is defined
+      - __linux_compliance_remediate_plan is mapping
+      - __linux_compliance_remediate_plan.enabled is true
+      - __linux_compliance_remediate_family is defined
+      - __linux_compliance_remediate_family is mapping
+      - __linux_compliance_remediate_family.name in __linux_compliance_remediate_sysctl_families
+      - >-
+        __linux_compliance_remediate_family ==
+        (__linux_compliance_remediate_plan.families
+         | selectattr('name', 'equalto', __linux_compliance_remediate_family.name) | list | first | default({}))
+    fail_msg: >-
+      sysctl_parameters.yml runs only from the family file of sysctl, ipv4_parameters or ipv6_parameters, from the
+      remediate dispatcher with linux_compliance_remediate_enabled true and a boolean
+      linux_compliance_remediate_sysctl_runtime. No change was made to the host.
+    quiet: true
+  tags:
+    - always
+
+- name: Kernel parameters | Name the benchmark, the files that its checks read and the drop-ins of the collection
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_sc_name: "{{ __linux_compliance_remediate_family.name }}"
+    __linux_compliance_remediate_sc_benchmark: "{{ linux_compliance_discovered.benchmark_id | default('') }}"
+    __linux_compliance_remediate_sc_checked: >-
+      {{ __linux_compliance_remediate_sysctl_checked[linux_compliance_discovered.benchmark_id | default('')]
+         | default(none) }}
+    __linux_compliance_remediate_sc_runtime: "{{ linux_compliance_remediate_sysctl_runtime }}"
+    __linux_compliance_remediate_sc_rules: >-
+      {{ __linux_compliance_remediate_family.cleanup + __linux_compliance_remediate_family.apply }}
+    __linux_compliance_remediate_sc_owned: >-
+      {{ __linux_compliance_remediate_rules | selectattr('family', 'in', __linux_compliance_remediate_sysctl_families)
+         | map(attribute='parameters') | map(attribute='path') | list }}
+  tags:
+    - always
+
+- name: Kernel parameters | Resolve the value that the profile or the content requires and the values its check accepts
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_sc_values: >-
+      {%- set values = {} -%}
+      {%- for rule in __linux_compliance_remediate_family.apply -%}
+      {%- if rule.parameters.value_id is defined -%}
+      {%- set found = rule.parameters.profile_values | default([])
+            | selectattr('content_sha256', 'equalto', linux_compliance_discovered.content_sha256)
+            | selectattr('profiles', 'contains', linux_compliance_remediate_profile)
+            | map(attribute='value') | map('join', '') | list -%}
+      {%- set value = found | first | default(none) -%}
+      {%- set _ = values.update({rule.rule_id: {'value': value, 'accepted': [value] if value is string else none,
+                                                'pattern': none}}) -%}
+      {%- else -%}
+      {%- set _ = values.update({rule.rule_id: {
+            'value': rule.parameters.value | default(none),
+            'accepted': (rule.parameters.accepted | default({}))[__linux_compliance_remediate_sc_benchmark]
+                        | default(none) if rule.parameters.accepted_pattern is not defined else none,
+            'pattern': rule.parameters.accepted_pattern | default(none)}}) -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {{ values }}
+  tags:
+    - always
+
+- name: Kernel parameters | Refuse a rule without a usable key, drop-in path, value or check before anything changes
+  vars:
+    __linux_compliance_remediate_sc_wanted: >-
+      {{ __linux_compliance_remediate_sc_values[__linux_compliance_remediate_sc_rule.rule_id]
+         | default({'value': '', 'accepted': [''], 'pattern': none}) }}
+    __linux_compliance_remediate_sc_applies: >-
+      {{ __linux_compliance_remediate_sc_rule.rule_id in __linux_compliance_remediate_sc_values }}
+  ansible.builtin.assert:
+    that:
+      - >-
+        __linux_compliance_remediate_sc_rule.parameters.key | default('')
+        is match(__linux_compliance_remediate_sysctl_key_pattern)
+      - >-
+        __linux_compliance_remediate_sc_rule.parameters.path | default('')
+        is match(__linux_compliance_remediate_sysctl_dropin_pattern)
+      - __linux_compliance_remediate_sc_rule.parameters.datatype | default('') in ['int', 'string']
+      - >-
+        __linux_compliance_remediate_sc_rules | map(attribute='parameters.path')
+        | select('equalto', __linux_compliance_remediate_sc_rule.parameters.path) | list | length == 1
+      - not __linux_compliance_remediate_sc_applies or __linux_compliance_remediate_sc_checked is mapping
+      - >-
+        not __linux_compliance_remediate_sc_applies
+        or (__linux_compliance_remediate_sc_wanted.value is string
+            and __linux_compliance_remediate_sc_wanted.value is match(__linux_compliance_remediate_sysctl_value_pattern)
+            and (__linux_compliance_remediate_sc_wanted.value | length > 0
+                 or __linux_compliance_remediate_sc_rule.parameters.empty_value | default(false)))
+      - >-
+        not __linux_compliance_remediate_sc_applies
+        or (__linux_compliance_remediate_sc_wanted.pattern is string
+            and __linux_compliance_remediate_sc_wanted.value is search(__linux_compliance_remediate_sc_wanted.pattern))
+        or (__linux_compliance_remediate_sc_wanted.accepted is sequence
+            and __linux_compliance_remediate_sc_wanted.accepted is not string
+            and __linux_compliance_remediate_sc_wanted.accepted | length > 0
+            and __linux_compliance_remediate_sc_wanted.accepted | reject('string') | list | length == 0
+            and __linux_compliance_remediate_sc_wanted.value in __linux_compliance_remediate_sc_wanted.accepted)
+      - >-
+        not __linux_compliance_remediate_sc_applies
+        or __linux_compliance_remediate_sc_rule.parameters.datatype | default('') != 'int'
+        or __linux_compliance_remediate_sc_wanted.value is match('^-?[0-9]{1,19}$')
+    fail_msg: >-
+      {{ __linux_compliance_remediate_sc_rule.rule_id }} needs a kernel parameter key, a drop-in named
+      /etc/sysctl.d/999-freesecdev-*.conf of its own, the datatype int or string and, to be applied, the value
+      {{ __linux_compliance_remediate_sc_rule.parameters.value_id | default('of the catalogue') }} for the profile
+      {{ linux_compliance_remediate_profile }} in the content
+      {{ linux_compliance_discovered.content_sha256 | default('') }}
+      of the benchmark {{ __linux_compliance_remediate_sc_benchmark }}, which the content's check of that benchmark
+      accepts; the catalogue holds {{ __linux_compliance_remediate_sc_wanted }}. The values come from the pinned
+      content (ADR 0021, ADR 0029); no kernel parameter was changed.
+    quiet: true
+  loop: "{{ __linux_compliance_remediate_sc_rules }}"
+  loop_control:
+    loop_var: __linux_compliance_remediate_sc_rule
+    label: "{{ __linux_compliance_remediate_sc_rule.rule_id }}"
+  tags:
+    - always
+
+- name: Kernel parameters | Compose the drop-in of every rule to apply and read the record of every rule
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_sc_records: >-
+      {%- set records = {} -%}
+      {%- for rule in __linux_compliance_remediate_sc_rules -%}
+      {%- set _ = records.update({rule.rule_id: (rule.ledger_entry.prior_values | default([])
+            | items2dict(key_name='name', value_name='value')) if rule.ledger_entry is mapping else none}) -%}
+      {%- endfor -%}
+      {{ records }}
+    __linux_compliance_remediate_sc_lines: >-
+      {%- set lines = {} -%}
+      {%- for rule in __linux_compliance_remediate_family.apply -%}
+      {%- set value = __linux_compliance_remediate_sc_values[rule.rule_id].value -%}
+      {%- set _ = lines.update({rule.rule_id: rule.parameters.key ~ ' =' ~ ((' ' ~ value) if value else '')}) -%}
+      {%- endfor -%}
+      {{ lines }}
+  tags:
+    - always
+
+- name: Kernel parameters | Compose the content and the SHA-256 of every drop-in to apply
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_sc_contents: >-
+      {%- set contents = {} -%}
+      {%- for rule in __linux_compliance_remediate_family.apply -%}
+      {%- set _ = contents.update({rule.rule_id:
+            '# Managed by freesecdev.linux_compliance for ' ~ rule.rule_id ~ '.' ~ __linux_compliance_remediate_newline
+            ~ '# Switching the rule or the ' ~ rule.family ~ ' topic off removes this file.'
+            ~ __linux_compliance_remediate_newline
+            ~ __linux_compliance_remediate_sc_lines[rule.rule_id] ~ __linux_compliance_remediate_newline}) -%}
+      {%- endfor -%}
+      {{ contents }}
+  tags:
+    - always
+
+- name: Kernel parameters | Name the SHA-256 that the collection expects of every drop-in that it applies
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_sc_known: >-
+      {%- set known = {} -%}
+      {%- for rule in __linux_compliance_remediate_family.apply -%}
+      {%- set _ = known.update({rule.parameters.path:
+            __linux_compliance_remediate_sc_contents[rule.rule_id] | hash('sha256')}) -%}
+      {%- endfor -%}
+      {{ known }}
+    __linux_compliance_remediate_sc_directories: >-
+      {{ (__linux_compliance_remediate_sysctl_boot_directories
+          + ((__linux_compliance_remediate_sc_checked | default({}, true)).directories | default([]))
+          + ((__linux_compliance_remediate_sc_checked | default({}, true)).package_directories | default([])))
+         | unique | list }}
+    __linux_compliance_remediate_sc_single_files: >-
+      {{ (__linux_compliance_remediate_sysctl_boot_last + __linux_compliance_remediate_sysctl_ufw_files
+          + ((__linux_compliance_remediate_sc_checked | default({}, true)).files | default([])))
+         | unique | list }}
+  tags:
+    - always
+
+- name: Kernel parameters | Inspect the configuration directories and files without following a symbolic link
+  ansible.builtin.stat:
+    path: "{{ __linux_compliance_remediate_sc_path }}"
+    follow: false
+    get_checksum: false
+    get_mime: false
+    get_attributes: false
+  loop: "{{ __linux_compliance_remediate_sc_directories + __linux_compliance_remediate_sc_single_files }}"
+  loop_control:
+    loop_var: __linux_compliance_remediate_sc_path
+  register: __linux_compliance_remediate_sc_inspected
+  tags:
+    - always
+
+- name: Kernel parameters | Name what the inspection found
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_sc_stats: >-
+      {{ dict(__linux_compliance_remediate_sc_inspected.results | map(attribute='__linux_compliance_remediate_sc_path')
+              | zip(__linux_compliance_remediate_sc_inspected.results | map(attribute='stat'))) }}
+    __linux_compliance_remediate_sc_removed: []
+  tags:
+    - always
+
+- name: Kernel parameters | Name the directories to list and the state of the drop-in directory
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_sc_listed: >-
+      {{ __linux_compliance_remediate_sc_directories
+         | select('in', __linux_compliance_remediate_sc_stats | dict2items | selectattr('value.isdir', 'defined')
+                        | selectattr('value.isdir') | map(attribute='key') | list) | list }}
+    __linux_compliance_remediate_sc_directory_stat: >-
+      {{ __linux_compliance_remediate_sc_stats[__linux_compliance_remediate_sysctl_directory] }}
+  tags:
+    - always
+
+- name: Kernel parameters | List every entry of the configuration directories without following a symbolic link
+  ansible.builtin.find:
+    paths: "{{ __linux_compliance_remediate_sc_listed }}"
+    file_type: any
+    follow: false
+    hidden: true
+    recurse: false
+    get_checksum: true
+    checksum_algorithm: sha256
+  register: __linux_compliance_remediate_sc_found
+  when: __linux_compliance_remediate_sc_listed | length > 0
+  tags:
+    - always
+
+- name: Kernel parameters | Inspect the target of every symbolic link of the configuration
+  ansible.builtin.stat:
+    path: "{{ __linux_compliance_remediate_sc_link }}"
+    follow: true
+    get_checksum: false
+    get_mime: false
+    get_attributes: false
+  loop: >-
+    {{ (__linux_compliance_remediate_sc_found.files | default([]) | selectattr('islnk') | map(attribute='path') | list)
+       + (__linux_compliance_remediate_sc_single_files
+          | select('in', __linux_compliance_remediate_sc_stats | dict2items | selectattr('value.islnk', 'defined')
+                         | selectattr('value.islnk') | map(attribute='key') | list) | list) }}
+  loop_control:
+    loop_var: __linux_compliance_remediate_sc_link
+  register: __linux_compliance_remediate_sc_link_targets
+  tags:
+    - always
+
+- name: Kernel parameters | Name every configuration entry, whether it is a regular file or a link to one
+  vars:
+    __linux_compliance_remediate_sc_linked: >-
+      {{ __linux_compliance_remediate_sc_link_targets.results | default([])
+         | selectattr('stat.isreg', 'defined') | selectattr('stat.isreg')
+         | map(attribute='__linux_compliance_remediate_sc_link') | list }}
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_sc_entries: >-
+      {%- set entries = {} -%}
+      {%- for item in __linux_compliance_remediate_sc_found.files | default([]) -%}
+      {%- set _ = entries.update({item.path: {'isreg': item.isreg, 'islnk': item.islnk,
+            'isdir': item.isdir | default(false),
+            'readable': item.isreg or item.path in __linux_compliance_remediate_sc_linked,
+            'checksum': item.checksum | default('')}}) -%}
+      {%- endfor -%}
+      {%- for path in __linux_compliance_remediate_sc_single_files
+            if (__linux_compliance_remediate_sc_stats[path].exists | default(false)) -%}
+      {%- set item = __linux_compliance_remediate_sc_stats[path] -%}
+      {%- set _ = entries.update({path: {'isreg': item.isreg, 'islnk': item.islnk,
+            'isdir': item.isdir | default(false),
+            'readable': item.isreg or path in __linux_compliance_remediate_sc_linked, 'checksum': ''}}) -%}
+      {%- endfor -%}
+      {{ entries }}
+  tags:
+    - always
+
+- name: Kernel parameters | Read every configuration file whose content the collection does not know
+  ansible.builtin.slurp:
+    src: "{{ __linux_compliance_remediate_sc_source }}"
+  loop: >-
+    {{ __linux_compliance_remediate_sc_entries | dict2items | selectattr('value.readable')
+       | map(attribute='key')
+       | select('match', '^(.*\.conf|' ~ (__linux_compliance_remediate_sysctl_ufw_files | map('regex_escape')
+                                           | join('|')) ~ ')$')
+       | sort | list }}
+  loop_control:
+    loop_var: __linux_compliance_remediate_sc_source
+  register: __linux_compliance_remediate_sc_read
+  when: >-
+    __linux_compliance_remediate_sc_source not in __linux_compliance_remediate_sc_known
+    or __linux_compliance_remediate_sc_entries[__linux_compliance_remediate_sc_source].checksum
+       != __linux_compliance_remediate_sc_known[__linux_compliance_remediate_sc_source]
+  tags:
+    - always
+
+- name: Kernel parameters | Keep the text of every configuration file
+  vars:
+    __linux_compliance_remediate_sc_read_texts: >-
+      {{ dict(__linux_compliance_remediate_sc_read.results | default([]) | rejectattr('skipped', 'defined')
+              | map(attribute='__linux_compliance_remediate_sc_source')
+              | zip(__linux_compliance_remediate_sc_read.results | default([]) | rejectattr('skipped', 'defined')
+                    | map(attribute='content') | map('b64decode'))) }}
+    __linux_compliance_remediate_sc_known_texts: >-
+      {%- set texts = {} -%}
+      {%- for rule in __linux_compliance_remediate_family.apply
+            if rule.parameters.path in __linux_compliance_remediate_sc_entries
+            and rule.parameters.path not in __linux_compliance_remediate_sc_read_texts -%}
+      {%- set _ = texts.update({rule.parameters.path: __linux_compliance_remediate_sc_contents[rule.rule_id]}) -%}
+      {%- endfor -%}
+      {{ texts }}
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_sc_texts: >-
+      {{ __linux_compliance_remediate_sc_read_texts | combine(__linux_compliance_remediate_sc_known_texts) }}
+  tags:
+    - always
+
+- name: Kernel parameters | Name the running parameters to read and to test for writing
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_sc_runtime_read: >-
+      {%- set names = [] -%}
+      {%- for rule in __linux_compliance_remediate_family.cleanup -%}
+      {%- set prior = __linux_compliance_remediate_sc_records[rule.rule_id] | default({}, true) -%}
+      {%- if prior.runtime_prior is defined -%}
+      {%- set _ = names.append(rule.parameters.key) -%}
+      {%- set _ = names.extend(prior.keys() | select('match', '^companion:') | map('regex_replace', '^companion:', '')
+            | list) -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {%- if __linux_compliance_remediate_sc_runtime -%}
+      {%- for rule in __linux_compliance_remediate_family.apply -%}
+      {%- set _ = names.append(rule.parameters.key) -%}
+      {%- if rule.parameters.key in __linux_compliance_remediate_sysctl_propagating -%}
+      {%- set _ = names.append(__linux_compliance_remediate_sysctl_propagating[rule.parameters.key]) -%}
+      {%- endif -%}
+      {%- set _ = names.extend(__linux_compliance_remediate_sysctl_side_effects[rule.parameters.key] | default([])) -%}
+      {%- endfor -%}
+      {%- endif -%}
+      {{ names | unique | list }}
+    __linux_compliance_remediate_sc_runtime_probe: >-
+      {{ (__linux_compliance_remediate_family.apply | map(attribute='parameters.key') | unique | list)
+         if __linux_compliance_remediate_sc_runtime else [] }}
+  tags:
+    - always
+
+- name: Kernel parameters | Read the running value of the parameters and test whether they can be set
+  freesecdev.linux_compliance.sysctl_runtime:
+    read: "{{ __linux_compliance_remediate_sc_runtime_read }}"
+    probe: "{{ __linux_compliance_remediate_sc_runtime_probe }}"
+  register: __linux_compliance_remediate_sc_running
+  when: __linux_compliance_remediate_sc_runtime_read | length > 0
+  tags:
+    - always
+
+- name: Kernel parameters | Keep the running values
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_sc_running_values: >-
+      {{ __linux_compliance_remediate_sc_running.running | default({}) }}
+    __linux_compliance_remediate_sc_writable: "{{ __linux_compliance_remediate_sc_running.writable | default({}) }}"
+  tags:
+    - always
+
+- name: Kernel parameters | Name why each rule that is no longer effective cannot be reverted, and what to restore
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_sc_cleanup_plan: >-
+      {%- set plan = {} -%}
+      {%- set directory = __linux_compliance_remediate_sc_directory_stat -%}
+      {%- for rule in __linux_compliance_remediate_family.cleanup -%}
+      {%- set path = rule.parameters.path -%}
+      {%- set key = rule.parameters.key -%}
+      {%- set prior = __linux_compliance_remediate_sc_records[rule.rule_id] | default({}, true) -%}
+      {%- set entry = __linux_compliance_remediate_sc_entries[path] | default(none) -%}
+      {%- set text = __linux_compliance_remediate_sc_texts[path] | default('') -%}
+      {%- set header = '# Managed by freesecdev.linux_compliance for ' ~ rule.rule_id ~ '.' -%}
+      {%- set sha = prior.dropin_sha256 | default(none) -%}
+      {%- set companions = prior.keys() | select('match', '^companion:') | map('regex_replace', '^companion:', '')
+            | list -%}
+      {%- set ns = namespace(reason=none, detail='', restores=[], runtime=[]) -%}
+      {%- if prior.method | default('unknown') != 'dropin' -%}
+      {%- set ns.reason = 'method_changed' -%}
+      {%- set ns.detail = 'the ledger entry was recorded by the ' ~ prior.method | default('unknown') ~ ' method' -%}
+      {%- elif (directory.exists | default(false)) and not (directory.isdir | default(false)) -%}
+      {%- set ns.reason = 'not_directory' -%}
+      {%- set ns.detail = __linux_compliance_remediate_sysctl_directory ~ ' is not a directory' -%}
+      {%- elif entry is not none and not entry.isreg -%}
+      {%- set ns.reason = 'not_regular_file' -%}
+      {%- set ns.detail = path ~ ' is not a regular file' -%}
+      {%- elif entry is not none and entry.checksum != sha and not text.startswith(header) -%}
+      {%- set ns.reason = 'not_owned' -%}
+      {%- set ns.detail = path ~ ' does not carry the header of the collection' -%}
+      {%- elif not (sha is string and sha is match('^[0-9a-f]{64}$'))
+            or (prior.runtime_prior is defined) != (prior.runtime_written is defined)
+            or (prior.runtime_prior is defined and not (prior.runtime_prior is string
+                and prior.runtime_written is string))
+            or (companions | length > 0 and prior.runtime_prior is not defined)
+            or prior.keys() | select('match', '^companion:') | map('extract', prior) | reject('string') | list
+               | length > 0 -%}
+      {%- set ns.reason = 'invalid_record' -%}
+      {%- set ns.detail = 'the ledger entry does not record a drop-in checksum and a complete running value' -%}
+      {%- elif entry is not none and entry.checksum != sha -%}
+      {%- set ns.reason = 'modified_since_apply' -%}
+      {%- set ns.detail = path ~ ' changed after the collection wrote it' -%}
+      {%- endif -%}
+      {%- for vendor in prior.keys() | select('match', '^vendor_line:') | map('regex_replace', '^vendor_line:', '')
+            | list if ns.reason is none -%}
+      {%- set original = prior['vendor_line:' ~ vendor] -%}
+      {%- set written = prior['vendor_written:' ~ vendor] | default(none) -%}
+      {%- set lines = (__linux_compliance_remediate_sc_texts[vendor].split(__linux_compliance_remediate_newline))
+            if vendor in __linux_compliance_remediate_sc_texts else none -%}
+      {%- if ns.reason is not none -%}
+      {%- elif vendor not in __linux_compliance_remediate_sysctl_vendor_files or original is not string
+            or written is not string or __linux_compliance_remediate_newline in original ~ written -%}
+      {%- set ns.reason = 'invalid_record' -%}
+      {%- set ns.detail = 'the ledger entry records a line of ' ~ vendor ~ ' that the collection does not edit' -%}
+      {%- elif lines is none -%}
+      {%- set ns.reason = 'not_regular_file' if vendor in __linux_compliance_remediate_sc_entries
+            else 'target_absent' -%}
+      {%- set ns.detail = vendor ~ (' is not a regular file' if ns.reason == 'not_regular_file'
+            else ' no longer exists') -%}
+      {%- elif lines | select('equalto', written) | list | length == 1 and written != original -%}
+      {%- set ns.restores = ns.restores + [{'path': vendor, 'written': written, 'original': original}] -%}
+      {%- elif lines | select('equalto', original) | list | length == 1 -%}
+      {%- else -%}
+      {%- set ns.reason = 'modified_since_apply' -%}
+      {%- set ns.detail = vendor ~ ' no longer holds the line that the collection wrote' -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {%- if ns.reason is none and prior.runtime_prior is defined -%}
+      {%- set current = __linux_compliance_remediate_sc_running_values[key] | default(none) -%}
+      {%- if current is none -%}
+      {%- set ns.reason = 'target_absent' -%}
+      {%- set ns.detail = 'the kernel no longer has the parameter ' ~ key -%}
+      {%- elif (current.split() | join(' ')) == (prior.runtime_written.split() | join(' ')) -%}
+      {%- set ns.runtime = [{'name': key, 'value': prior.runtime_prior}] -%}
+      {%- set side_effects = __linux_compliance_remediate_sysctl_side_effects[key] | default([]) -%}
+      {%- set kept = __linux_compliance_remediate_family.apply | map(attribute='parameters.key') | list -%}
+      {%- for companion in (companions | reject('in', side_effects) | list)
+            + (companions | select('in', side_effects) | list)
+            if __linux_compliance_remediate_sc_running_values[companion] | default(none) is not none -%}
+      {%- set ns.runtime = ns.runtime + [{'name': companion,
+            'value': __linux_compliance_remediate_sc_running_values[companion] if companion in kept
+                     else prior['companion:' ~ companion]}] -%}
+      {%- endfor -%}
+      {%- elif (current.split() | join(' ')) != (prior.runtime_prior.split() | join(' ')) -%}
+      {%- set ns.reason = 'modified_since_apply' -%}
+      {%- set ns.detail = 'the running value of ' ~ key ~ ' is ' ~ current ~ ', neither the value '
+            ~ prior.runtime_written ~ ' that the collection set nor the value ' ~ prior.runtime_prior
+            ~ ' that it recorded' -%}
+      {%- endif -%}
+      {%- endif -%}
+      {%- set _ = plan.update({rule.rule_id: {'reason': ns.reason, 'detail': ns.detail,
+                                              'restores': ns.restores if ns.reason is none else [],
+                                              'runtime': ns.runtime if ns.reason is none else []}}) -%}
+      {%- endfor -%}
+      {{ plan }}
+  tags:
+    - always
+
+- name: Kernel parameters | Name the rules whose prior state can be restored, those that change forwarding first
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_sc_reverted_ids: >-
+      {%- set reverted = __linux_compliance_remediate_sc_cleanup_plan | dict2items | rejectattr('value.reason')
+            | map(attribute='key') | list -%}
+      {%- set forwarding = __linux_compliance_remediate_sysctl_propagating.keys() | list -%}
+      {%- set rules = __linux_compliance_remediate_family.cleanup | selectattr('rule_id', 'in', reverted) | list -%}
+      {{ (rules | selectattr('parameters.key', 'in', forwarding) | map(attribute='rule_id') | list)
+         + (rules | rejectattr('parameters.key', 'in', forwarding) | map(attribute='rule_id') | list) }}
+  tags:
+    - always
+
+- name: Kernel parameters | Restore the running value that the ledger recorded, and that of the interfaces it changed
+  freesecdev.linux_compliance.sysctl_runtime:
+    set: >-
+      {{ __linux_compliance_remediate_sc_reverted_ids | map('extract', __linux_compliance_remediate_sc_cleanup_plan)
+         | map(attribute='runtime') | flatten }}
+  register: __linux_compliance_remediate_sc_runtime_restored
+  when: >-
+    __linux_compliance_remediate_sc_reverted_ids | map('extract', __linux_compliance_remediate_sc_cleanup_plan)
+    | map(attribute='runtime') | flatten | length > 0
+  tags:
+    - always
+
+- name: Kernel parameters | Write back the lines of the vendor files that the collection changed
+  ansible.builtin.lineinfile:
+    path: "{{ __linux_compliance_remediate_sc_restore.path }}"
+    regexp: "{{ '^' ~ (__linux_compliance_remediate_sc_restore.written | regex_escape) ~ '$' }}"
+    line: >-
+      {{ __linux_compliance_remediate_sc_restore.original
+         | replace(__linux_compliance_remediate_backslash,
+                   __linux_compliance_remediate_backslash ~ __linux_compliance_remediate_backslash) }}
+    backrefs: true
+    state: present
+    create: false
+  loop: >-
+    {{ __linux_compliance_remediate_sc_reverted_ids | map('extract', __linux_compliance_remediate_sc_cleanup_plan)
+       | map(attribute='restores') | flatten }}
+  loop_control:
+    loop_var: __linux_compliance_remediate_sc_restore
+    label: "{{ __linux_compliance_remediate_sc_restore.path }}"
+  register: __linux_compliance_remediate_sc_restored
+  tags:
+    - always
+
+- name: Kernel parameters | Remove the drop-ins that the collection wrote for rules that are no longer effective
+  ansible.builtin.file:
+    path: "{{ __linux_compliance_remediate_sc_rule.parameters.path }}"
+    state: absent
+  loop: >-
+    {{ __linux_compliance_remediate_family.cleanup
+       | selectattr('rule_id', 'in', __linux_compliance_remediate_sc_reverted_ids)
+       | selectattr('parameters.path', 'in', __linux_compliance_remediate_sc_entries.keys() | list) | list }}
+  loop_control:
+    loop_var: __linux_compliance_remediate_sc_rule
+    label: "{{ __linux_compliance_remediate_sc_rule.rule_id }}"
+  register: __linux_compliance_remediate_sc_removal
+  tags:
+    - always
+
+- name: Kernel parameters | Forget the rules in the state ledger whose prior state is back
+  freesecdev.linux_compliance.control_state:
+    action: remove
+    rule_id: "{{ __linux_compliance_remediate_sc_rule.rule_id }}"
+  loop: >-
+    {{ __linux_compliance_remediate_family.cleanup
+       | selectattr('rule_id', 'in', __linux_compliance_remediate_sc_reverted_ids) | list }}
+  loop_control:
+    loop_var: __linux_compliance_remediate_sc_rule
+    label: "{{ __linux_compliance_remediate_sc_rule.rule_id }}"
+  register: __linux_compliance_remediate_sc_forget
+  tags:
+    - always
+
+- name: Kernel parameters | Add the result of every cleanup and remember the drop-ins that this run removes
+  vars:
+    __linux_compliance_remediate_sc_restored_names: >-
+      {{ __linux_compliance_remediate_sc_runtime_restored.set | default([]) | selectattr('changed')
+         | map(attribute='name') | list }}
+    __linux_compliance_remediate_sc_changed_ids: >-
+      {{ (__linux_compliance_remediate_sc_removal.results | default([]) | selectattr('changed')
+          | map(attribute='__linux_compliance_remediate_sc_rule.rule_id') | list)
+         + (__linux_compliance_remediate_sc_forget.results | default([]) | selectattr('changed')
+            | map(attribute='__linux_compliance_remediate_sc_rule.rule_id') | list) }}
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_sc_removed: >-
+      {{ __linux_compliance_remediate_family.cleanup
+         | selectattr('rule_id', 'in', __linux_compliance_remediate_sc_reverted_ids)
+         | map(attribute='parameters.path') | list }}
+    __linux_compliance_remediate_results: >-
+      {%- set results = [] -%}
+      {%- for rule in __linux_compliance_remediate_family.cleanup -%}
+      {%- set planned = __linux_compliance_remediate_sc_cleanup_plan[rule.rule_id] -%}
+      {%- set present = rule.parameters.path in __linux_compliance_remediate_sc_entries -%}
+      {%- set running = planned.runtime | map(attribute='name')
+            | select('in', __linux_compliance_remediate_sc_restored_names) | list -%}
+      {%- set _ = results.append({
+            'rule_id': rule.rule_id,
+            'family': rule.family,
+            'action': 'cleanup',
+            'status': 'restored' if planned.reason is none else 'cleanup_incomplete',
+            'reason': planned.reason,
+            'changed': rule.rule_id in __linux_compliance_remediate_sc_changed_ids,
+            'message': rule.parameters.path ~ ': '
+                       ~ (('restored (' ~ ('the drop-in was removed' if present
+                           else 'the drop-in no longer existed, which is the recorded prior state, so nothing was'
+                                ~ ' written to it')
+                          ~ ((', the original line was written back to '
+                              ~ planned.restores | map(attribute='path') | join(', '))
+                             if planned.restores | length > 0 else '')
+                          ~ ((', and the recorded running value was set again for ' ~ running | join(', '))
+                             if running | length > 0 else '')
+                          ~ ')') if planned.reason is none
+                          else 'cleanup_incomplete (' ~ planned.reason ~ ': ' ~ planned.detail
+                               ~ '; nothing was changed, the ledger entry is kept and the cleanup is retried on the'
+                               ~ ' next run)')}) -%}
+      {%- endfor -%}
+      {{ __linux_compliance_remediate_results + results }}
+  tags:
+    - always
+
+- name: Kernel parameters | Read the running values again after this run restored some
+  freesecdev.linux_compliance.sysctl_runtime:
+    read: "{{ __linux_compliance_remediate_sc_runtime_read }}"
+  register: __linux_compliance_remediate_sc_reread
+  when:
+    - __linux_compliance_remediate_sc_runtime_restored is changed
+    - __linux_compliance_remediate_family.apply | length > 0
+    - not ansible_check_mode
+  tags:
+    - always
+
+- name: Kernel parameters | Keep the running values as they are now
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_sc_running_values: >-
+      {{ __linux_compliance_remediate_sc_running_values
+         | combine(__linux_compliance_remediate_sc_reread.running | default({})) }}
+  tags:
+    - always
+
+- name: Kernel parameters | Decide for every rule to apply whether its drop-in can be written and satisfies the check
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_sc_plan: >-
+      {%- set plan = {} -%}
+      {%- set checked = __linux_compliance_remediate_sc_checked | default({}, true) -%}
+      {%- set entries = __linux_compliance_remediate_sc_entries -%}
+      {%- set texts = __linux_compliance_remediate_sc_texts -%}
+      {%- set directory = __linux_compliance_remediate_sc_directory_stat -%}
+      {%- set removed = __linux_compliance_remediate_sc_removed -%}
+      {%- set user_files = (checked.files | default([]) | select('in', entries) | list)
+            + (entries.keys() | select('match', '^(' ~ (checked.directories | default([]) | map('regex_escape')
+                                                          | join('|')) ~ ')/[^/]*\.conf$') | sort | list) -%}
+      {%- set package_files = entries.keys() | select('match', '^(' ~ (checked.package_directories | default([])
+            | map('regex_escape') | join('|')) ~ ')/[^/]*\.conf$') | sort | list -%}
+      {%- set boot_entries = [] -%}
+      {%- for entry_path, item in entries.items()
+            if ((entry_path | dirname) in __linux_compliance_remediate_sysctl_boot_directories
+                or entry_path in __linux_compliance_remediate_sysctl_boot_last
+                or entry_path in __linux_compliance_remediate_sysctl_ufw_files)
+               and entry_path not in removed -%}
+      {%- set _ = boot_entries.append({'path': entry_path,
+            'kind': 'file' if item.isreg else 'link' if item.islnk else 'directory' if item.isdir | default(false)
+                    else 'other',
+            'text': texts[entry_path] | default(none)}) -%}
+      {%- endfor -%}
+      {%- for rule in __linux_compliance_remediate_family.apply -%}
+      {%- set path = rule.parameters.path -%}
+      {%- set name = path | basename -%}
+      {%- set key = rule.parameters.key -%}
+      {%- set wanted = __linux_compliance_remediate_sc_values[rule.rule_id] -%}
+      {%- set value = wanted.value -%}
+      {%- set integer = rule.parameters.datatype == 'int' -%}
+      {%- set accepted_ints = (wanted.accepted | default([], true) | map('int') | list) if integer else [] -%}
+      {%- set pattern = (__linux_compliance_remediate_sysctl_empty_line_pattern if rule.parameters.empty_value
+            | default(false) else __linux_compliance_remediate_sysctl_line_pattern) | replace('{key}', key) -%}
+      {%- set prior = __linux_compliance_remediate_sc_records[rule.rule_id] -%}
+      {%- set entry = entries[path] | default(none) -%}
+      {%- set text = texts[path] | default('') -%}
+      {%- set header = '# Managed by freesecdev.linux_compliance for ' ~ rule.rule_id ~ '.' -%}
+      {%- set content = __linux_compliance_remediate_sc_contents[rule.rule_id] -%}
+      {%- set sha = content | hash('sha256') -%}
+      {%- set ns = namespace(user=[], package=[], edits=[], duplicate=[], large=[], earlier=[], later=[],
+                             now_ok=true) -%}
+      {%- for other in user_files if other != path and other not in removed and other in texts -%}
+      {%- set found = texts[other] | regex_findall(pattern, multiline=true) -%}
+      {%- set bad = [] -%}
+      {%- for candidate in found -%}
+      {%- set good = (candidate is match('^[+-]?[0-9]+$') and (candidate | int) in accepted_ints) if integer
+            else (candidate is search(wanted.pattern)) if wanted.pattern is string
+            else candidate in wanted.accepted -%}
+      {%- set ns.user = ns.user + [good] -%}
+      {%- if not good -%}
+      {%- set _ = bad.append(candidate) -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {%- if bad | length > 0 and other in __linux_compliance_remediate_sysctl_vendor_files -%}
+      {%- set lines = texts[other].split(__linux_compliance_remediate_newline) | select('match', pattern) | list -%}
+      {%- if found | length > 1 or lines | length != 1 -%}
+      {%- set ns.duplicate = ns.duplicate + [other ~ ' sets ' ~ key ~ ' ' ~ found | length ~ ' times'] -%}
+      {%- elif lines[0] | length > 1024 -%}
+      {%- set ns.large = ns.large + [other ~ ': the line of ' ~ key ~ ' is too long to record'] -%}
+      {%- else -%}
+      {%- set ns.edits = ns.edits + [{'path': other, 'original': lines[0],
+            'written': (lines[0] | regex_search('^[^=]*=[ \t]*')) ~ value}] -%}
+      {%- endif -%}
+      {%- elif bad | length > 0 -%}
+      {%- set ns.earlier = ns.earlier + [other ~ ' sets ' ~ key ~ ' to ' ~ bad | join(', ')
+            ~ ', and the content check reads every file'] -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {%- for other in package_files if other in texts -%}
+      {%- for candidate in texts[other] | regex_findall(pattern, multiline=true) -%}
+      {%- set good = (candidate is match('^[+-]?[0-9]+$') and (candidate | int) in accepted_ints) if integer
+            else (candidate is search(wanted.pattern)) if wanted.pattern is string
+            else candidate in wanted.accepted -%}
+      {%- set ns.package = ns.package + [good] -%}
+      {%- endfor -%}
+      {%- endfor -%}
+      {%- set edited = {} -%}
+      {%- for edit in ns.edits -%}
+      {%- set lines = [] -%}
+      {%- for line in texts[edit.path].split(__linux_compliance_remediate_newline) -%}
+      {%- set _ = lines.append(edit.written if line == edit.original else line) -%}
+      {%- endfor -%}
+      {%- set _ = edited.update({edit.path: lines | join(__linux_compliance_remediate_newline)}) -%}
+      {%- endfor -%}
+      {%- set planned_entries = [] -%}
+      {%- for item in boot_entries if item.path != path -%}
+      {%- set _ = planned_entries.append(item | combine({'text': edited[item.path]}) if item.path in edited
+            else item) -%}
+      {%- endfor -%}
+      {%- set _ = planned_entries.append({'path': path, 'kind': 'file', 'text': content}) -%}
+      {%- set planned_readers = planned_entries | freesecdev.linux_compliance.sysctl_effective(key) -%}
+      {%- set current_readers = boot_entries | freesecdev.linux_compliance.sysctl_effective(key) -%}
+      {%- for reader in ['systemd', 'procps'] -%}
+      {%- for setting, planned in [[planned_readers[reader], true], [current_readers[reader], false]] -%}
+      {%- set candidate = setting.value -%}
+      {%- set good = (rule.parameters.absent_accepted | default(false)) if candidate is none
+            else (candidate is match('^[+-]?[0-9]+$') and (candidate | int) in accepted_ints) if integer
+            else (candidate is search(wanted.pattern)) if wanted.pattern is string
+            else candidate in wanted.accepted -%}
+      {%- if planned and not good -%}
+      {%- set ns.later = ns.later + [__linux_compliance_remediate_sysctl_readers[reader] ~ ' would set ' ~ key ~ ' to '
+            ~ (candidate if candidate is not none else 'nothing') ~ ' from '
+            ~ (setting.source if setting.source is not none else 'no file') ~ ' instead of the drop-in'] -%}
+      {%- elif not planned and not good -%}
+      {%- set ns.now_ok = false -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {%- endfor -%}
+      {%- set static_ok = (ns.user | length > 0 and ns.user | reject | list | length == 0)
+            or (ns.user | length == 0 and ns.package | reject | list | length == 0
+                and (ns.package | length > 0 or rule.parameters.absent_accepted | default(false))) -%}
+      {%- set current = __linux_compliance_remediate_sc_running_values[key] | default(none) -%}
+      {%- set current_normal = (current.split() | join(' ')) if current is string else none -%}
+      {%- set runtime_ok = not __linux_compliance_remediate_sc_runtime
+            or (current_normal is string
+                and ((current_normal is match('^[+-]?[0-9]+$') and (current_normal | int) in accepted_ints)
+                     if integer else (current_normal is search(wanted.pattern)) if wanted.pattern is string
+                     else current_normal in (wanted.accepted | map('split') | map('join', ' ') | list))) -%}
+      {%- set exact = entry is not none and entry.isreg and entry.checksum == sha -%}
+      {%- set restorable = current is not string or current is match('^[\\t -~]{0,255}$') -%}
+      {%- set status =
+            'method_changed' if prior is mapping and prior.method | default('unknown') != 'dropin'
+            else 'notapplicable' if __linux_compliance_remediate_sc_runtime and current is none
+            else 'not_directory' if (directory.exists | default(false)) and not (directory.isdir | default(false))
+            else 'not_regular_file' if entry is not none and not entry.isreg
+            else 'not_owned' if entry is not none and not exact and not text.startswith(header)
+            else 'duplicate_setting' if ns.duplicate | length > 0
+            else 'prior_too_large' if ns.large | length > 0
+            else 'unparsed_configuration' if planned_readers.unsupported | length > 0
+            else 'overridden' if ns.later | length > 0
+            else 'conflicting_setting' if ns.earlier | length > 0
+            else 'prior_unrestorable' if not runtime_ok and not restorable
+            else 'runtime_unavailable' if not runtime_ok
+                 and not (__linux_compliance_remediate_sc_writable[key] | default(false))
+            else 'compliant' if runtime_ok and ns.edits | length == 0
+                 and (exact or (entry is none and static_ok and ns.now_ok))
+            else 'applied' -%}
+      {%- set reason =
+            ('the ledger entry was recorded by the ' ~ prior.method | default('unknown')
+             ~ ' method; clean it up first') if status == 'method_changed'
+            else ('the running kernel has no parameter ' ~ key) if status == 'notapplicable'
+            else (__linux_compliance_remediate_sysctl_directory ~ ' is not a directory') if status == 'not_directory'
+            else (path ~ ' is not a regular file') if status == 'not_regular_file'
+            else (path ~ ' exists without the header of the collection') if status == 'not_owned'
+            else (ns.duplicate | join('; ')) if status == 'duplicate_setting'
+            else (ns.large | join('; ')) if status == 'prior_too_large'
+            else (planned_readers.unsupported | join('; ')) if status == 'unparsed_configuration'
+            else ((ns.later + ns.earlier) | join('; ')) if status == 'overridden'
+            else (ns.earlier | join('; ')) if status == 'conflicting_setting'
+            else ('the running value of ' ~ key ~ ' cannot be written back on cleanup: it is longer than 255'
+                  ~ ' characters or holds a character other than printable ASCII and tab')
+                 if status == 'prior_unrestorable'
+            else ('the running value of ' ~ key ~ ' is ' ~ current ~ ' and cannot be set here: /proc/sys is'
+                  ~ ' read-only or the parameter is protected; set linux_compliance_remediate_sysctl_runtime to'
+                  ~ ' false to write only the persistent value') if status == 'runtime_unavailable'
+            else 'running_value_not_read' if not __linux_compliance_remediate_sc_runtime
+            else none -%}
+      {%- set pins = [] -%}
+      {%- for companion in __linux_compliance_remediate_sysctl_side_effects[key] | default([])
+            if companion != key and __linux_compliance_remediate_sc_running_values[companion] | default(none)
+               is not none -%}
+      {%- set _ = pins.append({'name': companion,
+                               'value': __linux_compliance_remediate_sc_running_values[companion]}) -%}
+      {%- endfor -%}
+      {%- set _ = plan.update({rule.rule_id: {
+            'status': status, 'reason': reason,
+            'write': status == 'applied' and not exact,
+            'edits': ns.edits if status == 'applied' else [],
+            'runtime': ([{'name': key, 'value': value}] + pins)
+                       if status == 'applied' and not runtime_ok else [],
+            'current': current}}) -%}
+      {%- endfor -%}
+      {{ plan }}
+  tags:
+    - always
+
+- name: Kernel parameters | Name the rules whose drop-in to write and the ledger records to write before any change
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_sc_to_write: >-
+      {{ __linux_compliance_remediate_family.apply
+         | selectattr('rule_id', 'in', __linux_compliance_remediate_sc_plan | dict2items
+                                       | selectattr('value.write') | map(attribute='key') | list) | list }}
+    __linux_compliance_remediate_sc_edits: >-
+      {%- set edits = [] -%}
+      {%- for rule in __linux_compliance_remediate_family.apply -%}
+      {%- for edit in __linux_compliance_remediate_sc_plan[rule.rule_id].edits -%}
+      {%- set _ = edits.append(edit | combine({'rule_id': rule.rule_id})) -%}
+      {%- endfor -%}
+      {%- endfor -%}
+      {{ edits }}
+    __linux_compliance_remediate_sc_runtime_set: >-
+      {%- set forwarding = __linux_compliance_remediate_sysctl_propagating.keys() | list -%}
+      {{ ((__linux_compliance_remediate_family.apply | selectattr('parameters.key', 'in', forwarding) | list)
+          + (__linux_compliance_remediate_family.apply | rejectattr('parameters.key', 'in', forwarding) | list))
+         | map(attribute='rule_id') | map('extract', __linux_compliance_remediate_sc_plan)
+         | map(attribute='runtime') | flatten }}
+    __linux_compliance_remediate_sc_record_values: >-
+      {%- set records = {} -%}
+      {%- for rule in __linux_compliance_remediate_family.apply
+            if __linux_compliance_remediate_sc_plan[rule.rule_id].status == 'applied' -%}
+      {%- set planned = __linux_compliance_remediate_sc_plan[rule.rule_id] -%}
+      {%- set prior = __linux_compliance_remediate_sc_records[rule.rule_id] -%}
+      {%- set base = {'method': 'dropin', 'dropin': none} if prior is none else prior -%}
+      {%- set extra = {} -%}
+      {%- for edit in planned.edits if ('vendor_line:' ~ edit.path) not in base -%}
+      {%- set _ = extra.update({'vendor_line:' ~ edit.path: edit.original,
+                                'vendor_written:' ~ edit.path: edit.written}) -%}
+      {%- endfor -%}
+      {%- if planned.runtime | length > 0 and base.runtime_prior is not defined -%}
+      {%- set _ = extra.update({'runtime_prior': planned.current,
+                                'runtime_written': __linux_compliance_remediate_sc_values[rule.rule_id].value}) -%}
+      {%- if rule.parameters.key in __linux_compliance_remediate_sysctl_propagating -%}
+      {%- set companion_glob = '^' ~ (__linux_compliance_remediate_sysctl_propagating[rule.parameters.key]
+            | regex_escape | replace(__linux_compliance_remediate_backslash ~ '*', '[^.]+')) ~ '$' -%}
+      {%- for companion in __linux_compliance_remediate_sc_running_values.keys() | select('match', companion_glob)
+            | reject('equalto', rule.parameters.key) | sort -%}
+      {%- set _ = extra.update({'companion:' ~ companion:
+                                __linux_compliance_remediate_sc_running_values[companion]}) -%}
+      {%- endfor -%}
+      {%- endif -%}
+      {%- for companion in __linux_compliance_remediate_sysctl_side_effects[rule.parameters.key] | default([])
+            if companion != rule.parameters.key
+               and __linux_compliance_remediate_sc_running_values[companion] | default(none) is not none -%}
+      {%- set _ = extra.update({'companion:' ~ companion:
+                                __linux_compliance_remediate_sc_running_values[companion]}) -%}
+      {%- endfor -%}
+      {%- endif -%}
+      {%- set values = base | combine(extra)
+            | combine({'dropin_sha256': __linux_compliance_remediate_sc_contents[rule.rule_id] | hash('sha256'),
+                       'written_line': __linux_compliance_remediate_sc_lines[rule.rule_id]}) -%}
+      {%- if prior is none or values != prior -%}
+      {%- set _ = records.update({rule.rule_id: values}) -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {{ records }}
+    __linux_compliance_remediate_sc_directory_missing: >-
+      {{ not (__linux_compliance_remediate_sc_directory_stat.exists | default(false)) }}
+  tags:
+    - always
+
+- name: Kernel parameters | Create the drop-in directory that systemd-sysctl reads but that does not exist
+  ansible.builtin.file:
+    path: "{{ __linux_compliance_remediate_sysctl_directory }}"
+    state: directory
+    mode: "0755"
+    owner: root
+    group: root
+  register: __linux_compliance_remediate_sc_directory_created
+  when:
+    - __linux_compliance_remediate_sc_to_write | length > 0
+    - __linux_compliance_remediate_sc_directory_missing
+  tags:
+    - always
+
+- name: Kernel parameters | Mark the directory as created by the collection, so cleanup can remove it
+  ansible.builtin.file:
+    path: "{{ __linux_compliance_remediate_sysctl_marker }}"
+    state: touch
+    mode: "0600"
+    owner: root
+    group: root
+    access_time: preserve
+    modification_time: preserve
+  when:
+    - __linux_compliance_remediate_sc_to_write | length > 0
+    - __linux_compliance_remediate_sc_directory_missing
+  tags:
+    - always
+
+- name: Kernel parameters | Record the prior state of each rule, the lines and running values it changes, before writing
+  freesecdev.linux_compliance.control_state:
+    action: record
+    rule_id: "{{ __linux_compliance_remediate_sc_rule.rule_id }}"
+    family: "{{ __linux_compliance_remediate_sc_rule.family }}"
+    revert_strategy: "{{ __linux_compliance_remediate_sc_rule.revert_strategy }}"
+    prior_values: >-
+      {{ __linux_compliance_remediate_sc_record_values[__linux_compliance_remediate_sc_rule.rule_id]
+         | dict2items(key_name='name', value_name='value') }}
+    collection_version: "{{ __linux_compliance_remediate_collection_version }}"
+    replace: "{{ __linux_compliance_remediate_sc_rule.ledger_entry is mapping }}"
+  loop: >-
+    {{ __linux_compliance_remediate_family.apply
+       | selectattr('rule_id', 'in', __linux_compliance_remediate_sc_record_values.keys() | list) | list }}
+  loop_control:
+    loop_var: __linux_compliance_remediate_sc_rule
+    label: "{{ __linux_compliance_remediate_sc_rule.rule_id }}"
+  register: __linux_compliance_remediate_sc_record
+  tags:
+    - always
+
+- name: Kernel parameters | Write the drop-in of every rule, which sorts after the drop-ins of the distribution
+  ansible.builtin.copy:
+    content: "{{ __linux_compliance_remediate_sc_contents[__linux_compliance_remediate_sc_rule.rule_id] }}"
+    dest: "{{ __linux_compliance_remediate_sc_rule.parameters.path }}"
+    follow: false
+    force: true
+    mode: "0644"
+    owner: root
+    group: root
+  loop: "{{ __linux_compliance_remediate_sc_to_write }}"
+  loop_control:
+    loop_var: __linux_compliance_remediate_sc_rule
+    label: "{{ __linux_compliance_remediate_sc_rule.rule_id }}"
+  register: __linux_compliance_remediate_sc_write
+  when: not (ansible_check_mode and __linux_compliance_remediate_sc_directory_missing)
+  tags:
+    - always
+
+- name: Kernel parameters | Set the compliant value on the one conflicting line of a vendor file
+  ansible.builtin.lineinfile:
+    path: "{{ __linux_compliance_remediate_sc_edit.path }}"
+    regexp: "{{ '^' ~ (__linux_compliance_remediate_sc_edit.original | regex_escape) ~ '$' }}"
+    line: >-
+      {{ __linux_compliance_remediate_sc_edit.written
+         | replace(__linux_compliance_remediate_backslash,
+                   __linux_compliance_remediate_backslash ~ __linux_compliance_remediate_backslash) }}
+    backrefs: true
+    state: present
+    create: false
+  loop: "{{ __linux_compliance_remediate_sc_edits }}"
+  loop_control:
+    loop_var: __linux_compliance_remediate_sc_edit
+    label: "{{ __linux_compliance_remediate_sc_edit.path }}"
+  register: __linux_compliance_remediate_sc_edited
+  tags:
+    - always
+
+- name: Kernel parameters | Set the running value that the check requires
+  freesecdev.linux_compliance.sysctl_runtime:
+    set: "{{ __linux_compliance_remediate_sc_runtime_set }}"
+  register: __linux_compliance_remediate_sc_runtime_written
+  when: __linux_compliance_remediate_sc_runtime_set | length > 0
+  tags:
+    - always
+
+- name: Kernel parameters | Name the interfaces to read for every rule whose value the kernel combines with theirs
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_sc_interface_read: >-
+      {%- set names = [] -%}
+      {%- for rule in __linux_compliance_remediate_family.apply
+            if __linux_compliance_remediate_sc_runtime
+               and rule.parameters.key in __linux_compliance_remediate_sysctl_interface_combination
+               and __linux_compliance_remediate_sc_plan[rule.rule_id].status in ['applied', 'compliant'] -%}
+      {%- set parts = rule.parameters.key.split('.') -%}
+      {%- set _ = names.append((parts[:3] + ['*', parts[4]]) | join('.')) -%}
+      {%- endfor -%}
+      {{ names | unique | list }}
+  tags:
+    - always
+
+- name: Kernel parameters | Read the value of every interface after the running values of the family are set
+  freesecdev.linux_compliance.sysctl_runtime:
+    read: "{{ __linux_compliance_remediate_sc_interface_read }}"
+  register: __linux_compliance_remediate_sc_interfaces_now
+  when: __linux_compliance_remediate_sc_interface_read | length > 0
+  tags:
+    - always
+
+- name: Kernel parameters | Name the interfaces whose own value still makes the effective value looser than the rule
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_sc_interface_findings: >-
+      {%- set findings = {} -%}
+      {%- set now = __linux_compliance_remediate_sc_interfaces_now.running | default({}) -%}
+      {%- for rule in __linux_compliance_remediate_family.apply
+            if __linux_compliance_remediate_sc_runtime
+               and rule.parameters.key in __linux_compliance_remediate_sysctl_interface_combination
+               and __linux_compliance_remediate_sc_plan[rule.rule_id].status in ['applied', 'compliant'] -%}
+      {%- set key = rule.parameters.key -%}
+      {%- set planned = __linux_compliance_remediate_sc_plan[rule.rule_id] -%}
+      {%- set wanted = __linux_compliance_remediate_sc_values[rule.rule_id] -%}
+      {%- set accepted_ints = wanted.accepted | default([], true) | map('int') | list -%}
+      {%- set combination = __linux_compliance_remediate_sysctl_interface_combination[key] -%}
+      {%- set parts = key.split('.') -%}
+      {%- set all_text = (wanted.value | string) if planned.runtime | length > 0 else now[key] | default(none) -%}
+      {%- set own_all = all_text | trim | int if all_text is string and all_text | trim is match('^-?[0-9]+$')
+            else none -%}
+      {%- set interface_pattern = '^' ~ ((parts[:3] | join('.')) | regex_escape) ~ '\\.([^.]+)\\.'
+            ~ (parts[4] | regex_escape) ~ '$' -%}
+      {%- set loose = [] -%}
+      {%- for name, own in now | dictsort
+            if name is match(interface_pattern) and name.split('.')[3] not in ['all', 'default', 'lo'] -%}
+      {%- set device = own | trim | int if own is string and own | trim is match('^-?[0-9]+$') else none -%}
+      {%- set combined = none if own_all is none or device is none
+            else ([own_all, device] | max) if combination == 'max'
+            else ([own_all, device] | min) if combination == 'min'
+            else (1 if own_all != 0 or device != 0 else 0) if combination == 'or'
+            else (1 if own_all != 0 and device != 0 else 0) if combination == 'and'
+            else device -%}
+      {%- set good = combined is not none
+            and (combined in accepted_ints
+                 or (combination == 'min' and accepted_ints | length > 0 and combined < accepted_ints | min)) -%}
+      {%- if not good -%}
+      {%- set _ = loose.append(name.split('.')[3] ~ ' (' ~ name ~ ' = ' ~ (own | trim) ~ ', so the kernel uses '
+            ~ (combined if combined is not none else 'an unknown value') ~ ')') -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {%- if loose | length > 0 -%}
+      {%- set _ = findings.update({rule.rule_id: loose}) -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {{ findings }}
+  tags:
+    - always
+
+- name: Kernel parameters | Add the result of every rule to apply and remember the drop-ins that this run writes
+  vars:
+    __linux_compliance_remediate_sc_set_names: >-
+      {{ __linux_compliance_remediate_sc_runtime_written.set | default([]) | selectattr('changed')
+         | map(attribute='name') | list }}
+    __linux_compliance_remediate_sc_changed_ids: >-
+      {{ (__linux_compliance_remediate_sc_write.results | default([]) | selectattr('changed')
+          | map(attribute='__linux_compliance_remediate_sc_rule.rule_id') | list)
+         + (__linux_compliance_remediate_sc_edited.results | default([]) | selectattr('changed')
+            | map(attribute='__linux_compliance_remediate_sc_edit.rule_id') | list)
+         + (__linux_compliance_remediate_sc_record.results | default([]) | selectattr('changed')
+            | map(attribute='__linux_compliance_remediate_sc_rule.rule_id') | list)
+         + ((__linux_compliance_remediate_sc_to_write | map(attribute='rule_id') | list)
+            if __linux_compliance_remediate_sc_directory_created is changed else [])
+         + (__linux_compliance_remediate_family.apply
+            | selectattr('parameters.key', 'in', __linux_compliance_remediate_sc_set_names)
+            | selectattr('rule_id', 'in', __linux_compliance_remediate_sc_plan | dict2items
+                                          | selectattr('value.runtime') | map(attribute='key') | list)
+            | map(attribute='rule_id') | list) }}
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_sc_written: >-
+      {{ __linux_compliance_remediate_sc_to_write | map(attribute='parameters.path') | list }}
+    __linux_compliance_remediate_results: >-
+      {%- set results = [] -%}
+      {%- for rule in __linux_compliance_remediate_family.apply -%}
+      {%- set planned = __linux_compliance_remediate_sc_plan[rule.rule_id] -%}
+      {%- set loose = __linux_compliance_remediate_sc_interface_findings[rule.rule_id] | default([]) -%}
+      {%- set _ = results.append({
+            'rule_id': rule.rule_id,
+            'family': rule.family,
+            'action': 'apply',
+            'status': planned.status,
+            'reason': 'interface_override' if loose | length > 0 else planned.reason,
+            'changed': rule.rule_id in __linux_compliance_remediate_sc_changed_ids,
+            'message': rule.parameters.path ~ ': ' ~ planned.status
+                       ~ ((' (' ~ planned.reason ~ '; nothing was changed)')
+                          if planned.reason and planned.status not in ['applied', 'compliant'] else '')
+                       ~ ((' (the conflicting line of ' ~ planned.edits | map(attribute='path') | join(', ')
+                           ~ ' now sets ' ~ rule.parameters.key ~ ' to the same value; the original line is'
+                           ~ ' recorded and written back on cleanup)') if planned.edits | length > 0 else '')
+                       ~ ((' (the running value was ' ~ planned.current ~ ' and is now the value of the drop-in;'
+                           ~ ' the value before is recorded and set again on cleanup)')
+                          if planned.runtime | length > 0 else '')
+                       ~ (' (only the persistent value was written; the running kernel takes it at the next boot)'
+                          if planned.status == 'applied' and not __linux_compliance_remediate_sc_runtime else '')
+                       ~ (' (only the persistent value is compliant: the running value was not read, because'
+                          ~ ' linux_compliance_remediate_sysctl_runtime is false)'
+                          if planned.status == 'compliant' and not __linux_compliance_remediate_sc_runtime
+                          else '')
+                       ~ ((' (interface_override: the kernel combines ' ~ rule.parameters.key ~ ' with the value of'
+                           ~ ' each interface, and these interfaces still have a looser effective value, which'
+                           ~ ' the collection does not change: ' ~ loose | join(', ') ~ ')')
+                          if loose | length > 0 else '')}) -%}
+      {%- endfor -%}
+      {{ __linux_compliance_remediate_results + results }}
+  tags:
+    - always
+
+- name: Kernel parameters | List what is left in the drop-in directory that the collection created
+  ansible.builtin.find:
+    paths: "{{ __linux_compliance_remediate_sysctl_directory }}"
+    file_type: any
+    follow: false
+    hidden: true
+    recurse: false
+  register: __linux_compliance_remediate_sc_left
+  when: __linux_compliance_remediate_sysctl_marker in __linux_compliance_remediate_sc_entries
+  tags:
+    - always
+
+- name: Kernel parameters | Decide whether the directory holds nothing but the marker of the collection
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_sc_tidy: >-
+      {{ __linux_compliance_remediate_sysctl_marker in __linux_compliance_remediate_sc_entries
+         and (__linux_compliance_remediate_sc_directory_stat.isdir | default(false))
+         and __linux_compliance_remediate_sc_entries[__linux_compliance_remediate_sysctl_marker].isreg
+         and (__linux_compliance_remediate_sc_left.files | default([]) | map(attribute='path') | list
+              | difference(__linux_compliance_remediate_sc_removed)
+              | union(__linux_compliance_remediate_sc_written) | sort)
+             == [__linux_compliance_remediate_sysctl_marker] }}
+  tags:
+    - always
+
+- name: Kernel parameters | Remove the drop-in directory that the collection created, once it holds no drop-in
+  ansible.builtin.file:
+    path: "{{ __linux_compliance_remediate_sc_tidy_path }}"
+    state: absent
+  loop:
+    - "{{ __linux_compliance_remediate_sysctl_marker }}"
+    - "{{ __linux_compliance_remediate_sysctl_directory }}"
+  loop_control:
+    loop_var: __linux_compliance_remediate_sc_tidy_path
+  when: __linux_compliance_remediate_sc_tidy
+  tags:
+    - always

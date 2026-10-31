@@ -1,0 +1,37 @@
+---
+minor_changes:
+  - >-
+    remediate - the kernel parameter topics are native (FREES-107, ADR 0029): 20 rules of ``sysctl`` and all 26 of
+    ``ipv4_parameters`` and 19 of ``ipv6_parameters``. Each rule writes one drop-in
+    ``/etc/sysctl.d/999-freesecdev-<rule>.conf`` with the value of the selected profile or of the check, which sorts
+    after every file of the distributions, and, where the check rejects the running value, sets that as well and
+    records the value before, which cleanup sets back (for the forwarding rules together with the flag of every
+    interface). A conflicting line of an Ubuntu procps file in ``/etc/sysctl.d`` (``rp_filter=2`` in
+    ``10-network-security.conf``) or of ufw's ``/etc/ufw/sysctl.conf`` is set to the rule's value, recorded first
+    and written back on cleanup; a
+    conflicting setting in an administrator's file is reported ``overridden`` or ``conflicting_setting`` and never
+    edited. ``ipv4_parameters`` and ``ipv6_parameters`` stay disruptive and need the family or ``network`` in
+    ``linux_compliance_remediate_allow_disruptive``. Eleven rules stay ``audit_only`` with their reasons in ADR 0029,
+    among them the three whose running value cannot be set back until the next boot.
+  - >-
+    remediate - the kernel parameter topics decide what takes effect with a model of ``systemd-sysctl`` and
+    ``sysctl --system`` (the filter ``freesecdev.linux_compliance.sysctl_effective``), checked against what the real
+    readers of the Molecule images set (``make sysctl-reader-verdicts``); a rule is ``overridden`` unless both
+    readers would apply its drop-in, and ``compliant`` only when both already set an accepted value; what the model
+    does not follow (a file name that procps expands as a pattern, a procps key with ``..``, a line of 1 MiB at which
+    systemd stops reading, a ufw setting other than a plain one) refuses the family (``unparsed_configuration``);
+    ufw's ``/etc/ufw/sysctl.conf`` counts only when ufw is enabled.
+  - >-
+    remediate - with the running values on, a rule of ``net.ipv4.conf.all`` or ``net.ipv6.conf.all`` whose value the
+    kernel combines with each interface's is always applied and then, after the running values are set, reported
+    with the reason ``interface_override`` and the interfaces named when an interface still keeps a looser effective
+    value; the collection never writes per-interface values; with them off, results carry the reason
+    ``running_value_not_read``; a running value that cleanup could not write back is refused as
+    ``prior_unrestorable``.
+  - >-
+    remediate - new variable ``linux_compliance_remediate_sysctl_runtime`` (default ``true``); with ``false`` the
+    kernel parameter topics write only the persistent drop-ins and neither read nor change the running kernel.
+  - >-
+    sysctl_runtime - new module that reads and sets running kernel parameters through their files below
+    ``/proc/sys``, without running a program; it refuses links and other file systems, reads every value back and
+    writes the value before back when the kernel keeps another one.

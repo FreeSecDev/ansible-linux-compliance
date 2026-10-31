@@ -456,7 +456,10 @@ def test_the_repository_declarations_pass_against_the_repository_catalogue(tmp_p
     native, errors = lifecycle.check(root)
     assert native == [
         "file_permissions",
+        "sysctl",
         "banners",
+        "ipv4_parameters",
+        "ipv6_parameters",
         "filesystem_modules",
         "protocol_modules",
         "wireless_modules",
@@ -967,6 +970,10 @@ def test_the_repository_declares_regression_groups_for_pwquality_ssh_and_sudo() 
         "changes": frozenset({"ubuntu", "rhel_compatible"}),
         "vendor": frozenset({"ubuntu", "rhel_compatible"}),
     }
+    assert found["ipv4_parameters"] == {"changes": frozenset({"ubuntu", "rhel_compatible"})}
+    assert lifecycle.regression_platforms(REPOSITORY_ROOT, "libvirt")["ipv4_parameters"] == {
+        "runtime": frozenset({"ubuntu", "rhel_compatible"})
+    }
     assert found["login_defs"] == {
         "changes": frozenset({"ubuntu", "rhel_compatible"}),
         "refusals": frozenset({"ubuntu", "rhel_compatible"}),
@@ -979,7 +986,56 @@ def test_the_repository_declares_regression_groups_for_pwquality_ssh_and_sudo() 
     assert found["protocol_modules"] == {}
     assert found["wireless_modules"] == {}
     assert found["file_permissions"] == {}
-    assert len(lifecycle.dispatched_regressions(REPOSITORY_ROOT)) == 16
+    assert len(lifecycle.dispatched_regressions(REPOSITORY_ROOT)) == 18
+
+
+LIBVIRT_GROUP = {**GROUP, "requires": ["libvirt"]}
+
+
+def test_a_regression_group_may_require_libvirt(tmp_path: Path) -> None:
+    pre_states = [*cast("list[object]", VALID["pre_states"]), LIBVIRT_PRE_STATE]
+    root = make_root(
+        tmp_path, {"file_permissions": changed(pre_states=pre_states, regressions=[LIBVIRT_GROUP])}
+    )
+    write_dispatch(root, FILES[:1])
+    assert lifecycle.check(root)[1] == []
+    assert lifecycle.regression_platforms(root)["file_permissions"] == {}
+    assert lifecycle.regression_platforms(root, "libvirt")["file_permissions"] == {
+        "changes": frozenset({"ubuntu"})
+    }
+
+
+@pytest.mark.parametrize(
+    ("declaration", "message"),
+    [
+        (
+            changed(regressions=[LIBVIRT_GROUP]),
+            (
+                "regressions changes runs on no platform with a libvirt lifecycle scenario"
+                " that runs a cycle of the topic"
+            ),
+        ),
+        (
+            changed(regressions=[{**GROUP, "requires": "libvirt"}]),
+            "regressions[0].requires needs a non-empty list of drivers",
+        ),
+        (
+            changed(regressions=[{**GROUP, "requires": ["vagrant"]}]),
+            "regressions[0].requires names the unknown driver 'vagrant'",
+        ),
+        (
+            changed(requires=["docker"], regressions=[LIBVIRT_GROUP]),
+            "regressions[0] requires libvirt, which the topic does not require",
+        ),
+    ],
+)
+def test_an_invalid_driver_of_a_regression_group_is_reported(
+    tmp_path: Path, declaration: dict[str, object], message: str
+) -> None:
+    root = make_root(tmp_path, {"file_permissions": declaration})
+    write_dispatch(root, FILES[:1])
+    found = lifecycle.check(root)[1]
+    assert any(message in error for error in found), found
 
 
 @pytest.mark.parametrize(

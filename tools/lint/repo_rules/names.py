@@ -192,6 +192,7 @@ BANNED_KEYWORDS: Final[frozenset[str]] = frozenset(
         "limits",
         "registry",
         "install_root",
+        "proc_root",
     }
 )
 SEAM_OWNERS: Final[Mapping[Path, frozenset[str]]] = MappingProxyType(
@@ -207,6 +208,7 @@ SEAM_OWNERS: Final[Mapping[Path, frozenset[str]]] = MappingProxyType(
         Path("plugins/module_utils/compliance/scc.py"): frozenset(
             {"runner", "clock", "limits", "install_root"}
         ),
+        Path("plugins/module_utils/compliance/sysctl.py"): frozenset({"proc_root"}),
         Path("plugins/module_utils/compliance/openscap.py"): frozenset(
             {"runner", "clock", "limits"}
         ),
