@@ -15,6 +15,7 @@ from __future__ import annotations
 import hashlib
 import json
 import operator
+import os
 import posixpath
 import subprocess
 import sys
@@ -29,6 +30,7 @@ from ansible_collections.freesecdev.linux_compliance.plugins.filter import (
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
 FIXTURES = REPOSITORY_ROOT / "tests" / "fixtures" / "lifecycle_record"
+COLLECTIONS = Path(record.__file__).parents[5]
 TIMEOUT_SECONDS = 300
 END = record.LINE_END
 TIMES = r"^/var/lib/rpm/rpmdb\.sqlite-(shm|wal)$"
@@ -170,7 +172,9 @@ def test_ansible_core_renders_the_expected_lines(tmp_path: Path, playbook: str) 
     output = tmp_path / "expected.json"
     result = subprocess.run(
         [
-            str(Path(sys.executable).parent / "ansible-playbook"),
+            sys.executable,
+            "-m",
+            "ansible.cli.playbook",
             "-i",
             "localhost,",
             "-c",
@@ -188,7 +192,8 @@ def test_ansible_core_renders_the_expected_lines(tmp_path: Path, playbook: str) 
         env={
             "PATH": "/usr/bin:/bin",
             "HOME": str(tmp_path),
-            "ANSIBLE_COLLECTIONS_PATH": str(REPOSITORY_ROOT / "build" / "collections"),
+            "PYTHONPATH": os.pathsep.join(sys.path),
+            "ANSIBLE_COLLECTIONS_PATH": str(COLLECTIONS),
         },
     )
     assert result.returncode == 0, result.stdout + result.stderr
