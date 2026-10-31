@@ -232,10 +232,18 @@ def test_every_role_task_file_belongs_to_the_native_topic_of_its_name(trees: Tre
             including = [
                 family
                 for family in families
+                if Path(relative).name
+                in (REPOSITORY_ROOT / "roles" / "remediate" / "tasks" / f"{family}.yml").read_text(
+                    encoding="utf-8"
+                )
+            ] or [
+                family
+                for family in families
                 if umbrella_of[family] is not None and stem.startswith(f"{umbrella_of[family]}_")
             ]
             assert len(including) > 1, relative
-            expected = {
+            assert len({umbrella_of[family] for family in including}) == 1, relative
+            expected = named | {
                 name
                 for family in including
                 for name in umbrella_of
@@ -244,7 +252,7 @@ def test_every_role_task_file_belongs_to_the_native_topic_of_its_name(trees: Tre
         else:
             assert len(named & set(families)) == 1, relative
         assert set(trees.context.classify(relative)[0]) == expected, relative
-    assert shared == 3
+    assert shared == 6
 
 
 def test_every_regression_file_belongs_to_the_topics_whose_groups_name_it(trees: Trees) -> None:

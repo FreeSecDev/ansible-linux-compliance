@@ -169,7 +169,7 @@ def login_defs_rules() -> dict[str, dict[str, object]]:
     return {
         rule_id: parameters
         for rule_id, parameters in native_parameters().items()
-        if parameters.get("comparison") is not None
+        if parameters.get("comparison") is not None and "stack_checked" not in parameters
     }
 
 

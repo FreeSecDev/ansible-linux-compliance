@@ -1,0 +1,239 @@
+---
+- name: PAM configuration line | Refuse to set a setting that the dispatcher did not plan
+  ansible.builtin.assert:
+    that:
+      - linux_compliance_remediate_enabled is boolean
+      - linux_compliance_remediate_enabled
+      - __linux_compliance_remediate_family is mapping
+      - __linux_compliance_remediate_family.name in ['faillock', 'pwhistory']
+      - __linux_compliance_remediate_sc is mapping
+      - __linux_compliance_remediate_sc.family == __linux_compliance_remediate_family.name
+      - __linux_compliance_remediate_rule is mapping
+      - __linux_compliance_remediate_rule.family == __linux_compliance_remediate_family.name
+      - >-
+        __linux_compliance_remediate_rule.parameters.setting
+        is match(__linux_compliance_remediate_security_conf_setting_pattern)
+      - >-
+        __linux_compliance_remediate_rule.parameters.comparison
+        in __linux_compliance_remediate_security_conf_comparisons
+      - __linux_compliance_remediate_sc_values[__linux_compliance_remediate_rule.rule_id] is string
+      - __linux_compliance_remediate_plan is defined
+      - __linux_compliance_remediate_plan is mapping
+      - __linux_compliance_remediate_plan.enabled is true
+      - >-
+        __linux_compliance_remediate_rule in
+        ((__linux_compliance_remediate_plan.families
+         | selectattr('name', 'equalto', __linux_compliance_remediate_family.name) | list | first
+         | default({}))).apply | default([])
+    fail_msg: >-
+      pam_conf_apply.yml runs only for a rule that the remediate dispatcher planned to apply, with
+      linux_compliance_remediate_enabled true. No change was made to the host.
+    quiet: true
+  tags:
+    - always
+
+- name: PAM configuration line | Read the method and the values that the ledger entry of the rule records
+  vars:
+    __linux_compliance_remediate_sc_recorded: >-
+      {{ (__linux_compliance_remediate_rule.ledger_entry.prior_values | default([])
+          | items2dict(key_name='name', value_name='value'))
+         if __linux_compliance_remediate_rule.ledger_entry is mapping else {} }}
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_sc_entry: "{{ __linux_compliance_remediate_sc_recorded }}"
+    __linux_compliance_remediate_sc_entry_method: >-
+      {{ none if __linux_compliance_remediate_rule.ledger_entry is not mapping
+         else __linux_compliance_remediate_sc_recorded.method | default('unknown') }}
+  tags:
+    - always
+
+- name: PAM configuration line | Inspect the configuration file with its SHA-256, without following a link
+  ansible.builtin.stat:
+    path: "{{ __linux_compliance_remediate_sc.path }}"
+    follow: false
+    get_checksum: true
+    checksum_algorithm: sha256
+    get_mime: false
+    get_attributes: false
+  register: __linux_compliance_remediate_sc_stat
+  tags:
+    - always
+
+- name: PAM configuration line | Read the configuration file
+  ansible.builtin.slurp:
+    src: "{{ __linux_compliance_remediate_sc.path }}"
+  register: __linux_compliance_remediate_sc_current
+  when: __linux_compliance_remediate_sc_stat.stat.isreg | default(false)
+  tags:
+    - always
+
+- name: PAM configuration line | Decide the setting as pam reads the file and every PAM service file
+  vars:
+    __linux_compliance_remediate_sc_setting: "{{ __linux_compliance_remediate_rule.parameters.setting }}"
+    __linux_compliance_remediate_sc_text: >-
+      {{ (__linux_compliance_remediate_sc_current.content | b64decode)
+         if __linux_compliance_remediate_sc_current is not skipped else '' }}
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_sc_regexp: "{{ '^[ \t]*' ~ __linux_compliance_remediate_sc_setting ~ '(?:[ \t=]|$)' }}"
+    __linux_compliance_remediate_sc_decision: >-
+      {{ __linux_compliance_remediate_sc_text | freesecdev.linux_compliance.pam_conf_decision({
+           'reader': __linux_compliance_remediate_sc.family,
+           'setting': __linux_compliance_remediate_sc_setting,
+           'comparison': __linux_compliance_remediate_rule.parameters.comparison,
+           'required': __linux_compliance_remediate_sc_values[__linux_compliance_remediate_rule.rule_id],
+           'stack_checked': __linux_compliance_remediate_rule.parameters.stack_checked},
+           __linux_compliance_remediate_sc_stack_texts) }}
+  tags:
+    - always
+
+- name: PAM configuration line | Name the line to write and the one line of the setting that it replaces
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_sc_line: "{{ __linux_compliance_remediate_sc_decision.line }}"
+    __linux_compliance_remediate_sc_found: >-
+      {{ [] if __linux_compliance_remediate_sc_decision.setting_line is none
+         else [__linux_compliance_remediate_sc_decision.setting_line] }}
+  tags:
+    - always
+
+- name: PAM configuration line | Decide whether the setting must be written
+  vars:
+    __linux_compliance_remediate_sc_by_sibling: >-
+      {{ __linux_compliance_remediate_sc_written[__linux_compliance_remediate_rule.parameters.setting]
+         | default(none) }}
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_sc_shared: >-
+      {{ __linux_compliance_remediate_rule.ledger_entry is none
+         and __linux_compliance_remediate_sc_by_sibling is not none
+         and __linux_compliance_remediate_sc_decision.status in ['applied', 'compliant']
+         and __linux_compliance_remediate_sc_found == [__linux_compliance_remediate_sc_by_sibling.line] }}
+    __linux_compliance_remediate_sc_status: >-
+      {{ 'method_changed' if __linux_compliance_remediate_sc_entry_method not in [none, 'line']
+         else 'notapplicable' if not __linux_compliance_remediate_sc_stat.stat.exists
+         else 'not_regular_file' if not __linux_compliance_remediate_sc_stat.stat.isreg
+         else __linux_compliance_remediate_sc_decision.status
+              if __linux_compliance_remediate_sc_decision.status not in ['applied', 'compliant']
+         else 'applied' if __linux_compliance_remediate_rule.ledger_entry is none
+              and __linux_compliance_remediate_sc_by_sibling is not none
+              and __linux_compliance_remediate_sc_found == [__linux_compliance_remediate_sc_by_sibling.line]
+         else __linux_compliance_remediate_sc_decision.status }}
+  tags:
+    - always
+
+- name: PAM configuration line | Name the prior state to record, the one a sibling rule recorded for a shared line
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_sc_prior: >-
+      {{ __linux_compliance_remediate_sc_written[__linux_compliance_remediate_rule.parameters.setting].prior
+         if __linux_compliance_remediate_sc_shared
+         else __linux_compliance_remediate_sc_entry
+              if __linux_compliance_remediate_sc_entry_method == 'line'
+         else {'method': 'line',
+               'setting_line': __linux_compliance_remediate_sc_found | first | default(none),
+               'mode': __linux_compliance_remediate_sc_stat.stat.mode | default(none),
+               'owner': __linux_compliance_remediate_sc_stat.stat.uid | default('') | string,
+               'group': __linux_compliance_remediate_sc_stat.stat.gid | default('') | string,
+               'sha256': __linux_compliance_remediate_sc_stat.stat.checksum | default(none)} }}
+  tags:
+    - always
+
+- name: PAM configuration line | Record the prior line of the setting, the line written and the state of the file
+  freesecdev.linux_compliance.control_state:
+    action: record
+    rule_id: "{{ __linux_compliance_remediate_rule.rule_id }}"
+    family: "{{ __linux_compliance_remediate_rule.family }}"
+    revert_strategy: "{{ __linux_compliance_remediate_rule.revert_strategy }}"
+    prior_values:
+      - name: method
+        value: line
+      - name: setting_line
+        value: "{{ __linux_compliance_remediate_sc_prior.setting_line }}"
+      - name: written_line
+        value: "{{ __linux_compliance_remediate_sc_line }}"
+      - name: mode
+        value: "{{ __linux_compliance_remediate_sc_prior.mode }}"
+      - name: owner
+        value: "{{ __linux_compliance_remediate_sc_prior.owner }}"
+      - name: group
+        value: "{{ __linux_compliance_remediate_sc_prior.group }}"
+      - name: sha256
+        value: "{{ __linux_compliance_remediate_sc_prior.sha256 }}"
+    collection_version: "{{ __linux_compliance_remediate_collection_version }}"
+  register: __linux_compliance_remediate_sc_record
+  when:
+    - __linux_compliance_remediate_sc_status == 'applied'
+    - __linux_compliance_remediate_rule.ledger_entry is none
+  tags:
+    - always
+
+- name: PAM configuration line | Write the setting with the value that the content's check accepts
+  ansible.builtin.lineinfile:
+    path: "{{ __linux_compliance_remediate_sc.path }}"
+    regexp: "{{ __linux_compliance_remediate_sc_regexp }}"
+    line: "{{ __linux_compliance_remediate_sc_line }}"
+    state: present
+    create: false
+  register: __linux_compliance_remediate_sc_write
+  when:
+    - __linux_compliance_remediate_sc_status == 'applied'
+    - not __linux_compliance_remediate_sc_shared
+  tags:
+    - always
+
+- name: PAM configuration line | Keep the recorded prior state and record the line written again, after the write
+  freesecdev.linux_compliance.control_state:
+    action: record
+    rule_id: "{{ __linux_compliance_remediate_rule.rule_id }}"
+    family: "{{ __linux_compliance_remediate_rule.family }}"
+    revert_strategy: "{{ __linux_compliance_remediate_rule.revert_strategy }}"
+    prior_values: >-
+      {{ __linux_compliance_remediate_sc_entry | combine({'written_line': __linux_compliance_remediate_sc_line})
+         | dict2items(key_name='name', value_name='value') }}
+    collection_version: "{{ __linux_compliance_remediate_collection_version }}"
+    replace: true
+  register: __linux_compliance_remediate_sc_rerecord
+  when:
+    - __linux_compliance_remediate_sc_status == 'applied'
+    - __linux_compliance_remediate_sc_entry_method == 'line'
+    - __linux_compliance_remediate_sc_entry.written_line | default(none) != __linux_compliance_remediate_sc_line
+  tags:
+    - always
+
+- name: PAM configuration line | Remember the line written and its prior state for a rule that shares the setting
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_sc_written: >-
+      {{ __linux_compliance_remediate_sc_written | combine({__linux_compliance_remediate_rule.parameters.setting: {
+           'line': __linux_compliance_remediate_sc_line,
+           'prior': __linux_compliance_remediate_sc_prior}}) }}
+  when:
+    - __linux_compliance_remediate_sc_status == 'applied'
+    - not __linux_compliance_remediate_sc_shared
+    - not ansible_check_mode
+  tags:
+    - always
+
+- name: PAM configuration line | Add the result of the rule
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_results: >-
+      {{ __linux_compliance_remediate_results + [{
+           'rule_id': __linux_compliance_remediate_rule.rule_id,
+           'family': __linux_compliance_remediate_rule.family,
+           'action': 'apply',
+           'status': __linux_compliance_remediate_sc_status,
+           'reason': {
+             'method_changed': 'the ledger entry was recorded by the '
+                               ~ __linux_compliance_remediate_sc_entry_method ~ ' method; clean it up first',
+             'notapplicable': __linux_compliance_remediate_sc.path
+                              ~ ' does not exist, so the PAM package that ships it is not installed; nothing is'
+                              ~ ' created',
+             'not_regular_file': __linux_compliance_remediate_sc.path
+                                 ~ ' is a symbolic link or not a regular file; nothing is written through it'
+           }[__linux_compliance_remediate_sc_status] | default(__linux_compliance_remediate_sc_decision.reason),
+           'changed': (__linux_compliance_remediate_sc_write is changed)
+                      or (__linux_compliance_remediate_sc_record is changed)
+                      or (__linux_compliance_remediate_sc_rerecord is changed),
+           'message': __linux_compliance_remediate_sc.path ~ ' '
+                      ~ __linux_compliance_remediate_rule.parameters.setting ~ ': '
+                      ~ __linux_compliance_remediate_sc_status
+                      ~ (' (the line that another rule of the setting wrote in this run)'
+                         if __linux_compliance_remediate_sc_shared else '')
+         }] }}
+  tags:
+    - always

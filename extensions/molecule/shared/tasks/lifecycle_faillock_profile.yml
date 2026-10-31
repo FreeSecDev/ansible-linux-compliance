@@ -1,0 +1,145 @@
+---
+- name: Faillock profile | Name the rules, the toggles and the file before the profile, with its prior lines
+  vars:
+    fop_newline: "\n"
+  ansible.builtin.set_fact:
+    fop_base: >-
+      {{ (fop_original.content | b64decode)
+         ~ (fop_case.prior | default([]) | map('regex_replace', '$', fop_newline) | join) }}
+    fop_rule_ids: "{{ fop_case.rules | map('regex_replace', '^', fop_prefix) | sort }}"
+    fop_toggles: >-
+      {{ fop_case.rules | map('regex_replace', '^', 'linux_compliance_rule_') | map('regex_replace', '$', '_enabled')
+         | list }}
+
+- name: Faillock profile | Give faillock.conf the prior lines of the profile, as an administrator would
+  ansible.builtin.copy:
+    content: "{{ fop_base }}"
+    dest: "{{ fop_conf }}"
+    follow: false
+    mode: "{{ fop_original_stat.stat.mode }}"
+    owner: root
+    group: root
+  when: fop_case.prior is defined
+
+- name: Faillock profile | Switch the rules of the profile on
+  ansible.builtin.set_fact:
+    "{{ item }}": true
+  loop: "{{ fop_toggles }}"
+
+- name: Faillock profile | Pretend that the discover role verified the profile, which selects the rules
+  ansible.builtin.set_fact:
+    linux_compliance_remediate_profile: "{{ fop_case.profile }}"
+    linux_compliance_discovered: >-
+      {{ fop_profile | combine({'profile_id': 'xccdf_org.ssgproject.content_profile_' ~ fop_case.profile,
+                                'rule_ids': fop_rule_ids}) }}
+
+- name: Faillock profile | Apply the rules of the profile in check mode
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: true
+    lifecycle_family: faillock
+    lifecycle_rule_ids: "{{ fop_rule_ids }}"
+
+- name: Faillock profile | Read faillock.conf after check mode
+  ansible.builtin.slurp:
+    src: "{{ fop_conf }}"
+  register: fop_checked
+
+- name: Faillock profile | Check that check mode reported every change and made none
+  ansible.builtin.assert:
+    that:
+      - lifecycle_results | map(attribute='rule_id') | list == fop_rule_ids
+      - lifecycle_results | map(attribute='status') | unique | list == ['applied']
+      - lifecycle_results | rejectattr('changed') | list == []
+      - fop_checked.content | b64decode == fop_base
+    fail_msg: "{{ fop_label }}, {{ fop_case.profile }}, check mode: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Faillock profile | Apply the rules of the profile
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+    lifecycle_family: faillock
+    lifecycle_rule_ids: "{{ fop_rule_ids }}"
+
+- name: Faillock profile | Read the ledger after the apply of the profile
+  freesecdev.linux_compliance.control_state:
+    action: list
+  register: fop_ledger
+
+- name: Faillock profile | Read faillock.conf after the apply of the profile
+  ansible.builtin.slurp:
+    src: "{{ fop_conf }}"
+  register: fop_applied
+
+- name: Faillock profile | Check that the file as built gained the lines of the profile, each prior line rewritten
+  vars:
+    fop_newline: "\n"
+    fop_added: >-
+      {{ (fop_applied.content | b64decode)[(fop_original.content | b64decode) | length:]
+         | split(fop_newline) | reject('equalto', '') | sort }}
+  ansible.builtin.assert:
+    that:
+      - lifecycle_results | map(attribute='status') | unique | list == ['applied']
+      - (fop_applied.content | b64decode).startswith(fop_original.content | b64decode)
+      - fop_added == fop_case.lines | sort
+      - >-
+        fop_ledger.entries | selectattr('rule_id', 'in', fop_rule_ids) | map(attribute='rule_id') | sort
+        == fop_rule_ids
+    fail_msg: "{{ fop_label }}, {{ fop_case.profile }}, apply: {{ lifecycle_results }}, added {{ fop_added }}"
+    quiet: true
+
+- name: Faillock profile | Apply the rules of the profile again
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+    lifecycle_family: faillock
+    lifecycle_rule_ids: "{{ fop_rule_ids }}"
+
+- name: Faillock profile | Check that the second apply found every rule compliant
+  ansible.builtin.assert:
+    that:
+      - lifecycle_results | map(attribute='status') | unique | list == ['compliant']
+      - lifecycle_results | selectattr('changed') | list == []
+    fail_msg: "{{ fop_label }}, {{ fop_case.profile }}, second apply: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Faillock profile | Switch the rules of the profile off
+  ansible.builtin.set_fact:
+    "{{ item }}": false
+  loop: "{{ fop_toggles }}"
+
+- name: Faillock profile | Clean up the rules of the profile
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+    lifecycle_family: faillock
+    lifecycle_rule_ids: "{{ fop_rule_ids }}"
+
+- name: Faillock profile | Read faillock.conf after the cleanup of the profile
+  ansible.builtin.slurp:
+    src: "{{ fop_conf }}"
+  register: fop_after
+
+- name: Faillock profile | Check that every rule was restored and faillock.conf is byte for byte as before the profile
+  ansible.builtin.assert:
+    that:
+      - lifecycle_results | map(attribute='rule_id') | list == fop_rule_ids
+      - lifecycle_results | map(attribute='status') | unique | list == ['restored']
+      - fop_after.content | b64decode == fop_base
+    fail_msg: "{{ fop_label }}, {{ fop_case.profile }}, cleanup: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Faillock profile | Give faillock.conf its content as built back after the prior lines
+  ansible.builtin.copy:
+    content: "{{ fop_original.content | b64decode }}"
+    dest: "{{ fop_conf }}"
+    follow: false
+    mode: "{{ fop_original_stat.stat.mode }}"
+    owner: root
+    group: root
+  when: fop_case.prior is defined

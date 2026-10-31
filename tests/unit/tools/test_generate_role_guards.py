@@ -24,6 +24,8 @@ NATIVE_FAMILIES = (
     "wireless_modules",
     "ssh",
     "pwquality",
+    "pwhistory",
+    "faillock",
     "login_defs",
     "sudo",
 )

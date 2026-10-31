@@ -1,0 +1,61 @@
+---
+- name: Faillock and pwhistory case | Describe the profile with the native rules it selects
+  ansible.builtin.set_fact:
+    pam_conf_rules: "{{ pam_conf_case.short_ids | map('regex_replace', '^', pam_conf_prefix) | list }}"
+    pam_conf_profile:
+      profile_id: "{{ pam_conf_case.profile_id }}"
+      benchmark_id: "{{ pam_conf_case.benchmark_id }}"
+      content_sha256: >-
+        {{ (lookup('ansible.builtin.file', playbook_dir ~ '/../../content/manifest.yml') | from_yaml).datastreams
+           | selectattr('name', 'equalto', pam_conf_case.datastream) | map(attribute='sha256') | first }}
+      rule_ids: "{{ pam_conf_case.short_ids | map('regex_replace', '^', pam_conf_prefix) | list }}"
+
+- name: Faillock and pwhistory case | Inspect the watched files before the role runs
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+    get_checksum: true
+    checksum_algorithm: sha256
+    get_mime: false
+    get_attributes: false
+  loop: "{{ pam_conf_watched }}"
+  register: pam_conf_before
+
+- name: Faillock and pwhistory case | Run the remediate role with the profile and both families allow-listed
+  ansible.builtin.include_role:
+    name: freesecdev.linux_compliance.remediate
+  vars:
+    linux_compliance_discovered: "{{ pam_conf_profile }}"
+    linux_compliance_remediate_profile: "{{ pam_conf_case.profile_id | regex_replace('^.*_profile_', '') }}"
+
+- name: Faillock and pwhistory case | Inspect the watched files after the role ran
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+    get_checksum: true
+    checksum_algorithm: sha256
+    get_mime: false
+    get_attributes: false
+  loop: "{{ pam_conf_watched }}"
+  register: pam_conf_after
+
+- name: Faillock and pwhistory case | Check that every rule was planned and reported once and nothing changed
+  vars:
+    pam_conf_results: "{{ linux_compliance_remediated.results | selectattr('rule_id', 'in', pam_conf_rules) | list }}"
+  ansible.builtin.assert:
+    that:
+      - linux_compliance_remediated.check_mode is true
+      - __linux_compliance_remediate_plan.families | map(attribute='name') | list == pam_conf_case.families
+      - pam_conf_results | map(attribute='rule_id') | sort == pam_conf_rules | sort
+      - pam_conf_results | map(attribute='action') | unique | list == ['apply']
+      - pam_conf_results | map(attribute='status') | difference(pam_conf_statuses) | list == []
+      - pam_conf_results | selectattr('status', 'equalto', 'applied') | rejectattr('changed') | list == []
+      - pam_conf_results | rejectattr('status', 'equalto', 'applied') | selectattr('changed') | list == []
+      - pam_conf_results | rejectattr('status', 'in', ['applied', 'compliant']) | rejectattr('reason') | list == []
+      - >-
+        pam_conf_before.results | map(attribute='stat') | map('ansible.builtin.dict2items')
+        | map('rejectattr', 'key', 'in', ['atime']) | map('items2dict') | list
+        == pam_conf_after.results | map(attribute='stat') | map('ansible.builtin.dict2items')
+        | map('rejectattr', 'key', 'in', ['atime']) | map('items2dict') | list
+    fail_msg: "{{ pam_conf_case.name }}: {{ pam_conf_results | to_json }}"
+    quiet: true

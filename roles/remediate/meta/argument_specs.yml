@@ -432,7 +432,7 @@ argument_specs:
           - "Topic toggle of the pam family (ADR 0011); false switches its rules off."
           - "Also the umbrella of pwquality, pwhistory, faillock, which it switches off too."
           - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
-          - "Rules: 55, native: 14, tagged: 1. Generated; see docs/remediation-variables.md."
+          - "Rules: 55, native: 25, tagged: 1. Generated; see docs/remediation-variables.md."
       linux_compliance_pwquality_enabled:
         type: bool
         default: true
@@ -448,7 +448,7 @@ argument_specs:
           - "Topic toggle of the pwhistory family (ADR 0011); false switches its rules off."
           - "Only narrows its umbrella linux_compliance_pam_enabled."
           - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
-          - "Rules: 7, native: 0, tagged: 2. Generated; see docs/remediation-variables.md."
+          - "Rules: 7, native: 3, tagged: 2. Generated; see docs/remediation-variables.md."
       linux_compliance_faillock_enabled:
         type: bool
         default: true
@@ -456,7 +456,7 @@ argument_specs:
           - "Topic toggle of the faillock family (ADR 0011); false switches its rules off."
           - "Only narrows its umbrella linux_compliance_pam_enabled."
           - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
-          - "Rules: 14, native: 0. Generated; see docs/remediation-variables.md."
+          - "Rules: 14, native: 8. Generated; see docs/remediation-variables.md."
       linux_compliance_accounts_enabled:
         type: bool
         default: true

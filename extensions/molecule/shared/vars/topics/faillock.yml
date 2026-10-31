@@ -1,0 +1,91 @@
+---
+family: faillock
+disruptive: true
+containment: >-
+  faillock only changes the lines of /etc/security/faillock.conf that the content's checks read (deny, unlock_time,
+  fail_interval, root_unlock_time, even_deny_root, audit, silent), one recorded line per setting; it never edits the
+  PAM stack, so pam_faillock takes the settings only where the stack already loads it. A lock-out setting can at most
+  lock an account after failed logins. The harness never authenticates: it connects with docker exec through the
+  Docker API as root, without sshd, PAM, sudo or a login shell, so neither a lock-out nor a PAM stack line that a
+  pre-state or a regression adds can cut it off, and the guard's connection test after every remediate run proves
+  that it still reaches the same unprivileged container. The allow-list names faillock only for the runs of this
+  topic.
+state:
+  files:
+    - path: /etc/security/faillock.conf
+      rewritten: true
+    - path: /etc/pam.d/common-auth
+      rewritten: true
+      platforms:
+        - ubuntu
+    - path: /etc/pam.d/common-account
+      rewritten: true
+      platforms:
+        - ubuntu
+    - path: /etc/pam.d/system-auth
+      rewritten: true
+      platforms:
+        - rhel_compatible
+    - path: /etc/pam.d/password-auth
+      rewritten: true
+      platforms:
+        - rhel_compatible
+  packages:
+    - name: libpam-modules
+      platforms:
+        - ubuntu
+    - name: pam
+      platforms:
+        - rhel_compatible
+  users:
+    - name: root
+  groups:
+    - name: root
+applied:
+  files:
+    - path: /etc/security/faillock.conf
+      checksum: 76ad2ec327791f797498d26fe88ca6a6095f0745636d8803408d61f10ed4b0e9
+      platforms:
+        - ubuntu
+    - path: /etc/security/faillock.conf
+      checksum: 55b9834c268905390013e5defa844f3742cfe0706ec2ff7ce8643f9f168f2e19
+      platforms:
+        - rhel_compatible
+pre_states:
+  - name: as built
+    audit: false
+  - name: customised deny and unlock_time
+    audit: false
+    files:
+      - path: /etc/security/faillock.conf
+        lines:
+          - regexp: "^# deny = 3$"
+            line: deny=10
+          - regexp: "^# unlock_time = 600$"
+            line: unlock_time = 1800
+    unchanged:
+      - rule: accounts_passwords_pam_faillock_unlock_time
+        status: compliant
+    applied:
+      files:
+        - path: /etc/security/faillock.conf
+          checksum: f306260c55412772ad4a1694758336271c8cc0997f73b5082c4b4e4b5b2478a2
+          platforms:
+            - ubuntu
+        - path: /etc/security/faillock.conf
+          checksum: 210847f4b99f39070e82948ab7a6b231e6fcc66dc721fb19d269b56c549b7e71
+          platforms:
+            - rhel_compatible
+regressions:
+  - name: changes
+    files:
+      - lifecycle_faillock_regressions.yml
+  - name: stack
+    files:
+      - lifecycle_faillock_stack.yml
+  - name: readers
+    files:
+      - lifecycle_faillock_readers.yml
+  - name: profiles
+    files:
+      - lifecycle_faillock_other_profiles.yml

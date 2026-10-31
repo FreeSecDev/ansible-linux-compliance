@@ -169,10 +169,10 @@ through subsystem tags.
 | `linux_compliance_iptables_enabled` | `iptables` | `firewall` | yes | `true` | 12 | 0 | 12 | 0 |
 | `linux_compliance_ufw_enabled` | `ufw` | `firewall` | yes | `true` | 9 | 0 | 9 | 0 |
 | `linux_compliance_ssh_enabled` | `ssh` | none | yes | `true` | 63 | 34 | 29 | 4 |
-| `linux_compliance_pam_enabled` | `pam` | none | yes | `true` | 55 | 14 | 41 | 1 |
+| `linux_compliance_pam_enabled` | `pam` | none | yes | `true` | 55 | 25 | 30 | 1 |
 | `linux_compliance_pwquality_enabled` | `pwquality` | `pam` | yes | `true` | 19 | 14 | 5 | 0 |
-| `linux_compliance_pwhistory_enabled` | `pwhistory` | `pam` | yes | `true` | 7 | 0 | 7 | 2 |
-| `linux_compliance_faillock_enabled` | `faillock` | `pam` | yes | `true` | 14 | 0 | 14 | 0 |
+| `linux_compliance_pwhistory_enabled` | `pwhistory` | `pam` | yes | `true` | 7 | 3 | 4 | 2 |
+| `linux_compliance_faillock_enabled` | `faillock` | `pam` | yes | `true` | 14 | 8 | 6 | 0 |
 | `linux_compliance_accounts_enabled` | `password_aging`, `login_defs`, `root_access`, `umask`, `user_sessions`, `smartcard`, `console_access`, `user_accounts` | umbrella | yes | `true` | 88 | 7 | 81 | 3 |
 | `linux_compliance_password_aging_enabled` | `password_aging` | `accounts` | yes | `true` | 5 | 0 | 5 | 4 |
 | `linux_compliance_login_defs_enabled` | `login_defs` | `accounts` | yes | `true` | 7 | 7 | 0 | 1 |
@@ -1410,11 +1410,11 @@ families through their subsystem tags:
 | Variable | Rule | Strategy |
 |---|---|---|
 | `linux_compliance_rule_accounts_password_pam_pwhistory_enabled_enabled` | `accounts_password_pam_pwhistory_enabled` | `audit_only` |
-| `linux_compliance_rule_accounts_password_pam_pwhistory_enforce_for_root_enabled` | `accounts_password_pam_pwhistory_enforce_for_root` | `audit_only` |
+| `linux_compliance_rule_accounts_password_pam_pwhistory_enforce_for_root_enabled` | `accounts_password_pam_pwhistory_enforce_for_root` | `recorded_value` |
 | `linux_compliance_rule_accounts_password_pam_pwhistory_enforce_root_enabled` | `accounts_password_pam_pwhistory_enforce_root` | `audit_only` |
 | `linux_compliance_rule_accounts_password_pam_pwhistory_remember_enabled` | `accounts_password_pam_pwhistory_remember` | `audit_only` |
-| `linux_compliance_rule_accounts_password_pam_pwhistory_remember_password_auth_enabled` | `accounts_password_pam_pwhistory_remember_password_auth` | `audit_only` |
-| `linux_compliance_rule_accounts_password_pam_pwhistory_remember_system_auth_enabled` | `accounts_password_pam_pwhistory_remember_system_auth` | `audit_only` |
+| `linux_compliance_rule_accounts_password_pam_pwhistory_remember_password_auth_enabled` | `accounts_password_pam_pwhistory_remember_password_auth` | `recorded_value` |
+| `linux_compliance_rule_accounts_password_pam_pwhistory_remember_system_auth_enabled` | `accounts_password_pam_pwhistory_remember_system_auth` | `recorded_value` |
 | `linux_compliance_rule_accounts_password_pam_pwhistory_use_authtok_enabled` | `accounts_password_pam_pwhistory_use_authtok` | `audit_only` |
 
 `linux_compliance_pwhistory_enabled: false` also switches off these rules of other
@@ -1433,16 +1433,16 @@ families through their subsystem tags:
 | `linux_compliance_rule_account_password_pam_faillock_system_auth_enabled` | `account_password_pam_faillock_system_auth` | `audit_only` |
 | `linux_compliance_rule_account_password_selinux_faillock_dir_enabled` | `account_password_selinux_faillock_dir` | `audit_only` |
 | `linux_compliance_rule_accounts_passwords_pam_faildelay_delay_enabled` | `accounts_passwords_pam_faildelay_delay` | `audit_only` |
-| `linux_compliance_rule_accounts_passwords_pam_faillock_audit_enabled` | `accounts_passwords_pam_faillock_audit` | `audit_only` |
-| `linux_compliance_rule_accounts_passwords_pam_faillock_deny_enabled` | `accounts_passwords_pam_faillock_deny` | `audit_only` |
-| `linux_compliance_rule_accounts_passwords_pam_faillock_deny_root_enabled` | `accounts_passwords_pam_faillock_deny_root` | `audit_only` |
+| `linux_compliance_rule_accounts_passwords_pam_faillock_audit_enabled` | `accounts_passwords_pam_faillock_audit` | `recorded_value` |
+| `linux_compliance_rule_accounts_passwords_pam_faillock_deny_enabled` | `accounts_passwords_pam_faillock_deny` | `recorded_value` |
+| `linux_compliance_rule_accounts_passwords_pam_faillock_deny_root_enabled` | `accounts_passwords_pam_faillock_deny_root` | `recorded_value` |
 | `linux_compliance_rule_accounts_passwords_pam_faillock_dir_enabled` | `accounts_passwords_pam_faillock_dir` | `audit_only` |
 | `linux_compliance_rule_accounts_passwords_pam_faillock_enabled_enabled` | `accounts_passwords_pam_faillock_enabled` | `audit_only` |
-| `linux_compliance_rule_accounts_passwords_pam_faillock_even_deny_root_or_root_unlock_time_enabled` | `accounts_passwords_pam_faillock_even_deny_root_or_root_unlock_time` | `audit_only` |
-| `linux_compliance_rule_accounts_passwords_pam_faillock_interval_enabled` | `accounts_passwords_pam_faillock_interval` | `audit_only` |
-| `linux_compliance_rule_accounts_passwords_pam_faillock_root_unlock_time_enabled` | `accounts_passwords_pam_faillock_root_unlock_time` | `audit_only` |
-| `linux_compliance_rule_accounts_passwords_pam_faillock_silent_enabled` | `accounts_passwords_pam_faillock_silent` | `audit_only` |
-| `linux_compliance_rule_accounts_passwords_pam_faillock_unlock_time_enabled` | `accounts_passwords_pam_faillock_unlock_time` | `audit_only` |
+| `linux_compliance_rule_accounts_passwords_pam_faillock_even_deny_root_or_root_unlock_time_enabled` | `accounts_passwords_pam_faillock_even_deny_root_or_root_unlock_time` | `recorded_value` |
+| `linux_compliance_rule_accounts_passwords_pam_faillock_interval_enabled` | `accounts_passwords_pam_faillock_interval` | `recorded_value` |
+| `linux_compliance_rule_accounts_passwords_pam_faillock_root_unlock_time_enabled` | `accounts_passwords_pam_faillock_root_unlock_time` | `recorded_value` |
+| `linux_compliance_rule_accounts_passwords_pam_faillock_silent_enabled` | `accounts_passwords_pam_faillock_silent` | `recorded_value` |
+| `linux_compliance_rule_accounts_passwords_pam_faillock_unlock_time_enabled` | `accounts_passwords_pam_faillock_unlock_time` | `recorded_value` |
 
 ### `password_aging`
 

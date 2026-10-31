@@ -1,0 +1,177 @@
+---
+- name: PAM configuration line | Refuse to restore a setting that the dispatcher did not plan to clean up
+  ansible.builtin.assert:
+    that:
+      - linux_compliance_remediate_enabled is boolean
+      - linux_compliance_remediate_enabled
+      - __linux_compliance_remediate_family is mapping
+      - __linux_compliance_remediate_family.name in ['faillock', 'pwhistory']
+      - __linux_compliance_remediate_sc is mapping
+      - __linux_compliance_remediate_sc.family == __linux_compliance_remediate_family.name
+      - __linux_compliance_remediate_rule is mapping
+      - __linux_compliance_remediate_rule.family == __linux_compliance_remediate_family.name
+      - >-
+        __linux_compliance_remediate_rule.parameters.setting
+        is match(__linux_compliance_remediate_security_conf_setting_pattern)
+      - __linux_compliance_remediate_rule.ledger_entry is mapping
+      - __linux_compliance_remediate_plan is defined
+      - __linux_compliance_remediate_plan is mapping
+      - __linux_compliance_remediate_plan.enabled is true
+      - >-
+        __linux_compliance_remediate_rule in
+        ((__linux_compliance_remediate_plan.families
+         | selectattr('name', 'equalto', __linux_compliance_remediate_family.name) | list | first
+         | default({}))).cleanup | default([])
+    fail_msg: >-
+      pam_conf_cleanup.yml runs only for a rule that the remediate dispatcher planned to clean up from its ledger
+      entry, with linux_compliance_remediate_enabled true. No change was made to the host.
+    quiet: true
+  tags:
+    - always
+
+- name: PAM configuration line | Inspect the configuration file before restoring the setting, without a link
+  ansible.builtin.stat:
+    path: "{{ __linux_compliance_remediate_sc.path }}"
+    follow: false
+    get_checksum: false
+    get_mime: false
+    get_attributes: false
+  register: __linux_compliance_remediate_sc_stat
+  tags:
+    - always
+
+- name: PAM configuration line | Read the configuration file to check that the setting is the line written
+  ansible.builtin.slurp:
+    src: "{{ __linux_compliance_remediate_sc.path }}"
+  register: __linux_compliance_remediate_sc_current
+  when: __linux_compliance_remediate_sc_stat.stat.isreg | default(false)
+  tags:
+    - always
+
+- name: PAM configuration line | Read the recorded prior state of the setting and of the file
+  vars:
+    __linux_compliance_remediate_sc_records: >-
+      {{ __linux_compliance_remediate_rule.ledger_entry.prior_values | default([])
+         | items2dict(key_name='name', value_name='value') }}
+    __linux_compliance_remediate_sc_setting: "{{ __linux_compliance_remediate_rule.parameters.setting }}"
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_sc_prior: "{{ __linux_compliance_remediate_sc_records }}"
+    __linux_compliance_remediate_sc_entry_method: >-
+      {{ __linux_compliance_remediate_sc_records.method | default('unknown') }}
+    __linux_compliance_remediate_sc_regexp: "{{ '^[ \t]*' ~ __linux_compliance_remediate_sc_setting ~ '(?:[ \t=]|$)' }}"
+    __linux_compliance_remediate_sc_found: >-
+      {{ ((__linux_compliance_remediate_sc_current.content | b64decode)
+          | regex_findall('(?m)^[ \t]*' ~ __linux_compliance_remediate_sc_setting ~ '(?:[ \t=].*)?$'))
+         if __linux_compliance_remediate_sc_current is not skipped else [] }}
+  tags:
+    - always
+
+- name: PAM configuration line | Name the reason the prior state cannot be restored, or that it is already as before
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_sc_reason: >-
+      {{ 'method_changed' if __linux_compliance_remediate_sc_entry_method != 'line'
+         else 'target_absent' if not __linux_compliance_remediate_sc_stat.stat.exists
+         else 'not_regular_file' if not __linux_compliance_remediate_sc_stat.stat.isreg
+         else 'invalid_record' if not (
+              'setting_line' in __linux_compliance_remediate_sc_prior
+              and (__linux_compliance_remediate_sc_prior.setting_line is none
+                   or (__linux_compliance_remediate_sc_prior.setting_line is string
+                       and __linux_compliance_remediate_newline
+                           not in __linux_compliance_remediate_sc_prior.setting_line
+                       and __linux_compliance_remediate_sc_prior.setting_line
+                           is search(__linux_compliance_remediate_sc_regexp)))
+              and __linux_compliance_remediate_sc_prior.written_line | default(none) is string
+              and __linux_compliance_remediate_newline
+                  not in __linux_compliance_remediate_sc_prior.written_line | default('')
+              and __linux_compliance_remediate_sc_prior.written_line | default('')
+                  is search(__linux_compliance_remediate_sc_regexp)
+              and __linux_compliance_remediate_sc_prior.mode | default('') is match('^[0-7]{4}$')
+              and __linux_compliance_remediate_sc_prior.owner | default('') is match('^[0-9]{1,10}$')
+              and __linux_compliance_remediate_sc_prior.group | default('') is match('^[0-9]{1,10}$'))
+         else none if __linux_compliance_remediate_sc_found
+              == ([] if __linux_compliance_remediate_sc_prior.setting_line is none
+                  else [__linux_compliance_remediate_sc_prior.setting_line])
+         else 'modified_since_apply' if
+              __linux_compliance_remediate_sc_found != [__linux_compliance_remediate_sc_prior.written_line]
+              or __linux_compliance_remediate_sc_stat.stat.mode != __linux_compliance_remediate_sc_prior.mode
+              or (__linux_compliance_remediate_sc_stat.stat.uid | string)
+                 != __linux_compliance_remediate_sc_prior.owner
+              or (__linux_compliance_remediate_sc_stat.stat.gid | string)
+                 != __linux_compliance_remediate_sc_prior.group
+         else none }}
+  tags:
+    - always
+
+- name: PAM configuration line | Note whether the setting already is as it was before the collection changed it
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_sc_already: >-
+      {{ __linux_compliance_remediate_sc_reason is none
+         and __linux_compliance_remediate_sc_found
+             == ([] if __linux_compliance_remediate_sc_prior.setting_line is none
+                 else [__linux_compliance_remediate_sc_prior.setting_line]) }}
+  tags:
+    - always
+
+- name: PAM configuration line | Remove the setting that the file did not have before
+  ansible.builtin.lineinfile:
+    path: "{{ __linux_compliance_remediate_sc.path }}"
+    regexp: "{{ __linux_compliance_remediate_sc_regexp }}"
+    state: absent
+  register: __linux_compliance_remediate_sc_removal
+  when:
+    - __linux_compliance_remediate_sc_reason is none
+    - not __linux_compliance_remediate_sc_already
+    - __linux_compliance_remediate_sc_prior.setting_line is none
+  tags:
+    - always
+
+- name: PAM configuration line | Write back the line that the file had before, in its place
+  ansible.builtin.lineinfile:
+    path: "{{ __linux_compliance_remediate_sc.path }}"
+    regexp: "{{ __linux_compliance_remediate_sc_regexp }}"
+    line: "{{ __linux_compliance_remediate_sc_prior.setting_line }}"
+    state: present
+    create: false
+  register: __linux_compliance_remediate_sc_restored
+  when:
+    - __linux_compliance_remediate_sc_reason is none
+    - not __linux_compliance_remediate_sc_already
+    - __linux_compliance_remediate_sc_prior.setting_line is not none
+  tags:
+    - always
+
+- name: PAM configuration line | Forget the rule in the state ledger after the restore
+  freesecdev.linux_compliance.control_state:
+    action: remove
+    rule_id: "{{ __linux_compliance_remediate_rule.rule_id }}"
+  register: __linux_compliance_remediate_sc_forget
+  when: __linux_compliance_remediate_sc_reason is none
+  tags:
+    - always
+
+- name: PAM configuration line | Add the result of the cleanup
+  vars:
+    __linux_compliance_remediate_sc_cleanup_status: >-
+      {{ 'restored' if __linux_compliance_remediate_sc_reason is none else 'cleanup_incomplete' }}
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_results: >-
+      {{ __linux_compliance_remediate_results + [{
+           'rule_id': __linux_compliance_remediate_rule.rule_id,
+           'family': __linux_compliance_remediate_rule.family,
+           'action': 'cleanup',
+           'status': __linux_compliance_remediate_sc_cleanup_status,
+           'reason': __linux_compliance_remediate_sc_reason,
+           'changed': (__linux_compliance_remediate_sc_removal is changed)
+                      or (__linux_compliance_remediate_sc_restored is changed)
+                      or (__linux_compliance_remediate_sc_forget is changed),
+           'message': __linux_compliance_remediate_rule.rule_id ~ ': ' ~ __linux_compliance_remediate_sc_cleanup_status
+                      ~ ((' (' ~ __linux_compliance_remediate_sc_reason ~ ': '
+                          ~ __linux_compliance_remediate_sc.path
+                          ~ '; nothing was changed, the ledger entry is kept and the cleanup is retried on the'
+                          ~ ' next run)')
+                         if __linux_compliance_remediate_sc_reason
+                         else ' (the setting was already as before; only the ledger entry was removed)'
+                         if __linux_compliance_remediate_sc_already else '')
+         }] }}
+  tags:
+    - always

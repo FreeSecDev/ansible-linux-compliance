@@ -462,6 +462,8 @@ def test_the_repository_declarations_pass_against_the_repository_catalogue(tmp_p
         "wireless_modules",
         "ssh",
         "pwquality",
+        "pwhistory",
+        "faillock",
         "login_defs",
         "sudo",
     ]
@@ -967,6 +969,13 @@ def test_the_repository_declares_regression_groups_for_pwquality_ssh_and_sudo() 
         "changes": frozenset({"ubuntu", "rhel_compatible"}),
         "vendor": frozenset({"ubuntu", "rhel_compatible"}),
     }
+    assert found["faillock"] == {
+        "changes": frozenset({"ubuntu", "rhel_compatible"}),
+        "stack": frozenset({"ubuntu", "rhel_compatible"}),
+        "readers": frozenset({"ubuntu", "rhel_compatible"}),
+        "profiles": frozenset({"ubuntu", "rhel_compatible"}),
+    }
+    assert found["pwhistory"] == {"changes": frozenset({"rhel_compatible"})}
     assert found["login_defs"] == {
         "changes": frozenset({"ubuntu", "rhel_compatible"}),
         "refusals": frozenset({"ubuntu", "rhel_compatible"}),
@@ -977,7 +986,7 @@ def test_the_repository_declares_regression_groups_for_pwquality_ssh_and_sudo() 
     assert found["protocol_modules"] == {}
     assert found["wireless_modules"] == {}
     assert found["file_permissions"] == {}
-    assert len(lifecycle.dispatched_regressions(REPOSITORY_ROOT)) == 14
+    assert len(lifecycle.dispatched_regressions(REPOSITORY_ROOT)) == 19
 
 
 @pytest.mark.parametrize(

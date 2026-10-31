@@ -7,10 +7,10 @@ from typing import cast
 
 import yaml
 
+from ansible_collections.freesecdev.linux_compliance.plugins.filter import pam_conf, restricted_mode
 from ansible_collections.freesecdev.linux_compliance.plugins.filter import (
     remediation_plan as plan_filter,
 )
-from ansible_collections.freesecdev.linux_compliance.plugins.filter import restricted_mode
 from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance import (
     toggles,
 )
@@ -51,6 +51,14 @@ FAMILY_PARAMETERS: dict[str, list[set[str]]] = {
         {"method", "path", "type", "attribute", "max_mode"},
         {"method", "path", "type", "attribute", "id"},
     ],
+    "pwhistory": [
+        {"setting", "comparison", "stack_checked"},
+        {"setting", "comparison", "stack_checked"} | PROFILE_VALUE_PARAMETERS,
+    ],
+    "faillock": [
+        {"setting", "comparison", "stack_checked"},
+        {"setting", "comparison", "stack_checked"} | PROFILE_VALUE_PARAMETERS,
+    ],
     "filesystem_modules": [KERNEL_MODULE_PARAMETERS],
     "protocol_modules": [KERNEL_MODULE_PARAMETERS],
     "wireless_modules": [KERNEL_MODULE_PARAMETERS],
@@ -62,10 +70,20 @@ NATIVE_FAMILIES = [
     *KERNEL_MODULE_FAMILIES,
     "ssh",
     "pwquality",
+    "pwhistory",
+    "faillock",
     "login_defs",
     "sudo",
 ]
-DISRUPTIVE_NATIVE_FAMILIES = [*KERNEL_MODULE_FAMILIES, "ssh", "pwquality", "login_defs", "sudo"]
+DISRUPTIVE_NATIVE_FAMILIES = [
+    *KERNEL_MODULE_FAMILIES,
+    "ssh",
+    "pwquality",
+    "pwhistory",
+    "faillock",
+    "login_defs",
+    "sudo",
+]
 LOGIN_DEFS_VALUES = {
     "at_most": r"(0|[1-9][0-9]{0,5})",
     "at_least": r"(0|[1-9][0-9]{0,5})",
@@ -304,6 +322,49 @@ def test_native_sudo_rules_write_only_drop_ins_that_sudo_reads_and_restrict_two_
     paths = [str(cast("dict[str, object]", rule["parameters"])["path"]) for rule in sudo]
     dropins = [path for path in paths if path.startswith("/etc/sudoers.d/")]
     assert len(dropins) == len(set(dropins)) == 4
+
+
+def test_native_faillock_and_pwhistory_rules_set_one_known_line_with_the_profile_value() -> None:
+    role_vars = load(ROLE / "vars" / "main.yml")
+    setting = re.compile(
+        str(role_vars["__linux_compliance_remediate_security_conf_setting_pattern"])
+    )
+    number = re.compile(str(role_vars["__linux_compliance_remediate_security_conf_number_pattern"]))
+    comparisons = cast(
+        "list[str]", role_vars["__linux_compliance_remediate_security_conf_comparisons"]
+    )
+    found: dict[str, list[str]] = {"faillock": [], "pwhistory": []}
+    for rule in native():
+        if rule["family"] not in found:
+            continue
+        parameters = cast("dict[str, object]", rule["parameters"])
+        assert rule["revert_strategy"] == "recorded_value"
+        assert setting.fullmatch(str(parameters["setting"]))
+        assert parameters["comparison"] in comparisons
+        assert isinstance(parameters["stack_checked"], bool)
+        assert (parameters["comparison"] == "present") is ("value_id" not in parameters)
+        for entry in cast("list[dict[str, object]]", parameters.get("profile_values", [])):
+            value = "".join(cast("list[str]", entry["value"]))
+            assert number.fullmatch(value), (rule["rule_id"], value)
+            assert parameters["comparison"] != "at_most" or int(value) >= 1
+            if parameters["setting"] in pam_conf.TIME_SETTINGS:
+                assert int(value) <= pam_conf.MAX_TIME, (rule["rule_id"], value)
+        found[str(rule["family"])].append(str(parameters["setting"]))
+    assert sorted(found["faillock"]) == [
+        "audit",
+        "deny",
+        "even_deny_root",
+        "even_deny_root",
+        "fail_interval",
+        "root_unlock_time",
+        "silent",
+        "unlock_time",
+    ]
+    assert sorted(found["pwhistory"]) == ["enforce_for_root", "remember", "remember"]
+    assert role_vars["__linux_compliance_remediate_faillock_conf"] == "/etc/security/faillock.conf"
+    assert (
+        role_vars["__linux_compliance_remediate_pwhistory_conf"] == "/etc/security/pwhistory.conf"
+    )
 
 
 def test_the_task_files_are_only_family_files_and_their_helpers() -> None:
