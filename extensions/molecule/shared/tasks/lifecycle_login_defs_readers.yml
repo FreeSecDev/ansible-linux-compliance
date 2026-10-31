@@ -1,0 +1,140 @@
+---
+- name: Login defaults readers | Refuse to run unless the login_defs topic has just run its cycles on Rocky Linux
+  ansible.builtin.assert:
+    that:
+      - lifecycle_topic.family == 'login_defs'
+      - lifecycle_rule_ids | length > 0
+      - lifecycle_allow_disruptive == ['login_defs']
+      - lifecycle_platform == 'rhel_compatible'
+    fail_msg: >-
+      The login_defs reader forms reuse the facts of the login_defs lifecycle, which must have just run on Rocky Linux,
+      where util-linux reads FAIL_DELAY through libeconf; the topic was {{ lifecycle_topic.family | default('none') }}
+      on {{ lifecycle_platform | default('none') }}.
+    quiet: true
+
+- name: Login defaults readers | Read login.defs as built
+  ansible.builtin.slurp:
+    src: /etc/login.defs
+  register: ldo_original
+
+- name: Login defaults readers | Inspect login.defs as built
+  ansible.builtin.stat:
+    path: /etc/login.defs
+    follow: false
+  register: ldo_original_stat
+
+- name: Login defaults readers | Name the profile, the rules and the forms that util-linux reads through libeconf
+  vars:
+    ldo_nul: "{{ 'AA==' | b64decode }}"
+    ldo_text: "{{ ldo_original.content | b64decode }}"
+  ansible.builtin.set_fact:
+    ldo_label: login_defs forms of the other readers
+    ldo_profile: "{{ linux_compliance_discovered }}"
+    ldo_remediate_profile: "{{ linux_compliance_remediate_profile }}"
+    ldo_prefix: xccdf_org.ssgproject.content_rule_
+    ldo_rule_cases:
+      - name: FAIL_DELAY = 30, which libeconf reads as 30
+        rule: accounts_logon_fail_delay
+        text: "{{ ldo_text ~ 'FAIL_DELAY = 30\n' }}"
+        expected: applied
+        lines:
+          - FAIL_DELAY  30
+      - name: FAIL_DELAY 30 right after another setting, which libeconf glues to that setting's value
+        rule: accounts_logon_fail_delay
+        text: "{{ ldo_text ~ 'LOGIN_RETRIES 5\nFAIL_DELAY 30\n' }}"
+        expected: applied
+        lines:
+          - FAIL_DELAY  30
+      - name: FAIL_DELAY=30, which libeconf reads and shadow-utils does not
+        rule: accounts_logon_fail_delay
+        text: "{{ ldo_text ~ 'FAIL_DELAY=30\n' }}"
+        expected: unreadable_value
+      - name: a NUL after the delay, where libeconf stops reading the line
+        rule: accounts_logon_fail_delay
+        text: "{{ ldo_text ~ 'FAIL_DELAY 30' ~ ldo_nul ~ '\n' }}"
+        expected: unreadable_value
+      - name: a negative delay, which libeconf reads as a huge number
+        rule: accounts_logon_fail_delay
+        text: "{{ ldo_text ~ 'FAIL_DELAY -1\n' }}"
+        expected: unreadable_value
+      - name: a section line, after which libeconf reads no setting of login.defs
+        rule: accounts_logon_fail_delay
+        text: "{{ ldo_text ~ '[site]\n' }}"
+        expected: unreadable_file
+      - name: a drop-in that sets FAIL_DELAY, which libeconf reads after login.defs
+        rule: accounts_logon_fail_delay
+        text: "{{ ldo_text }}"
+        dropin: "FAIL_DELAY 1\n"
+        expected: overridden
+      - name: CREATE_HOME yes with a Windows line ending, which shadow-utils trims
+        rule: accounts_have_homedir_login_defs
+        text: >-
+          {{ ldo_text | regex_replace('(?m)^CREATE_HOME[ \t].*$', 'CREATE_HOME yes\r') }}
+        expected: compliant
+      - name: a drop-in that sets CREATE_HOME=no, which libeconf reads
+        rule: accounts_have_homedir_login_defs
+        text: "{{ ldo_text }}"
+        dropin: "CREATE_HOME=no\n"
+        expected: overridden
+
+- name: Login defaults readers | Take the state of the whole instance before the reader forms
+  ansible.builtin.include_tasks:
+    file: lifecycle_broad.yml
+
+- name: Login defaults readers | Remember the state of the whole instance before the reader forms
+  ansible.builtin.set_fact:
+    ldo_broad_before: "{{ lifecycle_broad_record }}"
+
+- name: Login defaults readers | Apply and clean up every form, each on a login.defs of its own
+  block:
+    - name: Login defaults readers | Run every form through an apply and a cleanup
+      ansible.builtin.include_tasks:
+        file: lifecycle_login_defs_rule_case.yml
+      loop: "{{ ldo_rule_cases }}"
+      loop_control:
+        loop_var: ldr_case
+        label: "{{ ldr_case.name }}"
+
+  always:
+    - name: Login defaults readers | Remove the drop-in directory of the forms
+      ansible.builtin.file:
+        path: /etc/login.defs.d
+        state: absent
+
+- name: Login defaults readers | Give the profile of this platform back
+  ansible.builtin.set_fact:
+    linux_compliance_discovered: "{{ ldo_profile }}"
+    linux_compliance_remediate_profile: "{{ ldo_remediate_profile }}"
+
+- name: Login defaults readers | Give login.defs its content as built back
+  ansible.builtin.copy:
+    content: "{{ ldo_original.content | b64decode }}"
+    dest: /etc/login.defs
+    follow: false
+    mode: "{{ ldo_original_stat.stat.mode }}"
+    owner: root
+    group: root
+
+- name: Login defaults readers | Read the ledger after the reader forms
+  freesecdev.linux_compliance.control_state:
+    action: list
+  register: ldo_ledger_after
+
+- name: Login defaults readers | Check that the ledger records no rule of the topic any more
+  ansible.builtin.assert:
+    that:
+      - ldo_ledger_after.entries | selectattr('family', 'equalto', 'login_defs') | list == []
+    fail_msg: "{{ ldo_label }}: the ledger still holds {{ ldo_ledger_after.entries }}"
+    quiet: true
+
+- name: Login defaults readers | Assert that the whole instance is back to its state before the reader forms
+  ansible.builtin.include_tasks:
+    file: lifecycle_broad_compare.yml
+  vars:
+    lifecycle_label: login_defs forms of the other readers
+    lifecycle_broad_step: the reader forms
+    lifecycle_broad_reference: "{{ ldo_broad_before }}"
+
+- name: Login defaults readers | Record that this regression file ran to its end
+  ansible.builtin.set_fact:
+    lifecycle_regression_files_run: "{{ lifecycle_regression_files_run + ['lifecycle_login_defs_readers.yml'] }}"

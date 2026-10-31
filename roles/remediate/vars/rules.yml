@@ -180,6 +180,7 @@ __linux_compliance_remediate_rules:
     parameters:
       setting: "FAIL_DELAY"
       comparison: "at_least"
+      libeconf: true
       value_id: "var_accounts_fail_delay"
       profile_values:
         - datastream: "rhel9"

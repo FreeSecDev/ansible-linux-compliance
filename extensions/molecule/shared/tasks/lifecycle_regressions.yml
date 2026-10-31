@@ -59,6 +59,16 @@
     file: lifecycle_login_defs_values.yml
   when: "'lifecycle_login_defs_values.yml' in lifecycle_regression.files"
 
+- name: Lifecycle regressions | Run the login_defs bytes that the readers trim, stop at or read in pieces
+  ansible.builtin.include_tasks:
+    file: lifecycle_login_defs_bytes.yml
+  when: "'lifecycle_login_defs_bytes.yml' in lifecycle_regression.files"
+
+- name: Lifecycle regressions | Run the login_defs forms that libeconf reads for FAIL_DELAY and the drop-ins
+  ansible.builtin.include_tasks:
+    file: lifecycle_login_defs_readers.yml
+  when: "'lifecycle_login_defs_readers.yml' in lifecycle_regression.files"
+
 - name: Lifecycle regressions | Apply and clean up the login_defs rules that only other profiles select
   ansible.builtin.include_tasks:
     file: lifecycle_login_defs_other_profiles.yml

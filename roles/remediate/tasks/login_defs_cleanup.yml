@@ -110,31 +110,27 @@
   tags:
     - always
 
-- name: Login defaults | Remove the setting that login.defs did not have before
-  ansible.builtin.lineinfile:
-    path: "{{ __linux_compliance_remediate_login_defs }}"
-    regexp: "{{ __linux_compliance_remediate_ld_regexp }}"
-    state: absent
-  register: __linux_compliance_remediate_ld_removal
-  when:
-    - __linux_compliance_remediate_ld_reason is none
-    - not __linux_compliance_remediate_ld_already
-    - __linux_compliance_remediate_ld_prior.setting_line is none
-  tags:
-    - always
-
-- name: Login defaults | Write back the line that login.defs had before, in its place
-  ansible.builtin.lineinfile:
-    path: "{{ __linux_compliance_remediate_login_defs }}"
-    regexp: "{{ __linux_compliance_remediate_ld_regexp }}"
-    line: "{{ __linux_compliance_remediate_ld_prior.setting_line }}"
-    state: present
-    create: false
+- name: Login defaults | Write back the line that login.defs had before in its place, or remove the line written
+  vars:
+    __linux_compliance_remediate_ld_lines: >-
+      {{ (__linux_compliance_remediate_ld_current.content | b64decode).split(__linux_compliance_remediate_newline) }}
+    __linux_compliance_remediate_ld_index: >-
+      {{ __linux_compliance_remediate_ld_lines.index(__linux_compliance_remediate_ld_prior.written_line) }}
+  ansible.builtin.copy:
+    content: >-
+      {{ (__linux_compliance_remediate_ld_lines[:__linux_compliance_remediate_ld_index | int]
+          + ([] if __linux_compliance_remediate_ld_prior.setting_line is none
+             else [__linux_compliance_remediate_ld_prior.setting_line])
+          + __linux_compliance_remediate_ld_lines[__linux_compliance_remediate_ld_index | int + 1:])
+         | join(__linux_compliance_remediate_newline) }}
+    dest: "{{ __linux_compliance_remediate_login_defs }}"
+    follow: false
+    force: true
+    mode: "{{ __linux_compliance_remediate_ld_stat.stat.mode }}"
   register: __linux_compliance_remediate_ld_restored
   when:
     - __linux_compliance_remediate_ld_reason is none
     - not __linux_compliance_remediate_ld_already
-    - __linux_compliance_remediate_ld_prior.setting_line is not none
   tags:
     - always
 
@@ -159,8 +155,7 @@
            'action': 'cleanup',
            'status': __linux_compliance_remediate_ld_cleanup_status,
            'reason': __linux_compliance_remediate_ld_reason,
-           'changed': (__linux_compliance_remediate_ld_removal is changed)
-                      or (__linux_compliance_remediate_ld_restored is changed)
+           'changed': (__linux_compliance_remediate_ld_restored is changed)
                       or (__linux_compliance_remediate_ld_forget is changed),
            'message': __linux_compliance_remediate_rule.rule_id ~ ': ' ~ __linux_compliance_remediate_ld_cleanup_status
                       ~ ((' (' ~ __linux_compliance_remediate_ld_reason ~ ': '

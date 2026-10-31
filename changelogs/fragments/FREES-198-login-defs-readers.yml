@@ -1,0 +1,22 @@
+---
+bugfixes:
+  - >-
+    remediate - ``login_defs`` reads a line as shadow-utils, libeconf and ``pam_modutil_search_key`` do: a carriage
+    return, vertical tab or form feed around the value is a blank again, so a ``login.defs`` with Windows line
+    endings is remediated (``PASS_MAX_DAYS 99999`` becomes 365) instead of refused, while one inside the value, and a
+    vertical tab or form feed on a line to rewrite, which the state ledger does not record, still refuse (FREES-198).
+  - >-
+    remediate - ``login_defs`` refuses a line of the setting that holds a NUL (``unreadable_value``), and every rule
+    when a line of ``/etc/login.defs`` is 1023 bytes or longer (``long_line``), which shadow-utils reads in pieces;
+    before, ``PASS_MAX_DAYS 30`` followed by a NUL, or hidden behind a long comment, was overwritten with the
+    profile's looser value (FREES-198).
+  - >-
+    remediate - ``login_defs`` models libeconf for ``FAIL_DELAY``, which util-linux ``login`` reads through it on
+    Rocky Linux 9: the line is written as ``FAIL_DELAY  <value>`` so that libeconf does not glue it to the line
+    before, libeconf's reading of ``FAIL_DELAY = 30`` or ``30junk`` is never lowered, and a drop-in that mentions the
+    name (``overridden``), a section line or a drop-in link to no file (``unreadable_file``), and forms that only
+    libeconf or ``pam_umask`` read, such as ``FAIL_DELAY=30`` or a vertical tab before ``UMASK``, refuse (FREES-198).
+  - >-
+    remediate - ``login_defs`` writes ``/etc/login.defs`` with ``ansible.builtin.copy`` from the text it read instead
+    of ``lineinfile``, whose universal newlines rewrote every Windows line ending of the file; the cleanup now
+    restores a file with Windows line endings or without a final newline byte for byte (FREES-198).

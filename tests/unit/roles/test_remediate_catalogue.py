@@ -41,6 +41,7 @@ FAMILY_PARAMETERS: dict[str, list[set[str]]] = {
     "login_defs": [
         {"setting", "comparison", "value", "reads_dropins"},
         {"setting", "comparison"} | PROFILE_VALUE_PARAMETERS,
+        {"setting", "comparison", "libeconf"} | PROFILE_VALUE_PARAMETERS,
     ],
     "sudo": [
         {"method", "path", "options", "lines"},
