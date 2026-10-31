@@ -1055,7 +1055,7 @@ policy:
 
 ## Amendment 2026-10-30: the audit tools (FREES-110)
 
-The auditd topics ([ADR 0024](0024-native-auditd-settings-and-audit-rules.md)) must load the audit rules that they
+The auditd topics ([ADR 0030](0030-native-auditd-settings-and-audit-rules.md)) must load the audit rules that they
 write and ask auditd to read its configuration again, and must not leave a rule set that loads only in part. They follow
 the general rule of the amendment on external configuration validators (FREES-175): the tools run through the audited
 process helper, from a module of this collection, `freesecdev.linux_compliance.audit_control`, its fourth caller. The

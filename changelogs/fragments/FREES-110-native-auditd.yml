@@ -1,7 +1,7 @@
 ---
 minor_changes:
   - >-
-    remediate - the ``auditd`` umbrella gains its first fine-grained topics (FREES-110, ADR 0024). ``auditd_rules_time``
+    remediate - the ``auditd`` umbrella gains its first fine-grained topics (FREES-110, ADR 0030). ``auditd_rules_time``
     makes the five time change rules native: each writes one drop-in ``/etc/audit/rules.d/50-freesecdev-<rule>.rules``
     with the collection's own ``b32`` and ``b64`` lines (or the watch form that each benchmark checks), refuses a rule
     that another file already holds in part (``duplicate_rule``) and is ``compliant`` when another file holds it in

@@ -326,7 +326,7 @@ root through the audited process helper ([ADR 0023](../adr/0023-native-ssh-serve
 
 The `auditd_conf` and `auditd_rules_time` families of the `remediate` role write `/etc/audit/auditd.conf` and drop-ins
 below `/etc/audit/rules.d`, and the module `audit_control` runs `auditctl` and `augenrules` as root through the audited
-process helper ([ADR 0024](../adr/0024-native-auditd-settings-and-audit-rules.md),
+process helper ([ADR 0030](../adr/0030-native-auditd-settings-and-audit-rules.md),
 [ADR 0004](../adr/0004-audited-process-execution.md), FREES-110).
 
 ### Assets

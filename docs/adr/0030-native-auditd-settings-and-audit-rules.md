@@ -1,4 +1,4 @@
-# 0024. Native auditd settings and audit rule drop-ins
+# 0030. Native auditd settings and audit rule drop-ins
 
 - **Status:** proposed
 - **Date:** 2026-10-30

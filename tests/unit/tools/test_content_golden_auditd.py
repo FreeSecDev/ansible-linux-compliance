@@ -1,6 +1,6 @@
 """Golden tests that pin the native auditd rules against the OVAL checks of the pinned content.
 
-The collection writes its own audit rule lines and auditd.conf lines (ADR 0024); the content is
+The collection writes its own audit rule lines and auditd.conf lines (ADR 0030); the content is
 only read here, to prove that what the role writes satisfies the check of every pinned profile
 that selects the rule.
 """

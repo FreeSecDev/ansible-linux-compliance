@@ -312,7 +312,7 @@ stricter mode such as `0400` is kept and only the excess bits are removed. Its s
 Besides the reference family, these topics are native
 ([ADR 0021](adr/0021-native-banners-pwquality-and-profile-values.md), [ADR 0022](adr/0022-native-sudo-drop-ins.md),
 [ADR 0023](adr/0023-native-ssh-server-configuration.md),
-[ADR 0024](adr/0024-native-auditd-settings-and-audit-rules.md)).
+[ADR 0030](adr/0030-native-auditd-settings-and-audit-rules.md)).
 Their rules use the profile's own values, which `make catalogue` reads from the pinned datastreams into the rule
 parameters (`value_id`, `profile_values`); a rule whose content and profile the catalogue holds no value for fails the
 family before anything changes. A rule whose check accepts a range and leaves the exact value to the content's fix
@@ -487,9 +487,9 @@ run `/usr/bin/sudo`) and `package_sudo_installed` (package state).
 ### Audit daemon settings and audit rules
 
 The rule groups of the `auditd` umbrella become topics of their own
-([ADR 0024](adr/0024-native-auditd-settings-and-audit-rules.md), FREES-110); `linux_compliance_auditd_enabled: false`
+([ADR 0030](adr/0030-native-auditd-settings-and-audit-rules.md), FREES-110); `linux_compliance_auditd_enabled: false`
 switches them all off. Two are native so far, the other 177 rules of the umbrella stay `audit_only` with the reasons
-in ADR 0024 (the remaining audit rule groups follow with the same drop-in method).
+in ADR 0030 (the remaining audit rule groups follow with the same drop-in method).
 
 | Topic | Rules | What is applied | Record and cleanup |
 |---|---|---|---|

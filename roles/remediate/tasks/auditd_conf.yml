@@ -86,7 +86,7 @@
       | default('a fixed value') }} for the profile {{ linux_compliance_remediate_profile }} in the content
       {{ linux_compliance_discovered.content_sha256 }}), and no other rule of this run may set the same setting; the
       catalogue holds {{ __linux_compliance_remediate_ac_values[__linux_compliance_remediate_ac_rule.rule_id]
-      | default('') }}. The values are generated from the pinned content (ADR 0024); no auditd setting was changed.
+      | default('') }}. The values are generated from the pinned content (ADR 0030); no auditd setting was changed.
     quiet: true
   loop: "{{ __linux_compliance_remediate_family.cleanup + __linux_compliance_remediate_family.apply }}"
   loop_control:

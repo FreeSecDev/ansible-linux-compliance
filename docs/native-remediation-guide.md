@@ -6,7 +6,7 @@ lifecycle in Molecule. Audience: family authors and reviewers. Jira: FREES-53 (n
 [ADR 0011](adr/0011-control-toggles-and-cleanup.md) (toggles, cleanup, ledger),
 [ADR 0021](adr/0021-native-banners-pwquality-and-profile-values.md) (profile values, banners, password quality),
 [ADR 0023](adr/0023-native-ssh-server-configuration.md) (SSH server),
-[ADR 0024](adr/0024-native-auditd-settings-and-audit-rules.md) (auditd settings and audit rules).
+[ADR 0030](adr/0030-native-auditd-settings-and-audit-rules.md) (auditd settings and audit rules).
 The contract of a family file is in [remediation.md](remediation.md#family-file-contract); this guide is the
 procedure. `file_permissions`, `banners`, `pwquality`, `ssh` and `sudo`
 ([ADR 0022](adr/0022-native-sudo-drop-ins.md)) are the worked examples.

@@ -580,7 +580,7 @@ ships `/usr/sbin` with mode `0555` and the instance drops the capability that le
 regression adds the owner's write bit for the move and puts the mode back. The whole-instance comparison at the end
 leaves out only the inode and times of the binary and the times of `/usr/sbin`.
 
-The auditd topics ([ADR 0024](adr/0024-native-auditd-settings-and-audit-rules.md), FREES-110) select their rules
+The auditd topics ([ADR 0030](adr/0030-native-auditd-settings-and-audit-rules.md), FREES-110) select their rules
 with `profiles`: `auditd_conf` runs with `cis_level2_server` on Ubuntu and `stig` on Rocky Linux, `auditd_rules_time`
 with `cis_level2_server` and `e8`. The images ship the audit packages (`auditd` and `audit`, pinned), so the drop-ins,
 `auditd.conf` and their checksums are proven in the containers, where auditd does not run and nothing is loaded.

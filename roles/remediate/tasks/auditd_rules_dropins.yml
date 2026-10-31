@@ -90,7 +90,7 @@
       profile {{ linux_compliance_remediate_profile }} gives it, in the form
       {{ __linux_compliance_remediate_ar_rule.parameters.value_pattern | default('') }}; the catalogue holds
       {{ __linux_compliance_remediate_ar_lines[__linux_compliance_remediate_ar_rule.rule_id] | default('') }}. The lines
-      are generated from the catalogue (ADR 0024); no audit rule was changed.
+      are generated from the catalogue (ADR 0030); no audit rule was changed.
     quiet: true
   loop: "{{ __linux_compliance_remediate_family.cleanup + __linux_compliance_remediate_family.apply }}"
   loop_control:
