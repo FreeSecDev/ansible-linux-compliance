@@ -117,58 +117,6 @@
       statuses: [restored, none, none]
       text: "{{ pwr_text }}"
       recorded: []
-    - name: remember on the pam_pwhistory line of system-auth overrides both remember rules
-      toggles: [true, true, true]
-      stack: "password    requisite     pam_pwhistory.so remember=24 use_authtok"
-      statuses: [applied, overridden, overridden]
-      text: "{{ pwr_text }}enforce_for_root{{ pwr_newline }}"
-      recorded: [enforce_for_root]
-    - name: the cleanup with the stack line restores enforce_for_root alone
-      toggles: [false, false, false]
-      stack: "password    requisite     pam_pwhistory.so remember=24 use_authtok"
-      statuses: [restored, none, none]
-      text: "{{ pwr_text }}"
-      recorded: []
-    - name: every rule on again without the stack line
-      toggles: [true, true, true]
-      statuses: [applied, applied, applied]
-      text: "{{ pwr_applied_text }}"
-      recorded: [enforce_for_root, remember_password_auth, remember_system_auth]
-    - name: remember changed by hand is kept by both remember rules
-      toggles: [false, false, false]
-      edit:
-        regexp: "^remember = "
-        line: remember = 30
-      statuses: [restored, cleanup_incomplete, cleanup_incomplete]
-      text: "{{ pwr_text }}remember = 30{{ pwr_newline }}"
-      recorded: [remember_password_auth, remember_system_auth]
-    - name: remember put back as written is restored once, the second rule finds it as before
-      toggles: [false, false, false]
-      edit:
-        regexp: "^remember = "
-        line: remember = 24
-      statuses: [none, restored, restored]
-      text: "{{ pwr_text }}"
-      recorded: []
-    - name: conf= on the pam_pwhistory line of system-auth overrides every rule, enforce_for_root as well
-      toggles: [true, true, true]
-      conf: "{{ pwr_text }}"
-      stack: "password    requisite     pam_pwhistory.so conf=/etc/security/pwhistory-other.conf use_authtok"
-      statuses: [overridden, overridden, overridden]
-      text: "{{ pwr_text }}"
-      recorded: []
-    - name: an upper-case type and REMEMBER= in a service file of its own override both remember rules
-      toggles: [true, true, true]
-      service: "PASSWORD requisite pam_pwhistory.so REMEMBER=1\n"
-      statuses: [applied, overridden, overridden]
-      text: "{{ pwr_text }}enforce_for_root{{ pwr_newline }}"
-      recorded: [enforce_for_root]
-    - name: the cleanup with the service file restores enforce_for_root alone
-      toggles: [false, false, false]
-      service: "PASSWORD requisite pam_pwhistory.so REMEMBER=1\n"
-      statuses: [restored, none, none]
-      text: "{{ pwr_text }}"
-      recorded: []
   loop_control:
     loop_var: pwr_step
     label: "{{ pwr_step.name }}"

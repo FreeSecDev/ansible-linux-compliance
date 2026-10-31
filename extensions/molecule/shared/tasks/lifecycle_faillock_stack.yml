@@ -83,7 +83,6 @@
 - name: Faillock stack | Run the topic with pam_faillock in the stack, then with deny on its module line
   ansible.builtin.include_tasks:
     file: lifecycle_faillock_stack_case.yml
-  when: stack_case.platforms is not defined or lifecycle_platform in stack_case.platforms
   loop:
     - name: pam_faillock in the stack
       deny: ""
@@ -118,15 +117,6 @@
       statuses:
         - unreadable_stack
         - unreadable_stack
-    - name: a vendor service file that no file of /etc/pam.d shadows
-      deny: ""
-      service: "auth required pam_faillock.so deny=3\n"
-      service_path: /usr/lib/pam.d/fsd-regression-vendor
-      platforms:
-        - ubuntu
-      statuses:
-        - overridden
-        - applied
   loop_control:
     loop_var: stack_case
     label: "{{ stack_case.name }}"

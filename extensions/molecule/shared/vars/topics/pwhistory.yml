@@ -58,3 +58,8 @@ regressions:
       - rhel_compatible
     files:
       - lifecycle_pwhistory_readers.yml
+  - name: stack
+    platforms:
+      - rhel_compatible
+    files:
+      - lifecycle_pwhistory_stack.yml

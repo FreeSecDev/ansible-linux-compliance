@@ -86,6 +86,9 @@ regressions:
   - name: readers
     files:
       - lifecycle_faillock_readers.yml
+  - name: bytes
+    files:
+      - lifecycle_faillock_bytes.yml
   - name: profiles
     files:
       - lifecycle_faillock_other_profiles.yml

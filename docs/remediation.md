@@ -544,25 +544,34 @@ no exact revert, and immediate expiry of existing passwords).
 and that the content's check reads on that platform; `tests/unit/tools/test_content_golden_pam_conf.py` checks this
 against the OVAL of both datastreams. The PAM stack is only read, never edited. The filter
 `freesecdev.linux_compliance.pam_conf_decision` decides each rule the way `pam_faillock`, `pam_pwhistory` and libpam
-read the file and every file of `/etc/pam.d`, and `tests/unit/tools/test_pam_conf_oracle.py` checks it against
-what the real readers of both images read (`make pam-reader-verdicts`).
+read the file and the service files of `/etc/pam.d`, `/usr/lib/pam.d` and `/usr/share/pam.d`, and computes the exact
+new text, which the role writes with `ansible.builtin.copy` after a SHA-256 re-check, every other byte unchanged;
+`pam_conf_restore` computes the text of the cleanup the same way. `tests/unit/tools/test_pam_conf_oracle.py` checks
+the filter against what the real readers of both images read (`make pam-reader-verdicts`).
 
 | Rules | What is applied | Record and cleanup |
 |---|---|---|
-| `accounts_passwords_pam_faillock_deny`, `_unlock_time`, `_interval`, `_root_unlock_time` | `deny = <n>`, `unlock_time = <n>`, `fail_interval = <n>` or `root_unlock_time = <n>` in `/etc/security/faillock.conf`, with the profile's value (`var_accounts_passwords_pam_faillock_deny`, `_unlock_time`, `_fail_interval`, `_root_unlock_time`); a stricter value already set is kept, a time above 604800 (which `pam_faillock` ignores) is replaced, and a required `unlock_time` of `0` (never) is met only by `0` | `recorded_value` of `method` (`line`), `setting_line` (the prior line, or `null`), `written_line` and the file's `mode`, `owner`, `group` and `sha256`; cleanup writes the prior line back in its place or removes the line, while the setting is still the line written |
+| `accounts_passwords_pam_faillock_deny`, `_unlock_time`, `_interval`, `_root_unlock_time` | `deny = <n>`, `unlock_time = <n>`, `fail_interval = <n>` or `root_unlock_time = <n>` in `/etc/security/faillock.conf`, with the profile's value (`var_accounts_passwords_pam_faillock_deny`, `_unlock_time`, `_fail_interval`, `_root_unlock_time`); a stricter value already set is kept, a time above 604800 (which `pam_faillock` ignores) is replaced, and a required `unlock_time` of `0` (never) is met only by `0` | `recorded_value` of `method` (`line`), `setting_line` (the prior physical line, or `null`), `written_line`, the file's `mode`, `owner`, `group` and `sha256`, and `baseline_sha256` (the file before the family's first write); cleanup writes the prior line back in its place or removes the line, while the setting is still the line written, and the last rule of the file restores only when the result has `baseline_sha256` |
 | `accounts_passwords_pam_faillock_deny_root`, `_even_deny_root_or_root_unlock_time`, `_audit`, `_silent` | The flag `even_deny_root` (both root rules share the line, because `root_unlock_time` alone does not lock root), `audit` or `silent` in `faillock.conf` | As above |
 | `accounts_password_pam_pwhistory_remember_password_auth`, `_remember_system_auth` (RHEL 9) | `remember = <var_password_pam_remember>` in `/etc/security/pwhistory.conf`; both rules share the line | As above; the first rule writes the line and records the prior state, the second records the same prior state |
 | `accounts_password_pam_pwhistory_enforce_for_root` (RHEL 9) | The flag `enforce_for_root` in `pwhistory.conf` | As above |
 
 The statuses that refuse to act, with nothing changed and the entry kept, each with a reason: `notapplicable` (the file
 does not exist), `not_regular_file` (a symbolic link or not a regular file), `unsupported_value` (the profile requires a
-time above 604800 seconds, which `pam_faillock` ignores), `overridden` (a `pam_faillock` or `pam_pwhistory` line of any
-file of `/etc/pam.d`, in any case and across continued lines, carries `conf=` or sets the option, which pam takes over
-the file), `unreadable_file` (a NUL byte or a line of 1023 characters or more, on which `pam_faillock` fails),
+time above 604800 seconds, which `pam_faillock` ignores, or a `deny` above 65535), `unreadable_stack` (libpam reads a
+service file that the collection does not read as it does: an include of a file outside the PAM directories, a NUL
+byte or a line of 1023 bytes or more), `overridden` (a `pam_faillock` or `pam_pwhistory` line of a service file that
+libpam opens, in any case, across continued lines and split as `_pam_StrTok` splits it, carries `conf=` or sets the
+option, which pam takes over the file), `unreadable_file` (a NUL byte or a line of 1023 bytes or more, on which
+`pam_faillock` fails, or a file that is not UTF-8), `unreadable_value` (`deny` above 65535, which pam wraps at 16
+bits, or a control character that the ledger does not record), `changed_during_run` (the file changed between the
+read and the write),
 `hidden_setting` (pam reads a line of the setting that the collection would not edit: a vertical tab, form feed or
 carriage return around the key, or the key in another case for `pam_pwhistory`), `duplicate_setting` (the setting is on
 more than one line), `stricter_setting` (`unlock_time` or `root_unlock_time` is `0`, never, while the profile requires
-seconds; the line is kept), `method_changed`, and at cleanup `modified_since_apply`, `invalid_record`, `target_absent` and `not_regular_file`. A
+seconds; the line is kept), `method_changed`, and at cleanup `modified_since_apply`, `invalid_record`, `target_absent`,
+`not_regular_file`, `changed_during_run` and `restore_mismatch` (the last rule of the file would not give back the
+recorded SHA-256, for example after a comment was added by hand elsewhere in the file). A
 setting that is already as before at cleanup, such as a line removed by hand or the shared `remember` line that the
 other rule restored, is `restored` without a write (FREES-173). The settings take effect only where the stack loads
 `pam_faillock` or `pam_pwhistory`, and the content's checks pass only then; the Molecule regressions load such a stack

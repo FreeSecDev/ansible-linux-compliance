@@ -10,11 +10,16 @@ minor_changes:
     above 604800 seconds, which ``pam_faillock`` ignores, is replaced (and never written from a profile,
     ``unsupported_value``), a required ``unlock_time`` of ``0`` is met only by ``0``, an existing ``0`` under a
     profile that requires seconds is kept (``stricter_setting``), a line that pam reads but the collection would not
-    edit is ``hidden_setting``, and a file on which ``pam_faillock`` fails is ``unreadable_file``. The prior line and
-    the file's mode, ownership and SHA-256 are recorded, and switching a rule or the topic off writes the prior line
-    back or removes the line, and never overwrites a later change (``modified_since_apply``). A setting that a
-    ``pam_faillock`` or ``pam_pwhistory`` line of any PAM service file sets or redirects with ``conf=`` is
-    ``overridden`` and the stack is never edited;
+    edit is ``hidden_setting``, and a file on which ``pam_faillock`` fails (a NUL byte or a line of 1023 bytes or
+    more) is ``unreadable_file``; ``deny`` above 65535 is ``unreadable_value``. The exact new text of the file is
+    written with ``ansible.builtin.copy`` after a SHA-256 re-check, every other byte (CRs included) unchanged. The
+    prior line, the file's mode, ownership and SHA-256 and its SHA-256 before the family's first write are recorded,
+    and switching a rule or the topic off writes the prior line back or removes the line, never overwrites a later
+    change (``modified_since_apply``), and restores the last rule of the file only when the result has the recorded
+    SHA-256 (``restore_mismatch``). A setting that a ``pam_faillock`` or ``pam_pwhistory`` line of a service file that
+    libpam opens (``/etc/pam.d``, ``/usr/lib/pam.d``, ``/usr/share/pam.d``, absolute includes) sets or redirects with
+    ``conf=`` is ``overridden``, a service file that the collection cannot read as libpam does is
+    ``unreadable_stack``, and the stack is never edited;
     duplicate lines, symbolic links and a missing file are refused with a reason. The settings take effect where the
     stack loads the module. The rules that enable the modules in the stack, the Ubuntu pwhistory rules (whose checks
     read only ``common-password``), ``pam_faildelay``, the tally directory and its SELinux context and the

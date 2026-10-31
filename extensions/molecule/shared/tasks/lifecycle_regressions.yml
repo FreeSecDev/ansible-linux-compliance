@@ -59,6 +59,11 @@
     file: lifecycle_faillock_readers.yml
   when: "'lifecycle_faillock_readers.yml' in lifecycle_regression.files"
 
+- name: Lifecycle regressions | Run the faillock regressions for the bytes that a write keeps and a cleanup proves
+  ansible.builtin.include_tasks:
+    file: lifecycle_faillock_bytes.yml
+  when: "'lifecycle_faillock_bytes.yml' in lifecycle_regression.files"
+
 - name: Lifecycle regressions | Apply and clean up the faillock rules that only other profiles select
   ansible.builtin.include_tasks:
     file: lifecycle_faillock_other_profiles.yml
@@ -73,6 +78,11 @@
   ansible.builtin.include_tasks:
     file: lifecycle_pwhistory_readers.yml
   when: "'lifecycle_pwhistory_readers.yml' in lifecycle_regression.files"
+
+- name: Lifecycle regressions | Run the pwhistory regressions with pam_pwhistory in the PAM stack and service files
+  ansible.builtin.include_tasks:
+    file: lifecycle_pwhistory_stack.yml
+  when: "'lifecycle_pwhistory_stack.yml' in lifecycle_regression.files"
 
 - name: Lifecycle regressions | Run the kernel module regressions for a change of method, changes by hand and site files
   ansible.builtin.include_tasks:

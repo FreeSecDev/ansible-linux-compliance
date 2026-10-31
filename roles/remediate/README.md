@@ -21,9 +21,11 @@ of `login_defs` (one recorded line per setting in `/etc/login.defs`: `PASS_MAX_D
 `PASS_WARN_AGE`, `PASS_MIN_LEN`, `UMASK`, `FAIL_DELAY`, `CREATE_HOME`), 8 rules of `faillock` and 3 rules of
 `pwhistory` (one recorded line per setting in `/etc/security/faillock.conf` or `/etc/security/pwhistory.conf`,
 through the shared helpers `pam_conf_prepare.yml`, `pam_conf_apply.yml` and `pam_conf_cleanup.yml` and the filter
-`pam_conf_decision`, which reads the file and every file of `/etc/pam.d` as linux-pam does; the PAM stack is only
-read, a setting that a module line sets or redirects with `conf=` is `overridden`, and a line that pam reads but the
-collection would not edit is `hidden_setting`), with the values of the selected profile, and
+`pam_conf_decision`, which reads the file and the service files of `/etc/pam.d`, `/usr/lib/pam.d` and
+`/usr/share/pam.d` as linux-pam does and computes the exact text that `copy` writes, every other byte unchanged; the
+cleanup writes the text of `pam_conf_restore` and proves the last restore of a file by its recorded SHA-256; the PAM
+stack is only read, a setting that a module line sets or redirects with `conf=` is `overridden`, and a line that pam
+reads but the collection would not edit is `hidden_setting`), with the values of the selected profile, and
 the 21 rules of the kernel module topics `filesystem_modules` (usb-storage included), `protocol_modules` and
 `wireless_modules` (one drop-in per module, `/etc/modprobe.d/freesecdev-<module>.conf`, with
 `install <module> /bin/false` and `blacklist <module>`; no module is unloaded and no initramfs rebuilt)

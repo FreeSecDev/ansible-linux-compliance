@@ -1,0 +1,232 @@
+---
+- name: Faillock bytes | Refuse to run unless the faillock topic has just run its cycles
+  ansible.builtin.assert:
+    that:
+      - lifecycle_topic.family == 'faillock'
+      - lifecycle_rule_ids | length == 2
+      - lifecycle_allow_disruptive == ['faillock']
+    fail_msg: >-
+      The faillock byte regressions reuse the facts of the faillock lifecycle, which must have just run with the deny
+      and unlock_time rules; the topic was {{ lifecycle_topic.family | default('none') }} with {{ lifecycle_rule_ids }}.
+    quiet: true
+
+- name: Faillock bytes | Name the rules, the toggles, the lines and the characters of the cases
+  ansible.builtin.set_fact:
+    regression_label: faillock byte regressions
+    regression_toggles: "{{ lifecycle_rules | map(attribute='toggle') | list }}"
+    regression_deny: xccdf_org.ssgproject.content_rule_accounts_passwords_pam_faillock_deny
+    regression_unlock: xccdf_org.ssgproject.content_rule_accounts_passwords_pam_faillock_unlock_time
+    regression_conf: /etc/security/faillock.conf
+    regression_deny_line: "deny = {{ {'ubuntu': 4, 'rhel_compatible': 5}[lifecycle_platform] }}"
+    regression_unlock_line: unlock_time = 900
+    regression_newline: "\n"
+    regression_vt: "\v"
+    regression_ff: "\f"
+    regression_cr: "\r"
+
+- name: Faillock bytes | Check that the lifecycle ran exactly the deny and unlock_time rules
+  ansible.builtin.assert:
+    that:
+      - lifecycle_rule_ids | sort == [regression_deny, regression_unlock] | sort
+    fail_msg: "{{ regression_label }}: {{ lifecycle_rule_ids }}"
+    quiet: true
+
+- name: Faillock bytes | Read faillock.conf as built
+  ansible.builtin.slurp:
+    src: "{{ regression_conf }}"
+  register: regression_original
+
+- name: Faillock bytes | Inspect faillock.conf as built
+  ansible.builtin.stat:
+    path: "{{ regression_conf }}"
+    follow: false
+  register: regression_original_stat
+
+- name: Faillock bytes | Keep the text as built
+  ansible.builtin.set_fact:
+    regression_text: "{{ regression_original.content | b64decode }}"
+
+- name: Faillock bytes | Take the state of the whole instance before the byte regressions
+  ansible.builtin.include_tasks:
+    file: lifecycle_broad.yml
+
+- name: Faillock bytes | Remember the state of the whole instance before the byte regressions
+  ansible.builtin.set_fact:
+    regression_broad_before: "{{ lifecycle_broad_record }}"
+
+- name: Faillock bytes | Apply and clean up each file whose bytes the write must keep or refuse
+  ansible.builtin.include_tasks:
+    file: lifecycle_faillock_case.yml
+  loop:
+    - name: a comment with a CR before a looser deny keeps its bytes when unlock_time is written
+      text: >-
+        {{ regression_text ~ 'deny = 3' ~ regression_newline ~ '# site' ~ regression_cr ~ 'deny = 10'
+           ~ regression_newline }}
+      statuses:
+        deny: compliant
+        unlock: applied
+      applied: >-
+        {{ regression_text ~ 'deny = 3' ~ regression_newline ~ '# site' ~ regression_cr ~ 'deny = 10'
+           ~ regression_newline ~ regression_unlock_line ~ regression_newline }}
+    - name: a CRLF file gets deny in place and unlock_time appended, every other byte kept
+      text: >-
+        {{ '# faillock' ~ regression_cr ~ regression_newline ~ 'deny = 10' ~ regression_cr ~ regression_newline
+           ~ 'audit' ~ regression_cr ~ regression_newline }}
+      statuses:
+        deny: applied
+        unlock: applied
+      applied: >-
+        {{ '# faillock' ~ regression_cr ~ regression_newline ~ regression_deny_line ~ regression_newline
+           ~ 'audit' ~ regression_cr ~ regression_newline ~ regression_unlock_line ~ regression_newline }}
+    - name: a CRLF file without either setting gets both lines appended
+      text: "{{ '# faillock' ~ regression_cr ~ regression_newline ~ 'audit' ~ regression_cr ~ regression_newline }}"
+      statuses:
+        deny: applied
+        unlock: applied
+      applied: >-
+        {{ '# faillock' ~ regression_cr ~ regression_newline ~ 'audit' ~ regression_cr ~ regression_newline
+           ~ regression_deny_line ~ regression_newline ~ regression_unlock_line ~ regression_newline }}
+    - name: a comment of 1202 bytes in 602 characters, on which pam_faillock fails, refuses both rules
+      text: "{{ regression_text ~ '# ' ~ ('é' * 600) ~ regression_newline }}"
+      statuses:
+        deny: unreadable_file
+        unlock: unreadable_file
+      applied: "{{ regression_text ~ '# ' ~ ('é' * 600) ~ regression_newline }}"
+    - name: a deny above 65535, which pam_faillock wraps at 16 bits, is refused
+      text: "{{ regression_text }}deny = 65540{{ regression_newline }}"
+      statuses:
+        deny: unreadable_value
+        unlock: applied
+      applied: >-
+        {{ regression_text }}deny = 65540{{ regression_newline }}{{ regression_unlock_line }}{{ regression_newline }}
+  loop_control:
+    loop_var: regression_case
+    label: "{{ regression_case.name }}"
+
+- name: Faillock bytes | Give faillock.conf its content as built back before the SHA-256 check
+  ansible.builtin.copy:
+    content: "{{ regression_text }}"
+    dest: "{{ regression_conf }}"
+    follow: false
+    mode: "{{ regression_original_stat.stat.mode }}"
+    owner: root
+    group: root
+
+- name: Faillock bytes | Switch every rule of the topic on for the SHA-256 check
+  ansible.builtin.set_fact:
+    "{{ item }}": true
+  loop: "{{ regression_toggles }}"
+
+- name: Faillock bytes | Apply both rules before the SHA-256 check
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+    lifecycle_family: faillock
+
+- name: Faillock bytes | Add a comment at the top by hand, a change that no rule made
+  ansible.builtin.copy:
+    content: >-
+      {{ '# site' ~ regression_newline ~ regression_text ~ regression_deny_line ~ regression_newline
+         ~ regression_unlock_line ~ regression_newline }}
+    dest: "{{ regression_conf }}"
+    follow: false
+    mode: "{{ regression_original_stat.stat.mode }}"
+    owner: root
+    group: root
+
+- name: Faillock bytes | Switch every rule of the topic off for the SHA-256 check
+  ansible.builtin.set_fact:
+    "{{ item }}": false
+  loop: "{{ regression_toggles }}"
+
+- name: Faillock bytes | Clean up with the comment in place
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+    lifecycle_family: faillock
+
+- name: Faillock bytes | Read faillock.conf after the cleanup that the comment stopped
+  ansible.builtin.slurp:
+    src: "{{ regression_conf }}"
+  register: regression_mismatch
+
+- name: Faillock bytes | Check that deny was restored and unlock_time, the last rule, refused to claim the file back
+  ansible.builtin.assert:
+    that:
+      - >-
+        lifecycle_results | items2dict(key_name='rule_id', value_name='status')
+        == {regression_deny: 'restored', regression_unlock: 'cleanup_incomplete'}
+      - >-
+        lifecycle_results | selectattr('rule_id', 'equalto', regression_unlock) | map(attribute='reason') | list
+        == ['restore_mismatch']
+      - lifecycle_results | selectattr('rule_id', 'equalto', regression_unlock) | selectattr('changed') | list == []
+      - >-
+        regression_mismatch.content | b64decode
+        == '# site' ~ regression_newline ~ regression_text ~ regression_unlock_line ~ regression_newline
+    fail_msg: "{{ regression_label }}, cleanup after a change by hand: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Faillock bytes | Remove the comment by hand again
+  ansible.builtin.copy:
+    content: "{{ regression_text ~ regression_unlock_line ~ regression_newline }}"
+    dest: "{{ regression_conf }}"
+    follow: false
+    mode: "{{ regression_original_stat.stat.mode }}"
+    owner: root
+    group: root
+
+- name: Faillock bytes | Clean up once the file matches its recorded SHA-256 again
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+    lifecycle_family: faillock
+
+- name: Faillock bytes | Read faillock.conf after the cleanup that the SHA-256 confirmed
+  ansible.builtin.slurp:
+    src: "{{ regression_conf }}"
+  register: regression_matched
+
+- name: Faillock bytes | Check that unlock_time was restored and faillock.conf is byte for byte as built
+  ansible.builtin.assert:
+    that:
+      - lifecycle_results | map(attribute='rule_id') | list == [regression_unlock]
+      - lifecycle_results | map(attribute='status') | list == ['restored']
+      - regression_matched.content | b64decode == regression_text
+    fail_msg: "{{ regression_label }}, cleanup after the change was undone: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Faillock bytes | Give faillock.conf its content, mode and ownership as built back
+  ansible.builtin.copy:
+    content: "{{ regression_text }}"
+    dest: "{{ regression_conf }}"
+    follow: false
+    mode: "{{ regression_original_stat.stat.mode }}"
+    owner: root
+    group: root
+
+- name: Faillock bytes | Read the ledger after the byte regressions
+  freesecdev.linux_compliance.control_state:
+    action: list
+  register: regression_ledger_after
+
+- name: Faillock bytes | Check that the ledger records no rule of the topic any more
+  ansible.builtin.assert:
+    that:
+      - regression_ledger_after.entries | selectattr('rule_id', 'in', lifecycle_rule_ids) | list == []
+    fail_msg: "{{ regression_label }}: the ledger still holds {{ regression_ledger_after.entries }}"
+    quiet: true
+
+- name: Faillock bytes | Assert that the whole instance is back to its state before the byte regressions
+  ansible.builtin.include_tasks:
+    file: lifecycle_broad_compare.yml
+  vars:
+    lifecycle_label: faillock byte regressions
+    lifecycle_broad_step: the byte regressions
+    lifecycle_broad_reference: "{{ regression_broad_before }}"
+
+- name: Faillock bytes | Record that this regression file ran to its end
+  ansible.builtin.set_fact:
+    lifecycle_regression_files_run: "{{ lifecycle_regression_files_run + ['lifecycle_faillock_bytes.yml'] }}"

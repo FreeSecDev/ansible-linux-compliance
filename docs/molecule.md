@@ -815,7 +815,7 @@ which the cleanup must restore and not a default, and a stricter `unlock_time = 
 `pwhistory`, `remember=5`. The cycles do not scan, because neither image loads `pam_faillock` or `pam_pwhistory` in its
 PAM stack and the content limits the rules to `system_with_kernel`; the SHA-256 of the whole file after the apply is
 the evidence.
-`faillock` has four groups on both platforms. `changes` (`shared/tasks/lifecycle_faillock_regressions.yml`) applies the
+`faillock` has five groups on both platforms. `changes` (`shared/tasks/lifecycle_faillock_regressions.yml`) applies the
 topic and compares the whole file with the as-built text plus the two lines; records both entries as if another method
 had written them (`method_changed` at apply and at cleanup, entries kept, file untouched); makes `deny` stricter and
 removes the `unlock_time` line by hand (`modified_since_apply` for `deny`, `restored` without a write for
@@ -828,32 +828,45 @@ created). `readers` (`lifecycle_faillock_readers.yml`) runs the same case file o
 `pam_faillock` reads its own way: an `unlock_time = 1000000`, which it ignores (rewritten to the profile's value), an
 `unlock_time = 0` (`stricter_setting`, kept), `deny` after a vertical tab (`hidden_setting`), and `deny` after a form
 feed and after a carriage return with `unlock_time`, a vertical tab and `= 60` (both `hidden_setting`, nothing
-written), each restored byte for byte; the control characters are passed as variables, because a Jinja escape in a
-task file reaches the file as a backslash. `stack` (`lifecycle_faillock_stack.yml`) writes the PAM stack that authselect `with-faillock` or a
+written), each restored byte for byte. `bytes` (`lifecycle_faillock_bytes.yml`) runs it over a comment with a CR
+before a looser `deny` (kept a comment, `deny` `compliant`), two CRLF files (each restored byte for byte), a comment of
+1202 bytes in 602 characters (`unreadable_file`) and `deny = 65540` (`unreadable_value`); then it applies both rules, adds a comment at the top by hand and checks that the cleanup
+restores `deny` but refuses the last rule, `unlock_time`, as `restore_mismatch`, because the file would not get its
+recorded SHA-256 back, and that it restores it once the comment is removed. The control characters are passed as
+variables, because a Jinja escape in a task file reaches the file as a backslash. `stack` (`lifecycle_faillock_stack.yml`) writes the PAM stack that authselect `with-faillock` or a
 pam-auth-update profile writes into `common-auth` and `common-account` (Ubuntu) or `system-auth` and `password-auth`
 (Rocky Linux), applies the topic and checks that the file gained exactly the lines of both rules; with `deny=3`
 on the `pam_faillock` preauth line `deny` is `overridden` with that file named and only `unlock_time` is written; with
 `conf=` on that line both rules are `overridden`; and a service file of its own, `/etc/pam.d/fsd-regression-faillock`,
-with an upper-case `AUTH` type and `deny=3` on a continued line makes `deny` `overridden` with that file named; no
+with an upper-case `AUTH` type and `deny=3` on a continued line, and one with `auth [default=die]pam_faillock.so
+deny=3`, make `deny` `overridden` with that file named; an include of `/etc/security/fsd-site-auth`, which the
+collection does not read, makes both rules `unreadable_stack` (the order of `/etc/pam.d`, `/usr/lib/pam.d` and
+`/usr/share/pam.d` is unit-tested only, because the whole-instance record keeps the times of `/usr`, which a file
+written there changes for good); no
 scan runs, because both contents put the faillock rules below a group limited to `system_with_kernel`, so a container
 scan reports them `notapplicable` even with the module in the stack; each cleanup restores the file byte for byte and the stack files are put back at the end.
 `profiles` (`lifecycle_faillock_other_profiles.yml`) applies in check mode and for real, repeats and cleans up the rules
 that the CIS level 1 profiles do not select with the STIG profile and a CIS level 2 profile of each platform, and checks
 that the file as built gained exactly the profile's lines; the STIG profiles start from an `unlock_time = 600`, which
-their required `0` (never) replaces in place and the cleanup puts back. `pwhistory` has one group, `changes`, on Rocky Linux
-(`lifecycle_pwhistory_regressions.yml`), whose steps check the shared `remember` line: the second rule records the
+their required `0` (never) replaces in place and the cleanup puts back. `pwhistory` has three groups on Rocky Linux. `changes`
+(`lifecycle_pwhistory_regressions.yml`) has steps that check the shared `remember` line: the second rule records the
 line that the first wrote, switching either rule off restores the line and the other rule writes and records it again,
-a rule switched back on finds the other rule's line `compliant`; then a change of method, a line removed by hand, a
-`remember=24` on the `pam_pwhistory` line of `system-auth` (both remember rules `overridden`), a change by hand that
-both remember rules keep until the written line is back, `REMEMBER = 1` in upper case and `remember` after a vertical
-tab in `pwhistory.conf` (both remember rules `hidden_setting`), `conf=` on the `pam_pwhistory` line of `system-auth`
-(all three rules `overridden`) and a service file of its own, `/etc/pam.d/fsd-regression-pwhistory`, with an
-upper-case `PASSWORD` type and `REMEMBER=1` (both remember rules `overridden`).
+a rule switched back on finds the other rule's line `compliant`; then a change of method and a line removed by hand.
+`stack` (`lifecycle_pwhistory_stack.yml`) starts from the file as built: `remember=24` on the `pam_pwhistory` line of
+`system-auth` (both remember rules `overridden`), a change by hand that both remember rules keep until the written
+line is back, `conf=` on the `pam_pwhistory` line of `system-auth` (all three rules `overridden`) and a service file
+of its own, `/etc/pam.d/fsd-regression-pwhistory`, with an upper-case `PASSWORD` type and `REMEMBER=1` (both
+remember rules `overridden`). `readers` (`lifecycle_pwhistory_readers.yml`)
+runs the same step file over `REMEMBER = 1` in upper case and `remember` after a vertical tab (both remember rules
+`hidden_setting`), a comment that hides a `remember` behind a CR, before a looser `remember` (rewritten in place) and
+before a compliant one (kept), and a CRLF file whose `enforce_for_root` line ends in a CR, which `pam_pwhistory` does
+not read (`hidden_setting`); every cleanup gives the file back byte for byte.
 
 The reader verdict table of ADR 0027 (`tests/fixtures/pam_conf/reader_verdicts.json`) is built in the same images:
 `make pam-reader-verdicts` builds the images if needed and runs `tools/pam/oracle/probe-in-image.sh` in a container of
 each, which fetches the source package of the installed `pam`, compiles the readers of `pam_faillock` and
-`pam_pwhistory` into a probe and records what they read for every case of `tools/pam/reader_corpus.py`. Run it after a
+`pam_pwhistory`, and libpam's own `_pam_assemble_line` and `_pam_StrTok`, into probes and records what they read
+for every case of `tools/pam/reader_corpus.py`. Run it after a
 change of the corpus or of the images' pam package and commit the table; `tests/unit/tools/test_pam_conf_oracle.py`
 fails until the table covers the corpus.
 
@@ -914,10 +927,10 @@ growth of the suite, while a hung run is still cancelled long before the merge q
 
 With `sudo` (FREES-175) the regressions moved out of the cycle legs: `make molecule-matrix` adds one leg per regression
 group that a declaration lists and platform it runs on, with the mode `regressions-<group>`, after the two toggle
-modes of the topic, so 40 cycle legs and 30 regression legs (`pwquality` `changes`, `ssh` `changes` and
+modes of the topic, so 40 cycle legs and 34 regression legs (`pwquality` `changes`, `ssh` `changes` and
 `vendor`, `sudo` `changes` and `profiles`, `login_defs` `changes`, `refusals`, `values` and `profiles`,
-`filesystem_modules` `changes`, `faillock` `changes`, `readers`, `stack` and `profiles` on both platforms, `sudo`
-`files` on Ubuntu, `pwhistory` `changes` on Rocky Linux; `wireless_modules` runs on Rocky Linux only). A topic skips
+`filesystem_modules` `changes`, `faillock` `changes`, `readers`, `bytes`, `stack` and `profiles` on both platforms, `sudo`
+`files` on Ubuntu, `pwhistory` `changes`, `readers` and `stack` on Rocky Linux; `wireless_modules` runs on Rocky Linux only). A topic skips
 the platforms that its declaration lists under `unselected_platforms` (`pwhistory` on Ubuntu), which get no leg.
 `tests/unit/tools/test_molecule_matrix.py` checks that every declared group
 gets its legs and no libvirt leg, `make lint-lifecycle` checks the groups, and the harness fails a regression leg whose
