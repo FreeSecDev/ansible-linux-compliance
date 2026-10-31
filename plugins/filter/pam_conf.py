@@ -22,8 +22,8 @@ description:
   - Returns the status of the rule (C(applied), C(compliant), C(overridden), C(hidden_setting),
     C(duplicate_setting), C(stricter_setting), C(unreadable_file) or C(unsupported_value)), its
     reason, the line to write and the one line of the setting that the collection would replace.
-  - A time that the profile requires above 604800 seconds is C(unsupported_value): pam_faillock
-    ignores such a value and keeps its default, so the collection never writes one.
+  - A time that the profile requires above 604800 seconds is C(unsupported_value), because
+    pam_faillock ignores such a value and keeps its default; the collection never writes one.
   - The model is checked against a verdict table that the real readers produce in the Molecule
     images (C(make pam-reader-verdicts), C(tools/pam)).
 author:
@@ -192,12 +192,12 @@ def read_faillock(text: str, args: tuple[str, ...] = ()) -> dict[str, int] | Non
     lines, readable = faillock_lines(text)
     if not readable:
         return None
-    for _, name, value in lines:
+    for _index, name, value in lines:
         _faillock_set(options, name, value)
     for argument in args:
         if argument in {"preauth", "authfail", "authsucc"} or argument.startswith("conf="):
             continue
-        name, _, value = argument[: FAILLOCK_BUFFER - 1].partition("=")
+        name, _equals, value = argument[: FAILLOCK_BUFFER - 1].partition("=")
         _faillock_set(options, name, value)
     if options["root_unlock_time"] == -1:
         options["root_unlock_time"] = options["unlock_time"]
@@ -226,7 +226,7 @@ def pwhistory_lines(text: str) -> list[tuple[int, str, str]]:
 
 
 def _first(lines: list[tuple[int, str, str]], key: str) -> str | None:
-    return next((value for _, name, value in lines if name.lower() == key), None)
+    return next((value for _index, name, value in lines if name.lower() == key), None)
 
 
 def read_pwhistory(text: str, args: tuple[str, ...] = ()) -> dict[str, int]:
@@ -473,9 +473,11 @@ def _file_decision(text: str, rule: Rule) -> dict[str, object]:
         )
         return _decision("unreadable_file", reason, rule.line, None)
     if rule.reader == "faillock":
-        read = [index for index, name, _ in lines if name == rule.setting]
+        read = [index for index, name, _value in lines if name == rule.setting]
     else:
-        read = [index for index, name, _ in pwhistory_lines(text) if name.lower() == rule.setting]
+        read = [
+            index for index, name, _value in pwhistory_lines(text) if name.lower() == rule.setting
+        ]
     physical = text.split("\n")
     edited = [index for index, value in enumerate(physical) if _editable(value, rule.setting)]
     if read != edited:
