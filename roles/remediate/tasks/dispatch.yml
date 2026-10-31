@@ -27,6 +27,34 @@
   tags:
     - always
 
+- name: Remediate | Dispatch the auditd_rules_time family when the plan gives it work
+  ansible.builtin.include_tasks:
+    file: "{{ role_path }}/tasks/auditd_rules_time.yml"
+    apply:
+      tags:
+        - always
+  loop: "{{ __linux_compliance_remediate_plan.families }}"
+  loop_control:
+    loop_var: __linux_compliance_remediate_family
+    label: "{{ __linux_compliance_remediate_family.name }}"
+  when: __linux_compliance_remediate_family.name == 'auditd_rules_time'
+  tags:
+    - always
+
+- name: Remediate | Dispatch the auditd_conf family when the plan gives it work
+  ansible.builtin.include_tasks:
+    file: "{{ role_path }}/tasks/auditd_conf.yml"
+    apply:
+      tags:
+        - always
+  loop: "{{ __linux_compliance_remediate_plan.families }}"
+  loop_control:
+    loop_var: __linux_compliance_remediate_family
+    label: "{{ __linux_compliance_remediate_family.name }}"
+  when: __linux_compliance_remediate_family.name == 'auditd_conf'
+  tags:
+    - always
+
 - name: Remediate | Dispatch the filesystem_modules family when the plan gives it work
   ansible.builtin.include_tasks:
     file: "{{ role_path }}/tasks/filesystem_modules.yml"

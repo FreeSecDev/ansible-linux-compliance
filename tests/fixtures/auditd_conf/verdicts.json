@@ -1,0 +1,8729 @@
+{
+ "platforms": {
+  "rhel_compatible": {
+   "package": "audit",
+   "version": "3.1.5-8.el9",
+   "image": "freesecdev-molecule/rhel_compatible:8101994123cf-839860b2818c",
+   "log_megabytes": 1031019,
+   "base": "#\n# This file controls the configuration of the audit daemon\n#\n\nlocal_events = yes\nwrite_logs = yes\nlog_file = /var/log/audit/audit.log\nlog_group = root\nlog_format = ENRICHED\nflush = INCREMENTAL_ASYNC\nfreq = 50\nmax_log_file = 8\nnum_logs = 5\npriority_boost = 4\nname_format = NONE\n##name = mydomain\nmax_log_file_action = ROTATE\nspace_left = 75\nspace_left_action = SYSLOG\nverify_email = yes\naction_mail_acct = root\nadmin_space_left = 50\nadmin_space_left_action = SUSPEND\ndisk_full_action = SUSPEND\ndisk_error_action = SUSPEND\nuse_libwrap = yes\n##tcp_listen_port = 60\ntcp_listen_queue = 5\ntcp_max_per_addr = 1\n##tcp_client_ports = 1024-65535\ntcp_client_max_idle = 0\ntransport = TCP\nkrb5_principal = auditd\n##krb5_key_file = /etc/audit/audit.key\ndistribute_network = no\nq_depth = 2000\noverflow_action = SYSLOG\nmax_restarts = 10\nplugin_dir = /etc/audit/plugins.d\nend_of_event_timeout = 2\n",
+   "read": {
+    "local_events": "yes",
+    "write_logs": "yes",
+    "log_file": "/var/log/audit/audit.log",
+    "log_group": "root",
+    "log_format": "ENRICHED",
+    "flush": "INCREMENTAL_ASYNC",
+    "freq": "50",
+    "max_log_size": "8",
+    "num_logs": "5",
+    "priority_boost": "4",
+    "name_format": "NONE",
+    "max_log_size_action": "ROTATE",
+    "space_left": "75",
+    "space_action": "SYSLOG",
+    "verify_email": "yes",
+    "action_mail_acct": "root",
+    "admin_space_left": "50",
+    "admin_space_left_action": "SUSPEND",
+    "disk_full_action": "SUSPEND",
+    "disk_error_action": "SUSPEND",
+    "use_libwrap": "yes",
+    "tcp_listen_queue": "5",
+    "tcp_max_per_addr": "1",
+    "tcp_client_max_idle": "0",
+    "transport": "TCP",
+    "krb5_principal": "auditd",
+    "distribute_network": "no",
+    "q_depth": "2000",
+    "overflow_action": "SYSLOG",
+    "max_restarts": "10",
+    "plugin_dir": "/etc/audit/plugins.d",
+    "eoe_timeout": "2"
+   }
+  },
+  "ubuntu": {
+   "package": "auditd",
+   "version": "1:3.1.2-2.1ubuntu0.1",
+   "image": "freesecdev-molecule/ubuntu:68ee22004a91-74e1c86b0ae4",
+   "log_megabytes": 1031019,
+   "base": "#\n# This file controls the configuration of the audit daemon\n#\n\nlocal_events = yes\nwrite_logs = yes\nlog_file = /var/log/audit/audit.log\nlog_group = adm\nlog_format = ENRICHED\nflush = INCREMENTAL_ASYNC\nfreq = 50\nmax_log_file = 8\nnum_logs = 5\npriority_boost = 4\nname_format = NONE\n##name = mydomain\nmax_log_file_action = ROTATE\nspace_left = 75\nspace_left_action = SYSLOG\nverify_email = yes\naction_mail_acct = root\nadmin_space_left = 50\nadmin_space_left_action = SUSPEND\ndisk_full_action = SUSPEND\ndisk_error_action = SUSPEND\nuse_libwrap = yes\n##tcp_listen_port = 60\ntcp_listen_queue = 5\ntcp_max_per_addr = 1\n##tcp_client_ports = 1024-65535\ntcp_client_max_idle = 0\ntransport = TCP\nkrb5_principal = auditd\n##krb5_key_file = /etc/audit/audit.key\ndistribute_network = no\nq_depth = 2000\noverflow_action = SYSLOG\nmax_restarts = 10\nplugin_dir = /etc/audit/plugins.d\nend_of_event_timeout = 2\n",
+   "read": {
+    "local_events": "yes",
+    "write_logs": "yes",
+    "log_file": "/var/log/audit/audit.log",
+    "log_group": "adm",
+    "log_format": "ENRICHED",
+    "flush": "INCREMENTAL_ASYNC",
+    "freq": "50",
+    "max_log_size": "8",
+    "num_logs": "5",
+    "priority_boost": "4",
+    "name_format": "NONE",
+    "max_log_size_action": "ROTATE",
+    "space_left": "75",
+    "space_action": "SYSLOG",
+    "verify_email": "yes",
+    "action_mail_acct": "root",
+    "admin_space_left": "50",
+    "admin_space_left_action": "SUSPEND",
+    "disk_full_action": "SUSPEND",
+    "disk_error_action": "SUSPEND",
+    "use_libwrap": "yes",
+    "tcp_listen_queue": "5",
+    "tcp_max_per_addr": "1",
+    "tcp_client_max_idle": "0",
+    "transport": "TCP",
+    "krb5_principal": "auditd",
+    "distribute_network": "no",
+    "q_depth": "2000",
+    "overflow_action": "SYSLOG",
+    "max_restarts": "10",
+    "plugin_dir": "/etc/audit/plugins.d",
+    "eoe_timeout": "2"
+   }
+  }
+ },
+ "cases": {
+  "admin_space_left_unset": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "unread": [
+     "admin_space_left"
+    ],
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "unread": [
+     "admin_space_left"
+    ],
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "as_built": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "both_space_unset": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Error - space_left(0) must be larger than admin_space_left(0)"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Error - space_left(0) must be larger than admin_space_left(0)"
+    ]
+   }
+  },
+  "carriage_return": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Value",
+     "80",
+     "should only be numbers or percent - line 40"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Value",
+     "80",
+     "should only be numbers or percent - line 40"
+    ]
+   }
+  },
+  "choice_ending_in_carriage_return": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Option email",
+     "not found - line 40"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Option email",
+     "not found - line 40"
+    ]
+   }
+  },
+  "comment_with_carriage_return": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "continuation": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Value \\ \\ should only be numbers or percent - line 40"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Value \\ \\ should only be numbers or percent - line 40"
+    ]
+   }
+  },
+  "duplicate_decides_the_check": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "space_left": "90",
+     "admin_space_left": "60"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "space_left": "90",
+     "admin_space_left": "60"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "duplicate_last_wins": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "space_left": "90"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "space_left": "90"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "empty_value": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Wrong number of arguments for line 40 in /etc/audit/auditd.conf",
+     "Not processing any more lines in /etc/audit/auditd.conf"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Wrong number of arguments for line 40 in /etc/audit/auditd.conf",
+     "Not processing any more lines in /etc/audit/auditd.conf"
+    ]
+   }
+  },
+  "exec_action": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "space_action": "exec"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "space_action": "exec"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "extra_value": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Keyword \"space_left\" has invalid option \"90\" in line 40 of /etc/audit/auditd.conf"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Keyword \"space_left\" has invalid option \"90\" in line 40 of /etc/audit/auditd.conf"
+    ]
+   }
+  },
+  "flush_incremental_freq_unset": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Error - incremental flushing chosen, but 0 selected for freq"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Error - incremental flushing chosen, but 0 selected for freq"
+    ]
+   }
+  },
+  "flush_none_freq_unset": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "flush": "NONE"
+    },
+    "unread": [
+     "freq"
+    ],
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "flush": "NONE"
+    },
+    "unread": [
+     "freq"
+    ],
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "flush_unset_freq_zero": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "freq": "0"
+    },
+    "unread": [
+     "flush"
+    ],
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "freq": "0"
+    },
+    "unread": [
+     "flush"
+    ],
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "form_feed": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Value",
+     "80",
+     "should only be numbers or percent - line 40"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Value",
+     "80",
+     "should only be numbers or percent - line 40"
+    ]
+   }
+  },
+  "freq_unset_incremental": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Error - incremental flushing chosen, but 0 selected for freq"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Error - incremental flushing chosen, but 0 selected for freq"
+    ]
+   }
+  },
+  "freq_zero_incremental": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Error - incremental flushing chosen, but 0 selected for freq"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Error - incremental flushing chosen, but 0 selected for freq"
+    ]
+   }
+  },
+  "indented_comment": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "keep_logs_one_log": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "max_log_size_action": "KEEP_LOGS",
+     "num_logs": "1"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "max_log_size_action": "KEEP_LOGS",
+     "num_logs": "1"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "keyword_in_capitals": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "space_left": "80"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "space_left": "80"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "keyword_only": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Wrong number of arguments for line 40 in /etc/audit/auditd.conf",
+     "Not processing any more lines in /etc/audit/auditd.conf"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Wrong number of arguments for line 40 in /etc/audit/auditd.conf",
+     "Not processing any more lines in /etc/audit/auditd.conf"
+    ]
+   }
+  },
+  "leading_spaces": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "space_left": "80"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "space_left": "80"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "leading_tab": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Unknown keyword \"\tspace_left\" in line 40 of /etc/audit/auditd.conf"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Unknown keyword \"\tspace_left\" in line 40 of /etc/audit/auditd.conf"
+    ]
+   }
+  },
+  "leading_zero": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "space_left": "080"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "space_left": "080"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "line_after_nul": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "messages": [
+     "Skipping line 41 in /etc/audit/auditd.conf: too long",
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "messages": [
+     "Skipping line 41 in /etc/audit/auditd.conf: too long",
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "line_of_158_bytes": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "action_mail_acct": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "action_mail_acct": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "line_of_159_bytes": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "messages": [
+     "Skipping line 41 in /etc/audit/auditd.conf: too long",
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "messages": [
+     "Skipping line 41 in /etc/audit/auditd.conf: too long",
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "line_of_spaces": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "line_of_tab": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Wrong number of arguments for line 41 in /etc/audit/auditd.conf",
+     "Not processing any more lines in /etc/audit/auditd.conf"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Wrong number of arguments for line 41 in /etc/audit/auditd.conf",
+     "Not processing any more lines in /etc/audit/auditd.conf"
+    ]
+   }
+  },
+  "long_comment": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "messages": [
+     "Skipping line 41 in /etc/audit/auditd.conf: too long",
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "messages": [
+     "Skipping line 41 in /etc/audit/auditd.conf: too long",
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "long_setting_skipped": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Skipping line 40 in /etc/audit/auditd.conf: too long",
+     "Error - space_left(0) must be larger than admin_space_left(50)"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Skipping line 40 in /etc/audit/auditd.conf: too long",
+     "Error - space_left(0) must be larger than admin_space_left(50)"
+    ]
+   }
+  },
+  "mail_with_domain_not_verified": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "verify_email": "no",
+     "action_mail_acct": "admin@example.com"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "verify_email": "no",
+     "action_mail_acct": "admin@example.com"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "mail_with_dotted_domain": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "action_mail_acct": "admin@example.com"
+    },
+    "messages": [
+     "validate_email: failed looking up host for example.com (Name or service not known)",
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "action_mail_acct": "admin@example.com"
+    },
+    "messages": [
+     "validate_email: temporary failure looking up domain for example.com",
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "mail_with_local_domain": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "email: admin@localhost should have . after @"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "email: admin@localhost should have . after @"
+    ]
+   }
+  },
+  "no_equals": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Missing equal sign for line 40 in /etc/audit/auditd.conf",
+     "Not processing any more lines in /etc/audit/auditd.conf"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Missing equal sign for line 40 in /etc/audit/auditd.conf",
+     "Not processing any more lines in /etc/audit/auditd.conf"
+    ]
+   }
+  },
+  "no_final_newline": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Skipping line 40 in /etc/audit/auditd.conf: too long",
+     "Error - space_left(0) must be larger than admin_space_left(50)"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Skipping line 40 in /etc/audit/auditd.conf: too long",
+     "Error - space_left(0) must be larger than admin_space_left(50)"
+    ]
+   }
+  },
+  "no_spaces_around_equals": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Wrong number of arguments for line 40 in /etc/audit/auditd.conf",
+     "Not processing any more lines in /etc/audit/auditd.conf"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Wrong number of arguments for line 40 in /etc/audit/auditd.conf",
+     "Not processing any more lines in /etc/audit/auditd.conf"
+    ]
+   }
+  },
+  "non_ascii_comment": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "nul_byte": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Skipping line 40 in /etc/audit/auditd.conf: too long",
+     "Error - space_left(0) must be larger than admin_space_left(50)"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Skipping line 40 in /etc/audit/auditd.conf: too long",
+     "Error - space_left(0) must be larger than admin_space_left(50)"
+    ]
+   }
+  },
+  "number_ending_in_tab": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Value 8\t should only be numbers - line 40"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Value 8\t should only be numbers - line 40"
+    ]
+   }
+  },
+  "out_of_range": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Error converting string to a number (Numerical result out of range) - line 40"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Error converting string to a number (Numerical result out of range) - line 40"
+    ]
+   }
+  },
+  "plus_sign": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Value + +80 should only be numbers or percent - line 40"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Value + +80 should only be numbers or percent - line 40"
+    ]
+   }
+  },
+  "repeated_spaces": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "space_left": "80"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "space_left": "80"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "rotate_one_log": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "num_logs": "1"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "num_logs": "1"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "rotate_without_num_logs": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "unread": [
+     "num_logs"
+    ],
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "unread": [
+     "num_logs"
+    ],
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "space_both_percent": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "space_left": "30%",
+     "admin_space_left": "20%"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "space_left": "30%",
+     "admin_space_left": "20%"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "space_equal_to_admin": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Error - space_left(50) must be larger than admin_space_left(50)"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Error - space_left(50) must be larger than admin_space_left(50)"
+    ]
+   }
+  },
+  "space_in_percent_admin_absolute": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "space_left": "25%"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "space_left": "25%"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "space_left_unset": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Error - space_left(0) must be larger than admin_space_left(50)"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Error - space_left(0) must be larger than admin_space_left(50)"
+    ]
+   }
+  },
+  "tabs_around_equals": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Wrong number of arguments for line 40 in /etc/audit/auditd.conf",
+     "Not processing any more lines in /etc/audit/auditd.conf"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Wrong number of arguments for line 40 in /etc/audit/auditd.conf",
+     "Not processing any more lines in /etc/audit/auditd.conf"
+    ]
+   }
+  },
+  "trailing_comment": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Wrong number of arguments for line 40 in /etc/audit/auditd.conf",
+     "Keyword \"space_left\" has invalid option \"#\" in line 40 of /etc/audit/auditd.conf"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Wrong number of arguments for line 40 in /etc/audit/auditd.conf",
+     "Keyword \"space_left\" has invalid option \"#\" in line 40 of /etc/audit/auditd.conf"
+    ]
+   }
+  },
+  "trailing_spaces": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "space_left": "80"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "space_left": "80"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "two_equals": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Keyword \"space_left\" has invalid option \"80\" in line 40 of /etc/audit/auditd.conf"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Keyword \"space_left\" has invalid option \"80\" in line 40 of /etc/audit/auditd.conf"
+    ]
+   }
+  },
+  "unknown_keyword": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Unknown keyword \"frobnicate\" in line 41 of /etc/audit/auditd.conf"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Unknown keyword \"frobnicate\" in line 41 of /etc/audit/auditd.conf"
+    ]
+   }
+  },
+  "unknown_keyword_padded_to_200": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "messages": [
+     "Skipping line 41 in /etc/audit/auditd.conf: too long",
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "messages": [
+     "Skipping line 41 in /etc/audit/auditd.conf: too long",
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "unknown_keyword_without_final_newline": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "messages": [
+     "Skipping line 41 in /etc/audit/auditd.conf: too long",
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "messages": [
+     "Skipping line 41 in /etc/audit/auditd.conf: too long",
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_action_mail_acct_0": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_action_mail_acct_1": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "action_mail_acct": "adm"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "action_mail_acct": "adm"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_action_mail_acct_2": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "action_mail_acct": "nosuchgroupxyz"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "action_mail_acct": "nosuchgroupxyz"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_action_mail_acct_3": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "email: a#b has illegal character"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "email: a#b has illegal character"
+    ]
+   }
+  },
+  "value_admin_space_left_0": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "admin_space_left": "25%"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "admin_space_left": "25%"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_admin_space_left_1": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Percentages should be less than 100 - line 40"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Percentages should be less than 100 - line 40"
+    ]
+   }
+  },
+  "value_admin_space_left_2": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Percentages should be less than 100 - line 40"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Percentages should be less than 100 - line 40"
+    ]
+   }
+  },
+  "value_admin_space_left_3": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Error - space_left(75) must be larger than admin_space_left(80)"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Error - space_left(75) must be larger than admin_space_left(80)"
+    ]
+   }
+  },
+  "value_admin_space_left_4": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "admin_space_left": "0%"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "admin_space_left": "0%"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_admin_space_left_5": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Value x x% should only be numbers or percent - line 40"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Value x x% should only be numbers or percent - line 40"
+    ]
+   }
+  },
+  "value_admin_space_left_6": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "admin_space_left": "99%"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "admin_space_left": "99%"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_admin_space_left_action_0": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "admin_space_left_action": "ignore"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "admin_space_left_action": "ignore"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_admin_space_left_action_1": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "admin_space_left_action": "syslog"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "admin_space_left_action": "syslog"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_admin_space_left_action_10": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "admin_space_left_action": "Suspend"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "admin_space_left_action": "Suspend"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_admin_space_left_action_11": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "admin_space_left_action": "Single"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "admin_space_left_action": "Single"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_admin_space_left_action_12": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "admin_space_left_action": "Halt"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "admin_space_left_action": "Halt"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_admin_space_left_action_13": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "admin_space_left_action": "Email"
+    },
+    "messages": [
+     "Email option is specified but /usr/lib/sendmail doesn't seem executable.",
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "admin_space_left_action": "Email"
+    },
+    "messages": [
+     "Email option is specified but /usr/lib/sendmail doesn't seem executable.",
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_admin_space_left_action_14": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "admin_space_left_action": "IGNORE"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "admin_space_left_action": "IGNORE"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_admin_space_left_action_15": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "admin_space_left_action": "SYSLOG"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "admin_space_left_action": "SYSLOG"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_admin_space_left_action_16": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "admin_space_left_action": "ROTATE"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "admin_space_left_action": "ROTATE"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_admin_space_left_action_17": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_admin_space_left_action_18": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "admin_space_left_action": "SINGLE"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "admin_space_left_action": "SINGLE"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_admin_space_left_action_19": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "admin_space_left_action": "HALT"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "admin_space_left_action": "HALT"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_admin_space_left_action_2": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "admin_space_left_action": "rotate"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "admin_space_left_action": "rotate"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_admin_space_left_action_20": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "admin_space_left_action": "EMAIL"
+    },
+    "messages": [
+     "Email option is specified but /usr/lib/sendmail doesn't seem executable.",
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "admin_space_left_action": "EMAIL"
+    },
+    "messages": [
+     "Email option is specified but /usr/lib/sendmail doesn't seem executable.",
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_admin_space_left_action_21": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Option frobnicate not found - line 40"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Option frobnicate not found - line 40"
+    ]
+   }
+  },
+  "value_admin_space_left_action_3": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "admin_space_left_action": "suspend"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "admin_space_left_action": "suspend"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_admin_space_left_action_4": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "admin_space_left_action": "single"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "admin_space_left_action": "single"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_admin_space_left_action_5": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "admin_space_left_action": "halt"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "admin_space_left_action": "halt"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_admin_space_left_action_6": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "admin_space_left_action": "email"
+    },
+    "messages": [
+     "Email option is specified but /usr/lib/sendmail doesn't seem executable.",
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "admin_space_left_action": "email"
+    },
+    "messages": [
+     "Email option is specified but /usr/lib/sendmail doesn't seem executable.",
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_admin_space_left_action_7": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "admin_space_left_action": "Ignore"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "admin_space_left_action": "Ignore"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_admin_space_left_action_8": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "admin_space_left_action": "Syslog"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "admin_space_left_action": "Syslog"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_admin_space_left_action_9": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "admin_space_left_action": "Rotate"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "admin_space_left_action": "Rotate"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_disk_error_action_0": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "disk_error_action": "ignore"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "disk_error_action": "ignore"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_disk_error_action_1": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "disk_error_action": "syslog"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "disk_error_action": "syslog"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_disk_error_action_10": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "disk_error_action": "IGNORE"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "disk_error_action": "IGNORE"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_disk_error_action_11": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "disk_error_action": "SYSLOG"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "disk_error_action": "SYSLOG"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_disk_error_action_12": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_disk_error_action_13": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "disk_error_action": "SINGLE"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "disk_error_action": "SINGLE"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_disk_error_action_14": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "disk_error_action": "HALT"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "disk_error_action": "HALT"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_disk_error_action_15": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Option frobnicate not found - line 40"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Option frobnicate not found - line 40"
+    ]
+   }
+  },
+  "value_disk_error_action_2": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "disk_error_action": "suspend"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "disk_error_action": "suspend"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_disk_error_action_3": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "disk_error_action": "single"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "disk_error_action": "single"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_disk_error_action_4": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "disk_error_action": "halt"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "disk_error_action": "halt"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_disk_error_action_5": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "disk_error_action": "Ignore"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "disk_error_action": "Ignore"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_disk_error_action_6": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "disk_error_action": "Syslog"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "disk_error_action": "Syslog"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_disk_error_action_7": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "disk_error_action": "Suspend"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "disk_error_action": "Suspend"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_disk_error_action_8": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "disk_error_action": "Single"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "disk_error_action": "Single"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_disk_error_action_9": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "disk_error_action": "Halt"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "disk_error_action": "Halt"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_disk_full_action_0": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "disk_full_action": "ignore"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "disk_full_action": "ignore"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_disk_full_action_1": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "disk_full_action": "syslog"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "disk_full_action": "syslog"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_disk_full_action_10": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "disk_full_action": "Single"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "disk_full_action": "Single"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_disk_full_action_11": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "disk_full_action": "Halt"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "disk_full_action": "Halt"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_disk_full_action_12": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "disk_full_action": "IGNORE"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "disk_full_action": "IGNORE"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_disk_full_action_13": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "disk_full_action": "SYSLOG"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "disk_full_action": "SYSLOG"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_disk_full_action_14": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "disk_full_action": "ROTATE"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "disk_full_action": "ROTATE"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_disk_full_action_15": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_disk_full_action_16": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "disk_full_action": "SINGLE"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "disk_full_action": "SINGLE"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_disk_full_action_17": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "disk_full_action": "HALT"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "disk_full_action": "HALT"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_disk_full_action_18": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Option frobnicate not found - line 40"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Option frobnicate not found - line 40"
+    ]
+   }
+  },
+  "value_disk_full_action_2": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "disk_full_action": "rotate"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "disk_full_action": "rotate"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_disk_full_action_3": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "disk_full_action": "suspend"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "disk_full_action": "suspend"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_disk_full_action_4": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "disk_full_action": "single"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "disk_full_action": "single"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_disk_full_action_5": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "disk_full_action": "halt"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "disk_full_action": "halt"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_disk_full_action_6": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "disk_full_action": "Ignore"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "disk_full_action": "Ignore"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_disk_full_action_7": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "disk_full_action": "Syslog"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "disk_full_action": "Syslog"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_disk_full_action_8": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "disk_full_action": "Rotate"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "disk_full_action": "Rotate"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_disk_full_action_9": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "disk_full_action": "Suspend"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "disk_full_action": "Suspend"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_distribute_network_0": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "distribute_network": "yes"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "distribute_network": "yes"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_distribute_network_1": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_distribute_network_2": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "distribute_network": "Yes"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "distribute_network": "Yes"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_distribute_network_3": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "distribute_network": "No"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "distribute_network": "No"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_distribute_network_4": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "distribute_network": "YES"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "distribute_network": "YES"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_distribute_network_5": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "distribute_network": "NO"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "distribute_network": "NO"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_distribute_network_6": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Option frobnicate not found - line 40"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Option frobnicate not found - line 40"
+    ]
+   }
+  },
+  "value_enable_krb5_0": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "enable_krb5": "yes"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "enable_krb5": "yes"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_enable_krb5_1": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "enable_krb5": "no"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "enable_krb5": "no"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_enable_krb5_2": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "enable_krb5": "Yes"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "enable_krb5": "Yes"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_enable_krb5_3": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "enable_krb5": "No"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "enable_krb5": "No"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_enable_krb5_4": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "enable_krb5": "YES"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "enable_krb5": "YES"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_enable_krb5_5": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "enable_krb5": "NO"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "enable_krb5": "NO"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_enable_krb5_6": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Option frobnicate not found - line 41"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Option frobnicate not found - line 41"
+    ]
+   }
+  },
+  "value_end_of_event_timeout_0": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "eoe_timeout": "0"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "eoe_timeout": "0"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_end_of_event_timeout_1": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "eoe_timeout": "1"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "eoe_timeout": "1"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_end_of_event_timeout_10": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Value abc should only be numbers - line 40"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Value abc should only be numbers - line 40"
+    ]
+   }
+  },
+  "value_end_of_event_timeout_11": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Value -1 should only be numbers - line 40"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Value -1 should only be numbers - line 40"
+    ]
+   }
+  },
+  "value_end_of_event_timeout_12": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Value 1.5 should only be numbers - line 40"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Value 1.5 should only be numbers - line 40"
+    ]
+   }
+  },
+  "value_end_of_event_timeout_2": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "eoe_timeout": "50"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "eoe_timeout": "50"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_end_of_event_timeout_3": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "eoe_timeout": "999"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "eoe_timeout": "999"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_end_of_event_timeout_4": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "eoe_timeout": "1000"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "eoe_timeout": "1000"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_end_of_event_timeout_5": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "eoe_timeout": "65535"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "eoe_timeout": "65535"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_end_of_event_timeout_6": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "eoe_timeout": "65536"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "eoe_timeout": "65536"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_end_of_event_timeout_7": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "eoe_timeout": "100000"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "eoe_timeout": "100000"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_end_of_event_timeout_8": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "eoe_timeout": "999999999"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "eoe_timeout": "999999999"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_end_of_event_timeout_9": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "eoe_timeout": "1000000000"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "eoe_timeout": "1000000000"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_flush_0": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "flush": "none"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "flush": "none"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_flush_1": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "flush": "incremental"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "flush": "incremental"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_flush_10": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "flush": "NONE"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "flush": "NONE"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_flush_11": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "flush": "INCREMENTAL"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "flush": "INCREMENTAL"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_flush_12": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_flush_13": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "flush": "DATA"
+    },
+    "messages": [
+     "Warning - freq is non-zero and incremental flushing not selected.",
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "flush": "DATA"
+    },
+    "messages": [
+     "Warning - freq is non-zero and incremental flushing not selected.",
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_flush_14": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "flush": "SYNC"
+    },
+    "messages": [
+     "Warning - freq is non-zero and incremental flushing not selected.",
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "flush": "SYNC"
+    },
+    "messages": [
+     "Warning - freq is non-zero and incremental flushing not selected.",
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_flush_15": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Option frobnicate not found - line 40"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Option frobnicate not found - line 40"
+    ]
+   }
+  },
+  "value_flush_2": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "flush": "incremental_async"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "flush": "incremental_async"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_flush_3": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "flush": "data"
+    },
+    "messages": [
+     "Warning - freq is non-zero and incremental flushing not selected.",
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "flush": "data"
+    },
+    "messages": [
+     "Warning - freq is non-zero and incremental flushing not selected.",
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_flush_4": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "flush": "sync"
+    },
+    "messages": [
+     "Warning - freq is non-zero and incremental flushing not selected.",
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "flush": "sync"
+    },
+    "messages": [
+     "Warning - freq is non-zero and incremental flushing not selected.",
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_flush_5": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "flush": "None"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "flush": "None"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_flush_6": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "flush": "Incremental"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "flush": "Incremental"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_flush_7": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "flush": "Incremental_async"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "flush": "Incremental_async"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_flush_8": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "flush": "Data"
+    },
+    "messages": [
+     "Warning - freq is non-zero and incremental flushing not selected.",
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "flush": "Data"
+    },
+    "messages": [
+     "Warning - freq is non-zero and incremental flushing not selected.",
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_flush_9": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "flush": "Sync"
+    },
+    "messages": [
+     "Warning - freq is non-zero and incremental flushing not selected.",
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "flush": "Sync"
+    },
+    "messages": [
+     "Warning - freq is non-zero and incremental flushing not selected.",
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_freq_0": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Error - incremental flushing chosen, but 0 selected for freq"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Error - incremental flushing chosen, but 0 selected for freq"
+    ]
+   }
+  },
+  "value_freq_1": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "freq": "1"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "freq": "1"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_freq_10": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Value abc should only be numbers - line 40"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Value abc should only be numbers - line 40"
+    ]
+   }
+  },
+  "value_freq_11": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Value -1 should only be numbers - line 40"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Value -1 should only be numbers - line 40"
+    ]
+   }
+  },
+  "value_freq_12": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Value 1.5 should only be numbers - line 40"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Value 1.5 should only be numbers - line 40"
+    ]
+   }
+  },
+  "value_freq_2": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_freq_3": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "freq": "999"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "freq": "999"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_freq_4": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "freq": "1000"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "freq": "1000"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_freq_5": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "freq": "65535"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "freq": "65535"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_freq_6": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "freq": "65536"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "freq": "65536"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_freq_7": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "freq": "100000"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "freq": "100000"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_freq_8": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "freq": "999999999"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "freq": "999999999"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_freq_9": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "freq": "1000000000"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "freq": "1000000000"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_krb5_principal_0": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "krb5_principal": "root"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "krb5_principal": "root"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_krb5_principal_1": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "krb5_principal": "adm"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "krb5_principal": "adm"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_krb5_principal_2": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "krb5_principal": "nosuchgroupxyz"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "krb5_principal": "nosuchgroupxyz"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_krb5_principal_3": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "krb5_principal": "a#b"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "krb5_principal": "a#b"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_local_events_0": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_local_events_1": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "local_events": "no"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "local_events": "no"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_local_events_2": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "local_events": "Yes"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "local_events": "Yes"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_local_events_3": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "local_events": "No"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "local_events": "No"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_local_events_4": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "local_events": "YES"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "local_events": "YES"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_local_events_5": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "local_events": "NO"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "local_events": "NO"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_local_events_6": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Option frobnicate not found - line 40"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Option frobnicate not found - line 40"
+    ]
+   }
+  },
+  "value_log_file_0": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_log_file_1": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Could not open dir relative (No such file or directory)"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Could not open dir relative (No such file or directory)"
+    ]
+   }
+  },
+  "value_log_file_2": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Keyword \"log_file\" has invalid option \"b\" in line 40 of /etc/audit/auditd.conf"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Keyword \"log_file\" has invalid option \"b\" in line 40 of /etc/audit/auditd.conf"
+    ]
+   }
+  },
+  "value_log_format_0": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "log_format": "raw"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "log_format": "raw"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_log_format_1": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "log_format": "enriched"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "log_format": "enriched"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_log_format_2": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "log_format": "Raw"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "log_format": "Raw"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_log_format_3": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "log_format": "Enriched"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "log_format": "Enriched"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_log_format_4": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "log_format": "RAW"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "log_format": "RAW"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_log_format_5": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_log_format_6": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Option frobnicate not found - line 40"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Option frobnicate not found - line 40"
+    ]
+   }
+  },
+  "value_log_group_0": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "log_group": "root"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_log_group_1": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "log_group": "adm"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_log_group_2": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Group ID is non-numeric and unknown (nosuchgroupxyz) - line 40"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Group ID is non-numeric and unknown (nosuchgroupxyz) - line 40"
+    ]
+   }
+  },
+  "value_log_group_3": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Group ID is non-numeric and unknown (a#b) - line 40"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Group ID is non-numeric and unknown (a#b) - line 40"
+    ]
+   }
+  },
+  "value_max_log_file_0": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "max_log_size": "0"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "max_log_size": "0"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_max_log_file_1": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "max_log_size": "1"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "max_log_size": "1"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_max_log_file_10": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Value abc should only be numbers - line 40"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Value abc should only be numbers - line 40"
+    ]
+   }
+  },
+  "value_max_log_file_11": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Value -1 should only be numbers - line 40"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Value -1 should only be numbers - line 40"
+    ]
+   }
+  },
+  "value_max_log_file_12": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Value 1.5 should only be numbers - line 40"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Value 1.5 should only be numbers - line 40"
+    ]
+   }
+  },
+  "value_max_log_file_2": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "max_log_size": "50"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "max_log_size": "50"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_max_log_file_3": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "max_log_size": "999"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "max_log_size": "999"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_max_log_file_4": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "max_log_size": "1000"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "max_log_size": "1000"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_max_log_file_5": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "max_log_size": "65535"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "max_log_size": "65535"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_max_log_file_6": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "max_log_size": "65536"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "max_log_size": "65536"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_max_log_file_7": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "max_log_size": "100000"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "max_log_size": "100000"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_max_log_file_8": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "max_log_size": "999999999"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "max_log_size": "999999999"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_max_log_file_9": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "max_log_size": "1000000000"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "max_log_size": "1000000000"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_max_log_file_action_0": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "max_log_size_action": "ignore"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "max_log_size_action": "ignore"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_max_log_file_action_1": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "max_log_size_action": "syslog"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "max_log_size_action": "syslog"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_max_log_file_action_10": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "max_log_size_action": "IGNORE"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "max_log_size_action": "IGNORE"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_max_log_file_action_11": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "max_log_size_action": "SYSLOG"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "max_log_size_action": "SYSLOG"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_max_log_file_action_12": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "max_log_size_action": "SUSPEND"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "max_log_size_action": "SUSPEND"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_max_log_file_action_13": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_max_log_file_action_14": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "max_log_size_action": "KEEP_LOGS"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "max_log_size_action": "KEEP_LOGS"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_max_log_file_action_15": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Option frobnicate not found - line 40"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Option frobnicate not found - line 40"
+    ]
+   }
+  },
+  "value_max_log_file_action_2": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "max_log_size_action": "suspend"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "max_log_size_action": "suspend"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_max_log_file_action_3": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "max_log_size_action": "rotate"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "max_log_size_action": "rotate"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_max_log_file_action_4": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "max_log_size_action": "keep_logs"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "max_log_size_action": "keep_logs"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_max_log_file_action_5": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "max_log_size_action": "Ignore"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "max_log_size_action": "Ignore"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_max_log_file_action_6": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "max_log_size_action": "Syslog"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "max_log_size_action": "Syslog"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_max_log_file_action_7": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "max_log_size_action": "Suspend"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "max_log_size_action": "Suspend"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_max_log_file_action_8": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "max_log_size_action": "Rotate"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "max_log_size_action": "Rotate"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_max_log_file_action_9": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "max_log_size_action": "Keep_logs"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "max_log_size_action": "Keep_logs"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_max_restarts_0": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "max_restarts": "0"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "max_restarts": "0"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_max_restarts_1": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "max_restarts": "1"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "max_restarts": "1"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_max_restarts_10": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Value abc should only be numbers - line 40"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Value abc should only be numbers - line 40"
+    ]
+   }
+  },
+  "value_max_restarts_11": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Value -1 should only be numbers - line 40"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Value -1 should only be numbers - line 40"
+    ]
+   }
+  },
+  "value_max_restarts_12": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Value 1.5 should only be numbers - line 40"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Value 1.5 should only be numbers - line 40"
+    ]
+   }
+  },
+  "value_max_restarts_2": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "max_restarts": "50"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "max_restarts": "50"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_max_restarts_3": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "max_restarts": "999"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "max_restarts": "999"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_max_restarts_4": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "max_restarts": "1000"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "max_restarts": "1000"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_max_restarts_5": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "max_restarts": "65535"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "max_restarts": "65535"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_max_restarts_6": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "max_restarts": "65536"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "max_restarts": "65536"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_max_restarts_7": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "max_restarts": "100000"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "max_restarts": "100000"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_max_restarts_8": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "max_restarts": "999999999"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "max_restarts": "999999999"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_max_restarts_9": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "max_restarts": "1000000000"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "max_restarts": "1000000000"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_name_0": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "name": "root"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "name": "root"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_name_1": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "name": "adm"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "name": "adm"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_name_2": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "name": "nosuchgroupxyz"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "name": "nosuchgroupxyz"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_name_3": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "name": "a#b"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "name": "a#b"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_name_format_0": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "name_format": "none"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "name_format": "none"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_name_format_1": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "name_format": "hostname"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "name_format": "hostname"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_name_format_10": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_name_format_11": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "name_format": "HOSTNAME"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "name_format": "HOSTNAME"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_name_format_12": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "name_format": "FQD"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "name_format": "FQD"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_name_format_13": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "name_format": "NUMERIC"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "name_format": "NUMERIC"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_name_format_14": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "name_format": "USER"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "name_format": "USER"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_name_format_15": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Option frobnicate not found - line 40"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Option frobnicate not found - line 40"
+    ]
+   }
+  },
+  "value_name_format_2": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "name_format": "fqd"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "name_format": "fqd"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_name_format_3": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "name_format": "numeric"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "name_format": "numeric"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_name_format_4": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "name_format": "user"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "name_format": "user"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_name_format_5": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "name_format": "None"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "name_format": "None"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_name_format_6": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "name_format": "Hostname"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "name_format": "Hostname"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_name_format_7": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "name_format": "Fqd"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "name_format": "Fqd"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_name_format_8": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "name_format": "Numeric"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "name_format": "Numeric"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_name_format_9": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "name_format": "User"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "name_format": "User"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_num_logs_0": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "num_logs": "0"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "num_logs": "0"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_num_logs_1": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "num_logs": "1"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "num_logs": "1"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_num_logs_10": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Value abc should only be numbers - line 40"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Value abc should only be numbers - line 40"
+    ]
+   }
+  },
+  "value_num_logs_11": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Value -1 should only be numbers - line 40"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Value -1 should only be numbers - line 40"
+    ]
+   }
+  },
+  "value_num_logs_12": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Value 1.5 should only be numbers - line 40"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Value 1.5 should only be numbers - line 40"
+    ]
+   }
+  },
+  "value_num_logs_2": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "num_logs": "50"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "num_logs": "50"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_num_logs_3": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "num_logs": "999"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "num_logs": "999"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_num_logs_4": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "num_logs must be 999 or less"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "num_logs must be 999 or less"
+    ]
+   }
+  },
+  "value_num_logs_5": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "num_logs must be 999 or less"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "num_logs must be 999 or less"
+    ]
+   }
+  },
+  "value_num_logs_6": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "num_logs must be 999 or less"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "num_logs must be 999 or less"
+    ]
+   }
+  },
+  "value_num_logs_7": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "num_logs must be 999 or less"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "num_logs must be 999 or less"
+    ]
+   }
+  },
+  "value_num_logs_8": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "num_logs must be 999 or less"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "num_logs must be 999 or less"
+    ]
+   }
+  },
+  "value_num_logs_9": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "num_logs must be 999 or less"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "num_logs must be 999 or less"
+    ]
+   }
+  },
+  "value_overflow_action_0": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "overflow_action": "ignore"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "overflow_action": "ignore"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_overflow_action_1": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "overflow_action": "syslog"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "overflow_action": "syslog"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_overflow_action_10": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "overflow_action": "IGNORE"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "overflow_action": "IGNORE"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_overflow_action_11": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_overflow_action_12": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "overflow_action": "SUSPEND"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "overflow_action": "SUSPEND"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_overflow_action_13": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "overflow_action": "SINGLE"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "overflow_action": "SINGLE"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_overflow_action_14": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "overflow_action": "HALT"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "overflow_action": "HALT"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_overflow_action_15": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Option frobnicate not found - line 40"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Option frobnicate not found - line 40"
+    ]
+   }
+  },
+  "value_overflow_action_2": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "overflow_action": "suspend"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "overflow_action": "suspend"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_overflow_action_3": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "overflow_action": "single"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "overflow_action": "single"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_overflow_action_4": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "overflow_action": "halt"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "overflow_action": "halt"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_overflow_action_5": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "overflow_action": "Ignore"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "overflow_action": "Ignore"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_overflow_action_6": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "overflow_action": "Syslog"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "overflow_action": "Syslog"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_overflow_action_7": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "overflow_action": "Suspend"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "overflow_action": "Suspend"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_overflow_action_8": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "overflow_action": "Single"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "overflow_action": "Single"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_overflow_action_9": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "overflow_action": "Halt"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "overflow_action": "Halt"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_plugin_dir_0": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "plugin_dir": "/var/log/audit/audit.log"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "plugin_dir": "/var/log/audit/audit.log"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_plugin_dir_1": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "plugin_dir": "relative/path"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "plugin_dir": "relative/path"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_plugin_dir_2": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Keyword \"plugin_dir\" has invalid option \"b\" in line 40 of /etc/audit/auditd.conf"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Keyword \"plugin_dir\" has invalid option \"b\" in line 40 of /etc/audit/auditd.conf"
+    ]
+   }
+  },
+  "value_priority_boost_0": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "priority_boost": "0"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "unobservable",
+    "status": 1,
+    "messages": [
+     "No plugins found, not dispatching events",
+     "type=DAEMON_START msg=audit(<time>:<serial>): op=start ver=3.1.2 format=enriched kernel=6.18.33.2-microsoft-standard-WSL2 auid=4294967295 pid=1 uid=0 ses=4294967295 subj=kernel res=success",
+     "AUID=\"unset\" UID=\"root\"",
+     "Unable to adjust out of memory score",
+     "config_manager init complete",
+     "Error sending status request (Operation not permitted)",
+     "Error sending enable request (Operation not permitted)",
+     "Unable to set initial audit startup state to 'enable', exiting",
+     "type=DAEMON_ABORT msg=audit(<time>:<serial>): op=set-enable auid=4294967295 pid=1 uid=0 ses=4294967295 subj=kernel res=failed",
+     "AUID=\"unset\" UID=\"root\"",
+     "Error setting audit daemon pid (Operation not permitted)"
+    ]
+   }
+  },
+  "value_priority_boost_1": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "priority_boost": "1"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "priority_boost": "1"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_priority_boost_10": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Value abc should only be numbers - line 40"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Value abc should only be numbers - line 40"
+    ]
+   }
+  },
+  "value_priority_boost_11": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Value -1 should only be numbers - line 40"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Value -1 should only be numbers - line 40"
+    ]
+   }
+  },
+  "value_priority_boost_12": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Value 1.5 should only be numbers - line 40"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Value 1.5 should only be numbers - line 40"
+    ]
+   }
+  },
+  "value_priority_boost_2": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "priority_boost": "50"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "priority_boost": "50"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_priority_boost_3": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "priority_boost": "999"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "priority_boost": "999"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_priority_boost_4": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "priority_boost": "1000"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "priority_boost": "1000"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_priority_boost_5": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "priority_boost": "65535"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "priority_boost": "65535"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_priority_boost_6": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "priority_boost": "65536"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "priority_boost": "65536"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_priority_boost_7": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "priority_boost": "100000"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "priority_boost": "100000"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_priority_boost_8": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "priority_boost": "999999999"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "priority_boost": "999999999"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_priority_boost_9": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "priority_boost": "1000000000"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "priority_boost": "1000000000"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_q_depth_0": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "q_depth": "0"
+    },
+    "messages": [
+     "q_depth should be larger than 512 for safety margin",
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "q_depth": "0"
+    },
+    "messages": [
+     "q_depth should be larger than 512 for safety margin",
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_q_depth_1": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "q_depth": "1"
+    },
+    "messages": [
+     "q_depth should be larger than 512 for safety margin",
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "q_depth": "1"
+    },
+    "messages": [
+     "q_depth should be larger than 512 for safety margin",
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_q_depth_10": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Value abc should only be numbers - line 40"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Value abc should only be numbers - line 40"
+    ]
+   }
+  },
+  "value_q_depth_11": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Value -1 should only be numbers - line 40"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Value -1 should only be numbers - line 40"
+    ]
+   }
+  },
+  "value_q_depth_12": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Value 1.5 should only be numbers - line 40"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Value 1.5 should only be numbers - line 40"
+    ]
+   }
+  },
+  "value_q_depth_2": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "q_depth": "50"
+    },
+    "messages": [
+     "q_depth should be larger than 512 for safety margin",
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "q_depth": "50"
+    },
+    "messages": [
+     "q_depth should be larger than 512 for safety margin",
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_q_depth_3": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "q_depth": "999"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "q_depth": "999"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_q_depth_4": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "q_depth": "1000"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "q_depth": "1000"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_q_depth_5": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "q_depth": "65535"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "q_depth": "65535"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_q_depth_6": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "q_depth": "65536"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "q_depth": "65536"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_q_depth_7": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "q_depth must be 99999 or less"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "q_depth must be 99999 or less"
+    ]
+   }
+  },
+  "value_q_depth_8": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "q_depth must be 99999 or less"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "q_depth must be 99999 or less"
+    ]
+   }
+  },
+  "value_q_depth_9": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "q_depth must be 99999 or less"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "q_depth must be 99999 or less"
+    ]
+   }
+  },
+  "value_space_left_0": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "space_left": "25%"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "space_left": "25%"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_space_left_1": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Percentages should be less than 100 - line 40"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Percentages should be less than 100 - line 40"
+    ]
+   }
+  },
+  "value_space_left_2": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Percentages should be less than 100 - line 40"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Percentages should be less than 100 - line 40"
+    ]
+   }
+  },
+  "value_space_left_3": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "space_left": "80"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "space_left": "80"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_space_left_4": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Error - space_left(0) must be larger than admin_space_left(50)"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Error - space_left(0) must be larger than admin_space_left(50)"
+    ]
+   }
+  },
+  "value_space_left_5": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Value x x% should only be numbers or percent - line 40"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Value x x% should only be numbers or percent - line 40"
+    ]
+   }
+  },
+  "value_space_left_6": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "space_left": "99%"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "space_left": "99%"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_space_left_action_0": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "space_action": "ignore"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "space_action": "ignore"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_space_left_action_1": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "space_action": "syslog"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "space_action": "syslog"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_space_left_action_10": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "space_action": "Suspend"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "space_action": "Suspend"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_space_left_action_11": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "space_action": "Single"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "space_action": "Single"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_space_left_action_12": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "space_action": "Halt"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "space_action": "Halt"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_space_left_action_13": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "space_action": "Email"
+    },
+    "messages": [
+     "Email option is specified but /usr/lib/sendmail doesn't seem executable.",
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "space_action": "Email"
+    },
+    "messages": [
+     "Email option is specified but /usr/lib/sendmail doesn't seem executable.",
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_space_left_action_14": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "space_action": "IGNORE"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "space_action": "IGNORE"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_space_left_action_15": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_space_left_action_16": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "space_action": "ROTATE"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "space_action": "ROTATE"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_space_left_action_17": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "space_action": "SUSPEND"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "space_action": "SUSPEND"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_space_left_action_18": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "space_action": "SINGLE"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "space_action": "SINGLE"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_space_left_action_19": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "space_action": "HALT"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "space_action": "HALT"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_space_left_action_2": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "space_action": "rotate"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "space_action": "rotate"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_space_left_action_20": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "space_action": "EMAIL"
+    },
+    "messages": [
+     "Email option is specified but /usr/lib/sendmail doesn't seem executable.",
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "space_action": "EMAIL"
+    },
+    "messages": [
+     "Email option is specified but /usr/lib/sendmail doesn't seem executable.",
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_space_left_action_21": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Option frobnicate not found - line 40"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Option frobnicate not found - line 40"
+    ]
+   }
+  },
+  "value_space_left_action_3": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "space_action": "suspend"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "space_action": "suspend"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_space_left_action_4": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "space_action": "single"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "space_action": "single"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_space_left_action_5": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "space_action": "halt"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "space_action": "halt"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_space_left_action_6": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "space_action": "email"
+    },
+    "messages": [
+     "Email option is specified but /usr/lib/sendmail doesn't seem executable.",
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "space_action": "email"
+    },
+    "messages": [
+     "Email option is specified but /usr/lib/sendmail doesn't seem executable.",
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_space_left_action_7": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "space_action": "Ignore"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "space_action": "Ignore"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_space_left_action_8": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "space_action": "Syslog"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "space_action": "Syslog"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_space_left_action_9": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "space_action": "Rotate"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "space_action": "Rotate"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_tcp_client_max_idle_0": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_tcp_client_max_idle_1": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "tcp_client_max_idle": "1"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "tcp_client_max_idle": "1"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_tcp_client_max_idle_10": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Value abc should only be numbers - line 40"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "tcp_client_max_idle": "abc"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_tcp_client_max_idle_11": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Value -1 should only be numbers - line 40"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "tcp_client_max_idle": "-1"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_tcp_client_max_idle_12": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Value 1.5 should only be numbers - line 40"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "tcp_client_max_idle": "1.5"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_tcp_client_max_idle_2": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "tcp_client_max_idle": "50"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "tcp_client_max_idle": "50"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_tcp_client_max_idle_3": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "tcp_client_max_idle": "999"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "tcp_client_max_idle": "999"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_tcp_client_max_idle_4": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "tcp_client_max_idle": "1000"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "tcp_client_max_idle": "1000"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_tcp_client_max_idle_5": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "tcp_client_max_idle": "65535"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "tcp_client_max_idle": "65535"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_tcp_client_max_idle_6": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "tcp_client_max_idle": "65536"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "tcp_client_max_idle": "65536"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_tcp_client_max_idle_7": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "tcp_client_max_idle": "100000"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "tcp_client_max_idle": "100000"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_tcp_client_max_idle_8": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "tcp_client_max_idle": "999999999"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "tcp_client_max_idle": "999999999"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_tcp_client_max_idle_9": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "tcp_client_max_idle": "1000000000"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "tcp_client_max_idle": "1000000000"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_tcp_listen_queue_0": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Error - converted number (0) is too small - line 40"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "tcp_listen_queue": "0"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_tcp_listen_queue_1": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "tcp_listen_queue": "1"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "tcp_listen_queue": "1"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_tcp_listen_queue_10": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Value abc should only be numbers - line 40"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "tcp_listen_queue": "abc"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_tcp_listen_queue_11": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Value -1 should only be numbers - line 40"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "tcp_listen_queue": "-1"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_tcp_listen_queue_12": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Value 1.5 should only be numbers - line 40"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "tcp_listen_queue": "1.5"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_tcp_listen_queue_2": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "tcp_listen_queue": "50"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "tcp_listen_queue": "50"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_tcp_listen_queue_3": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "tcp_listen_queue": "999"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "tcp_listen_queue": "999"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_tcp_listen_queue_4": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "tcp_listen_queue": "1000"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "tcp_listen_queue": "1000"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_tcp_listen_queue_5": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "tcp_listen_queue": "65535"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "tcp_listen_queue": "65535"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_tcp_listen_queue_6": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Error - converted number (65536) is too large - line 40"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "tcp_listen_queue": "65536"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_tcp_listen_queue_7": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Error - converted number (100000) is too large - line 40"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "tcp_listen_queue": "100000"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_tcp_listen_queue_8": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Error - converted number (999999999) is too large - line 40"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "tcp_listen_queue": "999999999"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_tcp_listen_queue_9": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Error - converted number (1000000000) is too large - line 40"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "tcp_listen_queue": "1000000000"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_tcp_max_per_addr_0": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Error - converted number (0) is too small - line 40"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "tcp_max_per_addr": "0"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_tcp_max_per_addr_1": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_tcp_max_per_addr_10": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Value abc should only be numbers - line 40"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "tcp_max_per_addr": "abc"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_tcp_max_per_addr_11": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Value -1 should only be numbers - line 40"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "tcp_max_per_addr": "-1"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_tcp_max_per_addr_12": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Value 1.5 should only be numbers - line 40"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "tcp_max_per_addr": "1.5"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_tcp_max_per_addr_2": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "tcp_max_per_addr": "50"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "tcp_max_per_addr": "50"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_tcp_max_per_addr_3": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "tcp_max_per_addr": "999"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "tcp_max_per_addr": "999"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_tcp_max_per_addr_4": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "tcp_max_per_addr": "1000"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "tcp_max_per_addr": "1000"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_tcp_max_per_addr_5": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Error - converted number (65535) is too large - line 40"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "tcp_max_per_addr": "65535"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_tcp_max_per_addr_6": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Error - converted number (65536) is too large - line 40"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "tcp_max_per_addr": "65536"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_tcp_max_per_addr_7": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Error - converted number (100000) is too large - line 40"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "tcp_max_per_addr": "100000"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_tcp_max_per_addr_8": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Error - converted number (999999999) is too large - line 40"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "tcp_max_per_addr": "999999999"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_tcp_max_per_addr_9": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Error - converted number (1000000000) is too large - line 40"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "tcp_max_per_addr": "1000000000"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_transport_0": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "transport": "tcp"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "transport": "tcp"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_transport_1": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "transport": "krb5"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "transport": "krb5"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_transport_2": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "transport": "Tcp"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "transport": "Tcp"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_transport_3": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "transport": "Krb5"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "transport": "Krb5"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_transport_4": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_transport_5": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "transport": "KRB5"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "transport": "KRB5"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_transport_6": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Option frobnicate not found - line 40"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Option frobnicate not found - line 40"
+    ]
+   }
+  },
+  "value_use_libwrap_0": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_use_libwrap_1": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "use_libwrap": "no"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "use_libwrap": "no"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_use_libwrap_2": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "use_libwrap": "Yes"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "use_libwrap": "Yes"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_use_libwrap_3": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "use_libwrap": "No"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "use_libwrap": "No"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_use_libwrap_4": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "use_libwrap": "YES"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "use_libwrap": "YES"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_use_libwrap_5": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "use_libwrap": "NO"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "use_libwrap": "NO"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_use_libwrap_6": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Option frobnicate not found - line 40"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Option frobnicate not found - line 40"
+    ]
+   }
+  },
+  "value_verify_email_0": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_verify_email_1": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "verify_email": "no"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "verify_email": "no"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_verify_email_2": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "verify_email": "Yes"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "verify_email": "Yes"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_verify_email_3": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "verify_email": "No"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "verify_email": "No"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_verify_email_4": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "verify_email": "YES"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "verify_email": "YES"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_verify_email_5": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "verify_email": "NO"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "verify_email": "NO"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_verify_email_6": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Option frobnicate not found - line 40"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Option frobnicate not found - line 40"
+    ]
+   }
+  },
+  "value_write_logs_0": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_write_logs_1": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "write_logs": "no"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "write_logs": "no"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_write_logs_2": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "write_logs": "Yes"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "write_logs": "Yes"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_write_logs_3": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "write_logs": "No"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "write_logs": "No"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_write_logs_4": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "write_logs": "YES"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "write_logs": "YES"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_write_logs_5": {
+   "rhel_compatible": {
+    "verdict": "accepted",
+    "status": 4,
+    "read": {
+     "write_logs": "NO"
+    },
+    "messages": [
+     "You must be root or have capabilities to run this program."
+    ]
+   },
+   "ubuntu": {
+    "verdict": "accepted",
+    "status": 1,
+    "read": {
+     "write_logs": "NO"
+    },
+    "messages": [
+     "Cannot change priority (Operation not permitted)"
+    ]
+   }
+  },
+  "value_write_logs_6": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Option frobnicate not found - line 40"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Option frobnicate not found - line 40"
+    ]
+   }
+  },
+  "vertical_tab": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Value",
+     "80",
+     "should only be numbers or percent - line 40"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Value",
+     "80",
+     "should only be numbers or percent - line 40"
+    ]
+   }
+  },
+  "word_for_equals": {
+   "rhel_compatible": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Missing equal sign for line 40 in /etc/audit/auditd.conf",
+     "Not processing any more lines in /etc/audit/auditd.conf"
+    ]
+   },
+   "ubuntu": {
+    "verdict": "refused",
+    "status": 6,
+    "messages": [
+     "Missing equal sign for line 40 in /etc/audit/auditd.conf",
+     "Not processing any more lines in /etc/audit/auditd.conf"
+    ]
+   }
+  }
+ }
+}

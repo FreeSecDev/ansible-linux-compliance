@@ -51,6 +51,12 @@ FAMILY_PARAMETERS: dict[str, list[set[str]]] = {
         {"method", "path", "type", "attribute", "max_mode"},
         {"method", "path", "type", "attribute", "id"},
     ],
+    "auditd_rules_time": [{"method", "path", "lines"}],
+    "auditd_conf": [
+        {"method", "setting", "compare", "value"},
+        {"method", "setting", "compare", "value", "absent_compliant"},
+        {"method", "setting", "compare"} | PROFILE_VALUE_PARAMETERS,
+    ],
     "filesystem_modules": [KERNEL_MODULE_PARAMETERS],
     "protocol_modules": [KERNEL_MODULE_PARAMETERS],
     "wireless_modules": [KERNEL_MODULE_PARAMETERS],
@@ -59,13 +65,23 @@ KERNEL_MODULE_FAMILIES = ["filesystem_modules", "protocol_modules", "wireless_mo
 NATIVE_FAMILIES = [
     "file_permissions",
     "banners",
+    "auditd_rules_time",
+    "auditd_conf",
     *KERNEL_MODULE_FAMILIES,
     "ssh",
     "pwquality",
     "login_defs",
     "sudo",
 ]
-DISRUPTIVE_NATIVE_FAMILIES = [*KERNEL_MODULE_FAMILIES, "ssh", "pwquality", "login_defs", "sudo"]
+DISRUPTIVE_NATIVE_FAMILIES = [
+    "auditd_rules_time",
+    "auditd_conf",
+    *KERNEL_MODULE_FAMILIES,
+    "ssh",
+    "pwquality",
+    "login_defs",
+    "sudo",
+]
 LOGIN_DEFS_VALUES = {
     "at_most": r"(0|[1-9][0-9]{0,5})",
     "at_least": r"(0|[1-9][0-9]{0,5})",
@@ -418,7 +434,11 @@ def test_every_rule_toggle_is_unique_and_a_valid_variable_name() -> None:
 
 def test_a_disabled_topic_excludes_every_catalogued_rule_of_its_family() -> None:
     result = plan(toggles={"linux_compliance_auditd_enabled": False})
-    auditd = {str(rule["rule_id"]) for rule in rules() if rule["family"] == "auditd"}
+    families = {"auditd"} | {
+        str(family["name"]) for family in registry() if family.get("umbrella") == "auditd"
+    }
+    assert {"auditd_conf", "auditd_rules_time"} <= families
+    auditd = {str(rule["rule_id"]) for rule in rules() if rule["family"] in families}
     disabled = cast("list[dict[str, object]]", result["disabled_rules"])
     assert len(auditd) > 100
     assert {str(item["rule_id"]) for item in disabled} == auditd

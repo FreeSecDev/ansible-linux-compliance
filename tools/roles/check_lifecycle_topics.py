@@ -120,6 +120,7 @@ CATEGORY_KEYS: Final[dict[str, str]] = {
     "sysctl": "name",
     "users": "name",
     "groups": "name",
+    "audit_rules": "line",
 }
 ATTRIBUTES: Final[dict[str, frozenset[str]]] = {
     "files": frozenset(
@@ -143,7 +144,10 @@ ATTRIBUTES: Final[dict[str, frozenset[str]]] = {
     "sysctl": frozenset({"value"}),
     "users": frozenset({"exists", "entry"}),
     "groups": frozenset({"exists", "entry"}),
+    "audit_rules": frozenset({"loaded"}),
 }
+DRIVERS_KEY: Final[str] = "drivers"
+KERNEL_CATEGORIES: Final[frozenset[str]] = frozenset({"audit_rules"})
 AUDIT_KEYS: Final[frozenset[str]] = frozenset({"applied_outcomes", "reason"})
 EXTRA_AUDIT_OUTCOMES: Final[frozenset[str]] = frozenset({"notapplicable"})
 PRE_STATE_KEYS: Final[frozenset[str]] = frozenset(
@@ -164,6 +168,7 @@ CHANGES_KEY: Final[str] = "changes"
 MODE: Final[re.Pattern[str]] = re.compile(r"[0-7]{4}")
 NAME: Final[re.Pattern[str]] = re.compile(r"[A-Za-z0-9_.@+-]+")
 PATH: Final[re.Pattern[str]] = re.compile(r"/[A-Za-z0-9_.@+/-]*")
+LINE: Final[re.Pattern[str]] = re.compile(r"-[A-Za-z0-9 ,=!<>/._+-]{1,511}")
 
 
 def _load(path: Path) -> object:
@@ -271,7 +276,7 @@ class Declaration:
         """Return the identifying value of an item, or record why it is missing or malformed."""
         key = CATEGORY_KEYS[category]
         value = item.get(key)
-        pattern = PATH if key == "path" else NAME
+        pattern = PATH if key == "path" else LINE if key == "line" else NAME
         if not isinstance(value, str) or pattern.fullmatch(value) is None:
             self.error(f"{what} needs a valid {key}")
             return None
@@ -279,6 +284,9 @@ class Declaration:
 
     def state_item_keys(self, category: str, item: dict[str, object], what: str) -> frozenset[str]:
         """Return the keys that a state item of ``category`` may have; check a file's flag."""
+        if category in KERNEL_CATEGORIES:
+            _kernel_drivers(self, item, what)
+            return frozenset({CATEGORY_KEYS[category], PLATFORMS_KEY, DRIVERS_KEY})
         if category != "files":
             return frozenset({CATEGORY_KEYS[category], PLATFORMS_KEY})
         if not isinstance(item.get(REWRITTEN_KEY, False), bool):
@@ -316,6 +324,8 @@ class Declaration:
         """Check the attributes that an expectation sets or requires to change."""
         attributes = ATTRIBUTES[category]
         allowed = attributes | {CATEGORY_KEYS[category], PLATFORMS_KEY, CHANGES_KEY}
+        if category in KERNEL_CATEGORIES:
+            allowed |= {DRIVERS_KEY}
         self.keys(item, frozenset(allowed), what)
         changes: list[str] = []
         if CHANGES_KEY in item:
@@ -595,6 +605,17 @@ class Declaration:
                 self.pre_state_unchanged(item["unchanged"], what)
             if "applied" in item and self._expectations(item["applied"], f"{what}.applied") == 0:
                 self.error(f"{what}.applied declares no expectation; leave it out instead")
+
+
+def _kernel_drivers(declaration: Declaration, item: dict[str, object], what: str) -> None:
+    """Check the drivers of an item that only a real kernel can show, such as a loaded rule.
+
+    The containers cannot read the kernel's audit rules, so such an item must name the
+    drivers that record it, and Docker is not one of them.
+    """
+    drivers = declaration.driver_list(item.get(DRIVERS_KEY), f"{what}.{DRIVERS_KEY}")
+    if drivers is not None and drivers & UNRESTRICTED_DRIVERS:
+        declaration.error(f"{what} cannot be recorded with docker, whose containers cannot read it")
 
 
 def check_profiles(declaration: Declaration, value: object) -> None:

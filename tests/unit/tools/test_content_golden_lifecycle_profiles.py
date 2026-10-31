@@ -10,6 +10,16 @@ from tests.unit.tools.test_content_golden_kernel_modules import PROFILE, TOPICS,
 from tests.unit.tools.test_content_golden_native import REPOSITORY_ROOT, pinned_benchmarks
 from tools.roles import check_lifecycle_topics, generate_toggles
 
+RULE = "xccdf_org.ssgproject.content_rule_"
+OUTSIDE_THE_CYCLES = {
+    "auditd_conf": {
+        RULE + "auditd_data_retention_flush": "the profiles regression applies it with ospp",
+        RULE + "auditd_data_retention_space_left": (
+            "only pci-dss selects it, a profile identifier with a hyphen that the roles refuse"
+            " (FREES-196); the auditd golden test pins its line"
+        ),
+    },
+}
 PLATFORM_OF_BENCHMARK = {
     "xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04": "ubuntu",
     "xccdf_org.ssgproject.content_benchmark_RHEL-9": "rhel_compatible",
@@ -75,7 +85,13 @@ def check_platform(
 
 def test_a_declared_profile_never_narrows_and_together_covers_every_rule_of_its_topic() -> None:
     families = set(declared_profiles())
-    assert families == {"filesystem_modules", "protocol_modules", "wireless_modules"}
+    assert families == {
+        "auditd_rules_time",
+        "auditd_conf",
+        "filesystem_modules",
+        "protocol_modules",
+        "wireless_modules",
+    }
     cycles: dict[str, set[str]] = {family: set() for family in families}
     selectable: dict[str, set[str]] = {family: set() for family in families}
     for path, sha256, benchmark in pinned_benchmarks():
@@ -83,4 +99,9 @@ def test_a_declared_profile_never_narrows_and_together_covers_every_rule_of_its_
             read(path, sha256).profiles, PLATFORM_OF_BENCHMARK[benchmark], cycles, selectable
         )
     for family, covered in cycles.items():
-        assert covered == selectable[family], (family, sorted(selectable[family] - covered))
+        outside = set(OUTSIDE_THE_CYCLES.get(family, {}))
+        assert not covered & outside, (family, sorted(covered & outside))
+        assert covered | outside == selectable[family], (
+            family,
+            sorted(selectable[family] - covered - outside),
+        )

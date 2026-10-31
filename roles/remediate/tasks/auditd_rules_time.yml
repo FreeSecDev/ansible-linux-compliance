@@ -1,0 +1,31 @@
+---
+- name: Audit rules for the system time | Refuse to run outside the dispatcher or without the opt-in
+  ansible.builtin.assert:
+    that:
+      - linux_compliance_remediate_enabled is boolean
+      - linux_compliance_remediate_enabled
+      - __linux_compliance_remediate_plan is defined
+      - __linux_compliance_remediate_plan is mapping
+      - __linux_compliance_remediate_plan.enabled is true
+      - __linux_compliance_remediate_family is defined
+      - __linux_compliance_remediate_family is mapping
+      - __linux_compliance_remediate_family.name == 'auditd_rules_time'
+      - >-
+        __linux_compliance_remediate_family ==
+        (__linux_compliance_remediate_plan.families
+         | selectattr('name', 'equalto', 'auditd_rules_time') | list | first | default({}))
+    fail_msg: >-
+      The auditd_rules_time family file runs only from the remediate dispatcher with
+      linux_compliance_remediate_enabled true. No change was made to the host.
+    quiet: true
+  tags:
+    - always
+
+- name: Audit rules for the system time | Write, check and load the audit rule drop-ins of the topic
+  ansible.builtin.include_tasks:
+    file: "{{ role_path }}/tasks/auditd_rules_dropins.yml"
+    apply:
+      tags:
+        - always
+  tags:
+    - always

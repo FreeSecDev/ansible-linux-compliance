@@ -165,7 +165,8 @@ def test_auditd_ssh_sudo_and_pam_stay_topics() -> None:
     for name in KEPT:
         assert name in catalogue().families
         assert name not in catalogue().umbrellas
-    assert {name for name in KEPT if governed(name) == [name]} == {"auditd", "ssh", "sudo"}
+    assert {name for name in KEPT if governed(name) == [name]} == {"ssh", "sudo"}
+    assert governed("auditd") == ["auditd_rules_time", "auditd_conf", "auditd"]
 
 
 def test_every_family_has_rules_and_every_rule_exactly_one_family() -> None:

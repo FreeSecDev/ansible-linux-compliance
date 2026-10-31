@@ -21,7 +21,11 @@ if TYPE_CHECKING:
 PROCESS_HELPER: Final[Path] = Path("plugins/module_utils/compliance/process.py")
 FILE_IO_HELPER: Final[Path] = Path("plugins/module_utils/compliance/fileio.py")
 FILE_IO_IMPORTERS: Final[frozenset[Path]] = frozenset(
-    {Path("plugins/module_utils/compliance/ledger.py"), FILE_IO_HELPER}
+    {
+        Path("plugins/module_utils/compliance/ledger.py"),
+        Path("plugins/module_utils/compliance/auditrules.py"),
+        FILE_IO_HELPER,
+    }
 )
 FILE_IO_MODULE: Final[str] = "fileio"
 LEDGER_MODULE: Final[Path] = Path("plugins/module_utils/compliance/ledger.py")
@@ -49,6 +53,7 @@ FILE_IO_ATTRIBUTES: Final[Mapping[str, frozenset[str]]] = MappingProxyType(
                 "read",
                 "rename",
                 "stat",
+                "statvfs",
                 "supports_dir_fd",
                 "unlink",
                 "urandom",

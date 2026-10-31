@@ -457,6 +457,8 @@ def test_the_repository_declarations_pass_against_the_repository_catalogue(tmp_p
     assert native == [
         "file_permissions",
         "banners",
+        "auditd_rules_time",
+        "auditd_conf",
         "filesystem_modules",
         "protocol_modules",
         "wireless_modules",
@@ -977,7 +979,9 @@ def test_the_repository_declares_regression_groups_for_pwquality_ssh_and_sudo() 
     assert found["protocol_modules"] == {}
     assert found["wireless_modules"] == {}
     assert found["file_permissions"] == {}
-    assert len(lifecycle.dispatched_regressions(REPOSITORY_ROOT)) == 14
+    assert found["auditd_conf"] == {"changes": frozenset({"ubuntu", "rhel_compatible"})}
+    assert found["auditd_rules_time"] == {"changes": frozenset({"ubuntu", "rhel_compatible"})}
+    assert len(lifecycle.dispatched_regressions(REPOSITORY_ROOT)) == 16
 
 
 @pytest.mark.parametrize(
@@ -1184,6 +1188,58 @@ def test_without_known_profiles_any_well_formed_profile_is_accepted(tmp_path: Pa
     )
     lifecycle.check_profiles(declaration, [{**PROFILE, "profile": "x"}])
     assert declaration.errors == []
+
+
+AUDIT_LINE = "-a always,exit -F arch=b64 -S adjtimex -k time-change"
+
+
+def test_loaded_audit_rules_may_be_declared_for_the_libvirt_driver(tmp_path: Path) -> None:
+    state = cast("dict[str, object]", VALID["state"])
+    applied = cast("dict[str, object]", VALID["applied"])
+    declaration = changed(
+        state={**state, "audit_rules": [{"line": AUDIT_LINE, "drivers": ["libvirt"]}]},
+        applied={
+            **applied,
+            "audit_rules": [{"line": AUDIT_LINE, "loaded": True, "drivers": ["libvirt"]}],
+        },
+    )
+    assert errors_for(tmp_path, declaration) == []
+
+
+@pytest.mark.parametrize(
+    ("item", "message"),
+    [
+        ({"line": AUDIT_LINE}, "state.audit_rules[0].drivers needs a non-empty list of drivers"),
+        (
+            {"line": AUDIT_LINE, "drivers": ["docker"]},
+            "state.audit_rules[0] cannot be recorded with docker",
+        ),
+        (
+            {"line": AUDIT_LINE, "drivers": ["libvirt", "docker"]},
+            "state.audit_rules[0] cannot be recorded with docker",
+        ),
+        ({"line": "w /x", "drivers": ["libvirt"]}, "state.audit_rules[0] needs a valid line"),
+        (
+            {"line": AUDIT_LINE, "drivers": ["libvirt"], "rewritten": True},
+            "state.audit_rules[0] has the unknown key 'rewritten'",
+        ),
+    ],
+)
+def test_an_invalid_audit_rule_item_is_reported(
+    tmp_path: Path, item: dict[str, object], message: str
+) -> None:
+    state = cast("dict[str, object]", VALID["state"])
+    found = errors_for(tmp_path, changed(state={**state, "audit_rules": [item]}))
+    assert any(message in error for error in found), found
+
+
+def test_drivers_are_only_for_items_that_need_a_kernel(tmp_path: Path) -> None:
+    state = cast("dict[str, object]", VALID["state"])
+    found = errors_for(
+        tmp_path,
+        changed(state={**state, "files": [{"path": "/etc/crontab", "drivers": ["libvirt"]}]}),
+    )
+    assert any("state.files[0] has the unknown key 'drivers'" in error for error in found), found
 
 
 REWRITTEN_STATE = {

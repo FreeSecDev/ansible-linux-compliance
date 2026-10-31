@@ -213,10 +213,17 @@ class TestCommandSpec:
 class TestPolicy:
     """Executable and option allow-list policy."""
 
-    def test_default_allow_list_is_only_oscap_the_scc_command_line_and_sshd_test_mode(
+    def test_default_allow_list_is_only_oscap_the_scc_command_line_sshd_and_the_audit_tools(
         self,
     ) -> None:
-        assert set(process.ALLOWED_EXECUTABLES) == {"oscap", "cscc", "sshd", "modprobe"}
+        assert set(process.ALLOWED_EXECUTABLES) == {
+            "oscap",
+            "cscc",
+            "sshd",
+            "auditctl",
+            "augenrules",
+            "modprobe",
+        }
         assert process.ALLOWED_EXECUTABLES["oscap"].fixed_path is None
         options = process.ALLOWED_EXECUTABLES["oscap"].allowed_options
         assert {
@@ -285,6 +292,59 @@ class TestPolicy:
     )
     def test_sshd_refuses_every_other_command_line(self, arguments: tuple[str, ...]) -> None:
         spec = process.CommandSpec("sshd", arguments, 1)
+        with pytest.raises(process.ProcessPolicyError):
+            process.check_policy(spec)
+
+    def test_audit_tools_run_only_in_their_exact_forms(self) -> None:
+        auditctl = process.ALLOWED_EXECUTABLES["auditctl"]
+        augenrules = process.ALLOWED_EXECUTABLES["augenrules"]
+        assert auditctl.fixed_path is None
+        assert augenrules.fixed_path is None
+        assert auditctl.argument_forms == (("-s",), ("-l",), ("--signal", "reload"))
+        assert augenrules.argument_forms == (("--load",), ("--check",))
+        for executable, arguments in (
+            ("auditctl", ("-s",)),
+            ("auditctl", ("-l",)),
+            ("auditctl", ("--signal", "reload")),
+            ("augenrules", ("--load",)),
+            ("augenrules", ("--check",)),
+        ):
+            spec = process.CommandSpec(executable, arguments, 1)
+            assert process.check_policy(spec).name == executable
+
+    @pytest.mark.parametrize(
+        ("executable", "arguments"),
+        [
+            ("auditctl", ()),
+            ("auditctl", ("-D",)),
+            ("auditctl", ("-e", "0")),
+            ("auditctl", ("-e", "2")),
+            ("auditctl", ("-f", "0")),
+            ("auditctl", ("-R", "/etc/audit/audit.rules")),
+            ("auditctl", ("-R", "/srv/rules")),
+            ("auditctl", ("-w", "/etc/passwd", "-p", "wa")),
+            ("auditctl", ("-W", "/etc/passwd")),
+            ("auditctl", ("-a", "always,exit", "-S", "all")),
+            ("auditctl", ("-d", "always,exit", "-S", "all")),
+            ("auditctl", ("-b", "0")),
+            ("auditctl", ("-s", "-l")),
+            ("auditctl", ("-l", "-k", "x")),
+            ("auditctl", ("--signal", "stop")),
+            ("auditctl", ("--signal", "TERM")),
+            ("auditctl", ("--signal",)),
+            ("auditctl", ("--signal=reload",)),
+            ("auditctl", ("--loginuid-immutable",)),
+            ("augenrules", ()),
+            ("augenrules", ("--load", "--check")),
+            ("augenrules", ("--check", "--load")),
+            ("augenrules", ("--load", "/srv/rules")),
+            ("augenrules", ("/etc/audit/rules.d",)),
+        ],
+    )
+    def test_audit_tools_refuse_every_other_command_line(
+        self, executable: str, arguments: tuple[str, ...]
+    ) -> None:
+        spec = process.CommandSpec(executable, arguments, 1)
         with pytest.raises(process.ProcessPolicyError):
             process.check_policy(spec)
 
