@@ -201,6 +201,11 @@ def role_task_files() -> list[str]:
 
 
 def test_every_role_task_file_belongs_to_the_native_topic_of_its_name(trees: Trees) -> None:
+    """A task file belongs to the topic of its name and to those of the family files including it.
+
+    ``sysctl_parameters.yml`` is the engine of ``sysctl``, ``ipv4_parameters`` and
+    ``ipv6_parameters`` (FREES-107), whose family files include it.
+    """
     files = role_task_files()
     assert files
     families = native()
@@ -210,7 +215,20 @@ def test_every_role_task_file_belongs_to_the_native_topic_of_its_name(trees: Tre
             family for family in families if stem == family or stem.startswith(family + "_")
         }
         assert len(expected) == 1, relative
+        expected |= {
+            Path(other).stem
+            for other in files
+            if Path(other).stem in families
+            and f"/tasks/{stem}.yml" in (REPOSITORY_ROOT / other).read_text(encoding="utf-8")
+        }
         assert set(trees.context.classify(relative)[0]) == expected, relative
+
+
+def test_the_kernel_parameter_engine_belongs_to_the_three_kernel_parameter_topics(
+    trees: Trees,
+) -> None:
+    topics = trees.context.classify(f"{affected.ROLE_TASKS}/sysctl_parameters.yml")[0]
+    assert set(topics) == {"sysctl", "ipv4_parameters", "ipv6_parameters"}
 
 
 def test_every_regression_file_belongs_to_the_topics_whose_groups_name_it(trees: Trees) -> None:
