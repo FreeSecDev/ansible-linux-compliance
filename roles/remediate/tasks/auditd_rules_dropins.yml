@@ -113,6 +113,9 @@
 - name: Audit rules | Read the audit status, the loaded rules and the rule lines of every file that augenrules reads
   freesecdev.linux_compliance.audit_control:
     action: status
+    expect: >-
+      {{ __linux_compliance_remediate_ar_lines.values() | select('sequence') | reject('string') | flatten | unique
+         | list }}
   register: __linux_compliance_remediate_ar_status
   tags:
     - always
@@ -272,6 +275,10 @@
     __linux_compliance_remediate_ar_plan: >-
       {%- set plan = {} -%}
       {%- set directory = __linux_compliance_remediate_ar_directory.stat -%}
+      {%- set live = __linux_compliance_remediate_ar_status.kernel | default(false)
+            and __linux_compliance_remediate_ar_status.enabled | default(none) == 1
+            and (__linux_compliance_remediate_ar_status.pid | default(0, true) | int) > 0 -%}
+      {%- set current = __linux_compliance_remediate_ar_status.current | default(none) is sameas true -%}
       {%- for rule in __linux_compliance_remediate_family.apply -%}
       {%- set prior = __linux_compliance_remediate_ar_records[rule.rule_id] -%}
       {%- set entry = __linux_compliance_remediate_ar_entries[rule.parameters.path] | default(none) -%}
@@ -283,6 +290,26 @@
       {%- set others = __linux_compliance_remediate_ar_status.files | default([])
             | rejectattr('path', 'equalto', rule.parameters.path) | list -%}
       {%- set elsewhere = wanted | select('in', others | map(attribute='lines') | flatten | list) | list -%}
+      {%- set unloaded = wanted | select('in', __linux_compliance_remediate_ar_status.missing | default(wanted))
+            | list -%}
+      {%- set confirmed = live and current and unloaded | length == 0 -%}
+      {%- set gone = namespace(lines=[]) -%}
+      {%- for item in others -%}
+      {%- for line in item.deletes | default([]) -%}
+      {%- set key = (line | regex_search('-k (\\S+)$', '\\1') or [none]) | first -%}
+      {%- set target = line.split(' ')[1] | default('') -%}
+      {%- if (line is match('^-W ') and wanted | select('search', '^-w ' ~ (target | regex_escape) ~ ' | -F path='
+                                                         ~ (target | regex_escape) ~ ' ') | list | length > 0)
+             or (line is match('^-d ') and ('-a ' ~ line[3:]) in wanted)
+             or (line is match('^-D ') and (key is none
+                 or wanted | select('search', ' -k ' ~ (key | regex_escape) ~ '$') | list | length > 0)) -%}
+      {%- set gone.lines = gone.lines + [item.path ~ ': ' ~ line] -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {%- endfor -%}
+      {%- set unconfirmed = 'no running auditd whose rules can be read here' if not live
+            else 'augenrules --check finds the rule files changed since the last load' if not current
+            else 'the running auditd has not loaded ' ~ unloaded | join('; ') -%}
       {%- set ns = namespace(holders=[]) -%}
       {%- for item in others if item.lines | intersect(wanted) | length > 0 -%}
       {%- set ns.holders = ns.holders + [item.path] -%}
@@ -298,7 +325,8 @@
             else 'not_regular_file' if entry is not none and not entry.isreg
             else 'not_owned' if entry is not none and entry.checksum | default('') != sha
                  and not (text | default('', true)).startswith(header)
-            else 'compliant' if entry is none and elsewhere | length == wanted | length
+            else 'compliant' if entry is none and elsewhere | length == wanted | length and confirmed
+            else 'conflicting_rule' if gone.lines | length > 0
             else 'duplicate_rule' if elsewhere | length > 0
             else 'watch_target_missing' if absent | length > 0
             else 'compliant' if entry is not none and entry.checksum | default('') == sha
@@ -316,8 +344,16 @@
                              ~ ' is a symbolic link or not a directory',
             'not_regular_file': rule.parameters.path ~ ' is a symbolic link or another non-regular file',
             'not_owned': rule.parameters.path ~ ' exists without the header of the collection',
-            'duplicate_rule': ns.holders | join(', ') ~ ' already holds ' ~ elsewhere | join('; ')
-                              ~ ', and auditctl stops at a rule that is loaded twice',
+            'conflicting_rule': gone.lines | join('; ') ~ ' deletes rules that match this rule, and augenrules'
+                                ~ ' keeps such a line in place, so whether the rule stays loaded depends on the'
+                                ~ ' order of the files; the running auditd does not confirm it',
+            'duplicate_rule': (ns.holders | join(', ') ~ ' already holds ' ~ elsewhere | join('; ')
+                               ~ ', and auditctl stops at a rule that is loaded twice')
+                              if entry is not none or elsewhere | length < wanted | length
+                              else (ns.holders | join(', ') ~ ' already holds every line, but the collection'
+                                    ~ ' reports such a rule compliant only when the running auditd has it loaded'
+                                    ~ ' and augenrules --check finds the rule files unchanged since that load ('
+                                    ~ unconfirmed ~ '); a drop-in of its own would repeat the rule'),
             'watch_target_missing': 'the directories ' ~ absent | join(', ')
                                     ~ ' do not exist, and the kernel refuses a watch below a missing directory'}
             [status] | default(none) -%}
@@ -392,8 +428,21 @@
 - name: Audit rules | Name whether this run changed the rule files and the rules that must then be loaded
   ansible.builtin.set_fact:
     __linux_compliance_remediate_ar_changed: >-
-      {{ not __linux_compliance_remediate_ar_status.check_mode
-         and (__linux_compliance_remediate_ar_write is changed or __linux_compliance_remediate_ar_removal is changed) }}
+      {%- set status = __linux_compliance_remediate_ar_status -%}
+      {%- set live = status.kernel | default(false) and status.enabled | default(none) == 1
+            and (status.pid | default(0, true) | int) > 0 -%}
+      {%- set ns = namespace(stale=false) -%}
+      {%- for rule in __linux_compliance_remediate_family.apply -%}
+      {%- set planned = __linux_compliance_remediate_ar_plan[rule.rule_id] -%}
+      {%- if planned.status == 'compliant' and planned.present
+            and __linux_compliance_remediate_ar_lines[rule.rule_id] | select('in', status.missing | default([]))
+                | list | length > 0 -%}
+      {%- set ns.stale = true -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {{ not status.check_mode
+         and (__linux_compliance_remediate_ar_write is changed or __linux_compliance_remediate_ar_removal is changed
+              or (live and ns.stale)) }}
     __linux_compliance_remediate_ar_expect: >-
       {%- set expect = [] -%}
       {%- for rule in __linux_compliance_remediate_family.apply -%}
@@ -586,47 +635,15 @@
             | map(attribute='__linux_compliance_remediate_ar_rule.rule_id') | list)
          + (__linux_compliance_remediate_ar_record.results | default([]) | selectattr('changed')
             | map(attribute='__linux_compliance_remediate_ar_rule.rule_id') | list) }}
-    __linux_compliance_remediate_ar_loading: >-
-      {{ '' if not __linux_compliance_remediate_ar_changed
-         else '; the rule set was checked and loaded' if __linux_compliance_remediate_ar_load.loaded | default(false)
-         else '; the loaded rules are locked (-e 2), so the rule files take effect at the next boot'
-         if __linux_compliance_remediate_ar_locked
-         else '; auditd does not run here, so the rules are loaded when it starts' }}
   ansible.builtin.set_fact:
     __linux_compliance_remediate_results: >-
-      {%- set results = [] -%}
-      {%- for rule in __linux_compliance_remediate_family.cleanup -%}
-      {%- set planned = __linux_compliance_remediate_ar_cleanup_plan[rule.rule_id] -%}
-      {%- set _ = results.append({
-            'rule_id': rule.rule_id,
-            'family': rule.family,
-            'action': 'cleanup',
-            'status': 'restored' if planned.reason is none else 'cleanup_incomplete',
-            'reason': planned.reason,
-            'changed': rule.rule_id in __linux_compliance_remediate_ar_changed_ids,
-            'message': rule.parameters.path ~ ': '
-                       ~ (('restored (the drop-in was removed' if planned.present
-                           else 'restored (the drop-in no longer existed, which is the recorded prior state, so'
-                                ~ ' only the ledger entry was removed')
-                          ~ __linux_compliance_remediate_ar_loading ~ ')' if planned.reason is none
-                          else 'cleanup_incomplete (' ~ planned.reason
-                               ~ '; nothing was changed, the ledger entry is kept and the cleanup is retried on the'
-                               ~ ' next run)')}) -%}
-      {%- endfor -%}
-      {%- for rule in __linux_compliance_remediate_family.apply -%}
-      {%- set planned = __linux_compliance_remediate_ar_plan[rule.rule_id] -%}
-      {%- set _ = results.append({
-            'rule_id': rule.rule_id,
-            'family': rule.family,
-            'action': 'apply',
-            'status': planned.status,
-            'reason': planned.reason,
-            'changed': rule.rule_id in __linux_compliance_remediate_ar_changed_ids,
-            'message': rule.parameters.path ~ ': ' ~ planned.status
-                       ~ ((' (' ~ planned.reason ~ '; nothing was changed)') if planned.reason
-                          else (' (' ~ __linux_compliance_remediate_ar_loading[2:] ~ ')')
-                          if planned.status == 'applied' and __linux_compliance_remediate_ar_loading else '')}) -%}
-      {%- endfor -%}
-      {{ __linux_compliance_remediate_results + results }}
+      {{ __linux_compliance_remediate_results
+         + (__linux_compliance_remediate_family
+            | freesecdev.linux_compliance.audit_rule_results(
+                __linux_compliance_remediate_ar_plan, __linux_compliance_remediate_ar_cleanup_plan,
+                __linux_compliance_remediate_ar_changed_ids,
+                {'changed': __linux_compliance_remediate_ar_changed,
+                 'loaded': __linux_compliance_remediate_ar_load.loaded | default(false),
+                 'locked': __linux_compliance_remediate_ar_locked})) }}
   tags:
     - always

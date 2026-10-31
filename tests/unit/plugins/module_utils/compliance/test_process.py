@@ -300,12 +300,13 @@ class TestPolicy:
         assert auditctl.fixed_path is None
         assert augenrules.fixed_path is None
         assert auditctl.argument_forms == (("-s",), ("-l",), ("--signal", "reload"))
-        assert augenrules.argument_forms == (("--load",),)
+        assert augenrules.argument_forms == (("--load",), ("--check",))
         for executable, arguments in (
             ("auditctl", ("-s",)),
             ("auditctl", ("-l",)),
             ("auditctl", ("--signal", "reload")),
             ("augenrules", ("--load",)),
+            ("augenrules", ("--check",)),
         ):
             spec = process.CommandSpec(executable, arguments, 1)
             assert process.check_policy(spec).name == executable
@@ -333,8 +334,8 @@ class TestPolicy:
             ("auditctl", ("--signal=reload",)),
             ("auditctl", ("--loginuid-immutable",)),
             ("augenrules", ()),
-            ("augenrules", ("--check",)),
             ("augenrules", ("--load", "--check")),
+            ("augenrules", ("--check", "--load")),
             ("augenrules", ("--load", "/srv/rules")),
             ("augenrules", ("/etc/audit/rules.d",)),
         ],

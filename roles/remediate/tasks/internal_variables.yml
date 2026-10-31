@@ -3,23 +3,32 @@
   ansible.builtin.assert:
     that:
       - >-
-        query('ansible.builtin.varnames', '^__linux_compliance_remediate_ac_applied$') == [] or
-        '__linux_compliance_remediate_ac_applied' in (hostvars[inventory_hostname] | list)
-      - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_ac_audit$') == [] or
         '__linux_compliance_remediate_ac_audit' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_ac_carriage$') == [] or
+        '__linux_compliance_remediate_ac_carriage' in (hostvars[inventory_hostname] | list)
       - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_ac_changed_ids$') == [] or
         '__linux_compliance_remediate_ac_changed_ids' in (hostvars[inventory_hostname] | list)
       - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_ac_changing$') == [] or
+        '__linux_compliance_remediate_ac_changing' in (hostvars[inventory_hostname] | list)
+      - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_ac_cleanup_plan$') == [] or
         '__linux_compliance_remediate_ac_cleanup_plan' in (hostvars[inventory_hostname] | list)
       - >-
-        query('ansible.builtin.varnames', '^__linux_compliance_remediate_ac_conflict$') == [] or
-        '__linux_compliance_remediate_ac_conflict' in (hostvars[inventory_hostname] | list)
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_ac_effect$') == [] or
+        '__linux_compliance_remediate_ac_effect' in (hostvars[inventory_hostname] | list)
       - >-
-        query('ansible.builtin.varnames', '^__linux_compliance_remediate_ac_effective$') == [] or
-        '__linux_compliance_remediate_ac_effective' in (hostvars[inventory_hostname] | list)
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_ac_final_lines$') == [] or
+        '__linux_compliance_remediate_ac_final_lines' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_ac_final_reading$') == [] or
+        '__linux_compliance_remediate_ac_final_reading' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_ac_first_reading$') == [] or
+        '__linux_compliance_remediate_ac_first_reading' in (hostvars[inventory_hostname] | list)
       - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_ac_forget$') == [] or
         '__linux_compliance_remediate_ac_forget' in (hostvars[inventory_hostname] | list)
@@ -27,17 +36,14 @@
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_ac_lines$') == [] or
         '__linux_compliance_remediate_ac_lines' in (hostvars[inventory_hostname] | list)
       - >-
-        query('ansible.builtin.varnames', '^__linux_compliance_remediate_ac_loading$') == [] or
-        '__linux_compliance_remediate_ac_loading' in (hostvars[inventory_hostname] | list)
-      - >-
-        query('ansible.builtin.varnames', '^__linux_compliance_remediate_ac_log_lines$') == [] or
-        '__linux_compliance_remediate_ac_log_lines' in (hostvars[inventory_hostname] | list)
-      - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_ac_plan$') == [] or
         '__linux_compliance_remediate_ac_plan' in (hostvars[inventory_hostname] | list)
       - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_ac_read$') == [] or
         '__linux_compliance_remediate_ac_read' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_ac_reading$') == [] or
+        '__linux_compliance_remediate_ac_reading' in (hostvars[inventory_hostname] | list)
       - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_ac_record$') == [] or
         '__linux_compliance_remediate_ac_record' in (hostvars[inventory_hostname] | list)
@@ -66,8 +72,8 @@
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_ac_services$') == [] or
         '__linux_compliance_remediate_ac_services' in (hostvars[inventory_hostname] | list)
       - >-
-        query('ansible.builtin.varnames', '^__linux_compliance_remediate_ac_size_mb$') == [] or
-        '__linux_compliance_remediate_ac_size_mb' in (hostvars[inventory_hostname] | list)
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_ac_signalled$') == [] or
+        '__linux_compliance_remediate_ac_signalled' in (hostvars[inventory_hostname] | list)
       - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_ac_space$') == [] or
         '__linux_compliance_remediate_ac_space' in (hostvars[inventory_hostname] | list)
@@ -77,6 +83,9 @@
       - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_ac_text$') == [] or
         '__linux_compliance_remediate_ac_text' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_ac_unterminated$') == [] or
+        '__linux_compliance_remediate_ac_unterminated' in (hostvars[inventory_hostname] | list)
       - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_ac_values$') == [] or
         '__linux_compliance_remediate_ac_values' in (hostvars[inventory_hostname] | list)
@@ -122,9 +131,6 @@
       - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_ar_load$') == [] or
         '__linux_compliance_remediate_ar_load' in (hostvars[inventory_hostname] | list)
-      - >-
-        query('ansible.builtin.varnames', '^__linux_compliance_remediate_ar_loading$') == [] or
-        '__linux_compliance_remediate_ar_loading' in (hostvars[inventory_hostname] | list)
       - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_ar_locked$') == [] or
         '__linux_compliance_remediate_ar_locked' in (hostvars[inventory_hostname] | list)
@@ -1045,11 +1051,13 @@
   ansible.builtin.set_fact:
     __linux_compliance_remediate_ac_audit: __linux_compliance_unset__
     __linux_compliance_remediate_ac_cleanup_plan: __linux_compliance_unset__
-    __linux_compliance_remediate_ac_conflict: __linux_compliance_unset__
+    __linux_compliance_remediate_ac_final_reading: __linux_compliance_unset__
+    __linux_compliance_remediate_ac_first_reading: __linux_compliance_unset__
     __linux_compliance_remediate_ac_forget: __linux_compliance_unset__
     __linux_compliance_remediate_ac_lines: __linux_compliance_unset__
     __linux_compliance_remediate_ac_plan: __linux_compliance_unset__
     __linux_compliance_remediate_ac_read: __linux_compliance_unset__
+    __linux_compliance_remediate_ac_reading: __linux_compliance_unset__
     __linux_compliance_remediate_ac_record: __linux_compliance_unset__
     __linux_compliance_remediate_ac_record_values: __linux_compliance_unset__
     __linux_compliance_remediate_ac_records: __linux_compliance_unset__
@@ -1304,11 +1312,13 @@
     that:
       - __linux_compliance_remediate_ac_audit == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ac_cleanup_plan == '__linux_compliance_unset__'
-      - __linux_compliance_remediate_ac_conflict == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_ac_final_reading == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_ac_first_reading == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ac_forget == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ac_lines == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ac_plan == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ac_read == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_ac_reading == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ac_record == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ac_record_values == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ac_records == '__linux_compliance_unset__'
@@ -1555,17 +1565,17 @@
       - __linux_compliance_remediate_ssh_write == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ssh_written == '__linux_compliance_unset__'
       - __linux_compliance_remediate_toggle_names == '__linux_compliance_unset__'
-      - __linux_compliance_remediate_ac_applied == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_ac_carriage == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ac_changed_ids == '__linux_compliance_unset__'
-      - __linux_compliance_remediate_ac_effective == '__linux_compliance_unset__'
-      - __linux_compliance_remediate_ac_loading == '__linux_compliance_unset__'
-      - __linux_compliance_remediate_ac_log_lines == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_ac_changing == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_ac_effect == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_ac_final_lines == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ac_rule == '__linux_compliance_unset__'
-      - __linux_compliance_remediate_ac_size_mb == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_ac_signalled == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ac_text == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_ac_unterminated == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ar_changed_ids == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ar_known_services == '__linux_compliance_unset__'
-      - __linux_compliance_remediate_ar_loading == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ar_missing_parents == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ar_parent == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ar_rule == '__linux_compliance_unset__'
@@ -1669,9 +1679,13 @@
         (lookup('ansible.builtin.file', role_path ~ '/vars/main.yml') |
         ansible.builtin.from_yaml)['__linux_compliance_remediate_auditd_conf']
       - >-
-        __linux_compliance_remediate_auditd_defaults is not defined or __linux_compliance_remediate_auditd_defaults ==
+        __linux_compliance_remediate_auditd_log_file is not defined or __linux_compliance_remediate_auditd_log_file ==
         (lookup('ansible.builtin.file', role_path ~ '/vars/main.yml') |
-        ansible.builtin.from_yaml)['__linux_compliance_remediate_auditd_defaults']
+        ansible.builtin.from_yaml)['__linux_compliance_remediate_auditd_log_file']
+      - >-
+        __linux_compliance_remediate_auditd_startup_settings is not defined or
+        __linux_compliance_remediate_auditd_startup_settings == (lookup('ansible.builtin.file', role_path ~
+        '/vars/main.yml') | ansible.builtin.from_yaml)['__linux_compliance_remediate_auditd_startup_settings']
       - >-
         __linux_compliance_remediate_backslash is not defined or __linux_compliance_remediate_backslash ==
         (lookup('ansible.builtin.file', role_path ~ '/vars/main.yml') |
@@ -1684,6 +1698,10 @@
         __linux_compliance_remediate_banner_max_length is not defined or __linux_compliance_remediate_banner_max_length
         == (lookup('ansible.builtin.file', role_path ~ '/vars/main.yml') |
         ansible.builtin.from_yaml)['__linux_compliance_remediate_banner_max_length']
+      - >-
+        __linux_compliance_remediate_carriage_return is not defined or __linux_compliance_remediate_carriage_return ==
+        (lookup('ansible.builtin.file', role_path ~ '/vars/main.yml') |
+        ansible.builtin.from_yaml)['__linux_compliance_remediate_carriage_return']
       - >-
         __linux_compliance_remediate_collection_version is not defined or
         __linux_compliance_remediate_collection_version == (lookup('ansible.builtin.file', role_path ~ '/vars/main.yml')
@@ -1823,17 +1841,17 @@
       linux_compliance_* variables. Nothing was scanned, changed or compared.
     quiet: true
   vars:
-    __linux_compliance_remediate_ac_applied: __linux_compliance_unset__
+    __linux_compliance_remediate_ac_carriage: __linux_compliance_unset__
     __linux_compliance_remediate_ac_changed_ids: __linux_compliance_unset__
-    __linux_compliance_remediate_ac_effective: __linux_compliance_unset__
-    __linux_compliance_remediate_ac_loading: __linux_compliance_unset__
-    __linux_compliance_remediate_ac_log_lines: __linux_compliance_unset__
+    __linux_compliance_remediate_ac_changing: __linux_compliance_unset__
+    __linux_compliance_remediate_ac_effect: __linux_compliance_unset__
+    __linux_compliance_remediate_ac_final_lines: __linux_compliance_unset__
     __linux_compliance_remediate_ac_rule: __linux_compliance_unset__
-    __linux_compliance_remediate_ac_size_mb: __linux_compliance_unset__
+    __linux_compliance_remediate_ac_signalled: __linux_compliance_unset__
     __linux_compliance_remediate_ac_text: __linux_compliance_unset__
+    __linux_compliance_remediate_ac_unterminated: __linux_compliance_unset__
     __linux_compliance_remediate_ar_changed_ids: __linux_compliance_unset__
     __linux_compliance_remediate_ar_known_services: __linux_compliance_unset__
-    __linux_compliance_remediate_ar_loading: __linux_compliance_unset__
     __linux_compliance_remediate_ar_missing_parents: __linux_compliance_unset__
     __linux_compliance_remediate_ar_parent: __linux_compliance_unset__
     __linux_compliance_remediate_ar_rule: __linux_compliance_unset__
@@ -1907,11 +1925,13 @@
   ansible.builtin.set_fact:
     __linux_compliance_remediate_ac_audit: __linux_compliance_unset_again__
     __linux_compliance_remediate_ac_cleanup_plan: __linux_compliance_unset_again__
-    __linux_compliance_remediate_ac_conflict: __linux_compliance_unset_again__
+    __linux_compliance_remediate_ac_final_reading: __linux_compliance_unset_again__
+    __linux_compliance_remediate_ac_first_reading: __linux_compliance_unset_again__
     __linux_compliance_remediate_ac_forget: __linux_compliance_unset_again__
     __linux_compliance_remediate_ac_lines: __linux_compliance_unset_again__
     __linux_compliance_remediate_ac_plan: __linux_compliance_unset_again__
     __linux_compliance_remediate_ac_read: __linux_compliance_unset_again__
+    __linux_compliance_remediate_ac_reading: __linux_compliance_unset_again__
     __linux_compliance_remediate_ac_record: __linux_compliance_unset_again__
     __linux_compliance_remediate_ac_record_values: __linux_compliance_unset_again__
     __linux_compliance_remediate_ac_records: __linux_compliance_unset_again__
@@ -2166,11 +2186,13 @@
     that:
       - __linux_compliance_remediate_ac_audit == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ac_cleanup_plan == '__linux_compliance_unset_again__'
-      - __linux_compliance_remediate_ac_conflict == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_ac_final_reading == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_ac_first_reading == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ac_forget == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ac_lines == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ac_plan == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ac_read == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_ac_reading == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ac_record == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ac_record_values == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ac_records == '__linux_compliance_unset_again__'
@@ -2417,17 +2439,17 @@
       - __linux_compliance_remediate_ssh_write == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ssh_written == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_toggle_names == '__linux_compliance_unset_again__'
-      - __linux_compliance_remediate_ac_applied == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_ac_carriage == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ac_changed_ids == '__linux_compliance_unset_again__'
-      - __linux_compliance_remediate_ac_effective == '__linux_compliance_unset_again__'
-      - __linux_compliance_remediate_ac_loading == '__linux_compliance_unset_again__'
-      - __linux_compliance_remediate_ac_log_lines == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_ac_changing == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_ac_effect == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_ac_final_lines == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ac_rule == '__linux_compliance_unset_again__'
-      - __linux_compliance_remediate_ac_size_mb == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_ac_signalled == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ac_text == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_ac_unterminated == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ar_changed_ids == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ar_known_services == '__linux_compliance_unset_again__'
-      - __linux_compliance_remediate_ar_loading == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ar_missing_parents == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ar_parent == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ar_rule == '__linux_compliance_unset_again__'
@@ -2501,17 +2523,17 @@
       linux_compliance_* variables. Nothing was scanned, changed or compared.
     quiet: true
   vars:
-    __linux_compliance_remediate_ac_applied: __linux_compliance_unset_again__
+    __linux_compliance_remediate_ac_carriage: __linux_compliance_unset_again__
     __linux_compliance_remediate_ac_changed_ids: __linux_compliance_unset_again__
-    __linux_compliance_remediate_ac_effective: __linux_compliance_unset_again__
-    __linux_compliance_remediate_ac_loading: __linux_compliance_unset_again__
-    __linux_compliance_remediate_ac_log_lines: __linux_compliance_unset_again__
+    __linux_compliance_remediate_ac_changing: __linux_compliance_unset_again__
+    __linux_compliance_remediate_ac_effect: __linux_compliance_unset_again__
+    __linux_compliance_remediate_ac_final_lines: __linux_compliance_unset_again__
     __linux_compliance_remediate_ac_rule: __linux_compliance_unset_again__
-    __linux_compliance_remediate_ac_size_mb: __linux_compliance_unset_again__
+    __linux_compliance_remediate_ac_signalled: __linux_compliance_unset_again__
     __linux_compliance_remediate_ac_text: __linux_compliance_unset_again__
+    __linux_compliance_remediate_ac_unterminated: __linux_compliance_unset_again__
     __linux_compliance_remediate_ar_changed_ids: __linux_compliance_unset_again__
     __linux_compliance_remediate_ar_known_services: __linux_compliance_unset_again__
-    __linux_compliance_remediate_ar_loading: __linux_compliance_unset_again__
     __linux_compliance_remediate_ar_missing_parents: __linux_compliance_unset_again__
     __linux_compliance_remediate_ar_parent: __linux_compliance_unset_again__
     __linux_compliance_remediate_ar_rule: __linux_compliance_unset_again__
@@ -2585,11 +2607,13 @@
   ansible.builtin.set_fact:
     __linux_compliance_remediate_ac_audit: __linux_compliance_unset__
     __linux_compliance_remediate_ac_cleanup_plan: __linux_compliance_unset__
-    __linux_compliance_remediate_ac_conflict: __linux_compliance_unset__
+    __linux_compliance_remediate_ac_final_reading: __linux_compliance_unset__
+    __linux_compliance_remediate_ac_first_reading: __linux_compliance_unset__
     __linux_compliance_remediate_ac_forget: __linux_compliance_unset__
     __linux_compliance_remediate_ac_lines: __linux_compliance_unset__
     __linux_compliance_remediate_ac_plan: __linux_compliance_unset__
     __linux_compliance_remediate_ac_read: __linux_compliance_unset__
+    __linux_compliance_remediate_ac_reading: __linux_compliance_unset__
     __linux_compliance_remediate_ac_record: __linux_compliance_unset__
     __linux_compliance_remediate_ac_record_values: __linux_compliance_unset__
     __linux_compliance_remediate_ac_records: __linux_compliance_unset__

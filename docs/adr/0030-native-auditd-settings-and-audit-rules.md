@@ -48,11 +48,12 @@ machines:
   and leaves every later rule unloaded: a rule held twice (`Rule exists`), a watch below a directory that does not
   exist, or an unknown system call. `augenrules` copies the previous generated file to `/etc/audit/audit.rules.prev`.
 - With the rules locked (`-e 2`, `enabled 2`), every change fails until the next boot.
-- auditd has no configuration test. On `SIGHUP` it keeps the old configuration when the new one is invalid, but it
-  then fails to start at the next boot: `space_left` not larger than `admin_space_left` (percentages are converted
-  with the size of the log's file system), incremental flushing with `freq = 0`, an unknown value, or a line without
-  spaces around `=` (`Missing equal sign`, after which no further line is read). `email` without a mail transport only
-  logs a warning.
+- auditd has no configuration test. On `SIGHUP` it keeps the old configuration and process when the new one is
+  invalid, without an event, but it then fails to start at the next boot: `space_left` not larger than
+  `admin_space_left` when neither is a percentage, incremental flushing with `freq = 0`, an unknown keyword or value,
+  or a line that is not three words split at single spaces (a TAB anywhere is part of a word; `space_left=80` gives
+  `Wrong number of arguments`, after which no further line is read). With a percentage, the conflict is only logged
+  when auditd starts (`setup_percentages`). `email` without a mail transport only logs a warning.
 
 ## Decision
 
@@ -98,9 +99,19 @@ Before a drop-in is written, the family reads every file that `augenrules` reads
 (below) and refuses what would break the rule set or claim a change that does not happen:
 
 - `compliant`, nothing written and nothing recorded, when every line of the rule is already in another file (an
-  administrator's file that holds the same rule);
-- `duplicate_rule` when only some of the lines are elsewhere, or when they are elsewhere and the drop-in exists too:
-  writing or keeping the drop-in would make `auditctl` stop at the repeated rule;
+  administrator's file that holds the same rule) and the real reader confirms it: the running auditd, with the rules
+  not locked, lists every line (`auditctl -l`), and `augenrules --check` finds the files of `/etc/audit/rules.d` unchanged
+  since the load (`audit_control` `current`). The family's own reading of the files is not enough: a CRLF file or an
+  earlier rule that stops `auditctl -R` would make it differ from what auditd loads ("the reader is the oracle");
+- `duplicate_rule` when only some of the lines are elsewhere, when they are elsewhere and the drop-in exists too
+  (writing or keeping the drop-in would make `auditctl` stop at the repeated rule), and when every line is elsewhere but
+  the real reader cannot confirm it: no running auditd (the containers), locked rules, a line that is not loaded or
+  files changed since the load. The reason says which;
+- `conflicting_rule` when another file holds a line that deletes rules matching this one: `-W` of its path, `-d` of
+  its line or `-D` with a selection such as `-D -k time-change`. `augenrules` moves only a bare `-D` to the start of
+  the set and keeps these lines in place, so whether the rule stays loaded depends on the order of the files (sorted as
+  `ls -1v` sorts them); the refusal does not depend on that order, and a rule that the running auditd lists after
+  `augenrules --check` confirmed the files is still `compliant`;
 - `watch_target_missing` when the directory of a watched path does not exist, which the kernel refuses;
 - `notapplicable` without `/etc/audit/rules.d` (no audit package), `not_directory`, `not_regular_file`, `not_owned`
   (a file at the drop-in's path without the header) and `method_changed`.
@@ -108,8 +119,9 @@ Before a drop-in is written, the family reads every file that `augenrules` reads
 ### 3. Loading: checked first, verified after, rolled back when it fails
 
 The module `freesecdev.linux_compliance.audit_control` runs the audit tools through the audited process helper in
-exact argument forms only (ADR 0004 amendment of FREES-110): `auditctl -s`, `auditctl -l`, `auditctl --signal reload`
-and `augenrules --load`. After the drop-ins of a topic changed, and only where `service_facts` reports `auditd.service`
+exact argument forms only (ADR 0004 amendment of FREES-110): `auditctl -s`, `auditctl -l`, `auditctl --signal reload`,
+`augenrules --load` and the read-only `augenrules --check`. After the drop-ins of a topic changed, or when the running
+auditd lacks a line of a drop-in that the family already wrote, and only where `service_facts` reports `auditd.service`
 running and the rules are not locked, the family calls it with `action: load`:
 
 1. it reads every file of `/etc/audit/rules.d` again and refuses to load when two places hold the same rule
@@ -124,9 +136,11 @@ When the load is refused or fails, the run removes the drop-ins it created and w
 back their ledger entries, loads the rule set again and fails with both messages; a drop-in that a cleanup of the run
 removed stays removed, because that is its prior state. `augenrules` leaves `/etc/audit/audit.rules.prev`; the family
 puts that file back as it was before the load (its content, mode and owner, or its absence), so a cleanup leaves the
-host as it was. With the rules locked, the files change and the result says that they take effect at the next boot;
-without a running auditd (the containers), the files change and the rules load when auditd starts. Check mode never
-loads.
+host as it was. Every result whose drop-in this run wrote or removed carries the effect on the loaded rules as its
+machine-readable `reason`, composed by the filter `audit_rule_results` (unit-tested): none after a verified load,
+`locked_until_reboot` when the rules are locked (`-e 2`: the files change, the kernel's rules stay as they are until
+the next boot), and `takes_effect_at_start` without a running auditd (the containers: the rules load when auditd
+starts). Check mode never loads.
 
 ### 4. auditd.conf: one line per setting, checked together
 
@@ -136,15 +150,58 @@ the collection's order `syslog`, `email`, `rotate`, `keep_logs`, `hostname`, `fq
 disruptive first: the STIG `SYSLOG|SINGLE|HALT` actions become `syslog`, the CIS `halt|single` disk-full action becomes
 `single`. A choice that offers none of these is `unsupported_value`. A minimum keeps a larger value already set.
 
-The line is written as `<setting> = <value>`, replacing the one line that sets it or appended when none does. The rule
-is `compliant` when that one line already has the form the check reads and a value it accepts, `duplicate_setting`
-when the setting is set more than once (the check reads the first occurrence, auditd keeps the last), and
-`prior_too_large` for a line above 1024 characters. Before anything is written, the settings that auditd checks
-together are computed as they will be after the run, from the file and auditd's defaults: `space_left` must be larger
-than `admin_space_left` (in percent of the log's file system, whose size `audit_control` reads, when one of them is a
-percentage), and incremental flushing needs `freq` above 0. When auditd would refuse them, every line of the run is
-`invalid_config` and nothing is written. After a change, a running auditd is asked to read the file again
-(`auditctl --signal reload`), and the run fails when the same auditd does not run afterwards.
+The line is written as `<setting> = <value>`, replacing the one line that sets it or appended when none does. What the
+file sets is decided as auditd decides it, by the reader `plugins/module_utils/compliance/auditconf.py` (through the
+filter `auditd_conf_reading`), never by a pattern of the role. auditd has no option that prints its configuration, so
+its decisions are recorded instead: `make auditd-conf-verdicts` runs the auditd of each Molecule image with `-f` on 424
+crafted files, in containers without network and capabilities, and commits what it read (`<keyword>_parser called
+with: <value>`) and whether it accepted the file (it refuses with status 6 before it opens anything) as
+`tests/fixtures/auditd_conf/verdicts.json`, generated by `tools/molecule/auditd_conf_verdicts.py` and
+`tools/molecule/auditd-conf-verdicts.sh`. The table keeps the image's own file as built and, per case, only what
+differs from it; the controller tests write every case again from that file and fail when the cases of the table and
+of the generator differ. They check the reader against every case on both platforms: it
+never accepts a file that auditd refuses or reads differently, and when it refuses one that auditd accepts, it says
+that it cannot tell. The table header records the auditd package of each image, and a test fails when the version that
+the image pins differs, until the table is made again. What the table showed, and the reader follows:
+
+- auditd reads each line into a buffer of 160 bytes (`fgets`) and skips a line longer than 158 bytes and a last line
+  without a newline, and reads the rest; a setting on such a line is not set. A NUL byte ends the line early, so
+  auditd also skips the line after it; the reader refuses a file with a NUL byte;
+- auditd splits a line into words at spaces only (`nv_split`, `audit_strsplit`), so a line is
+  `<keyword> = <value>` with leading and repeated spaces allowed; a TAB anywhere, a CR, VT or FF is part of a word, so
+  `space_left = 80` followed by CR or TAB refuses the whole file, as does a tab around `=`, `key=value`, a trailing
+  comment, an unknown keyword, a missing `=` or value, or a value outside the keyword's form (`num_logs` above 999,
+  `q_depth` above 99999, a percentage of 100 or more, an unknown group, a mail address without a dot after `@`);
+  keywords and choices ignore case;
+- when a keyword is set twice, auditd reads both lines and the last wins;
+- after reading, auditd refuses incremental flushing with `freq` 0 and, when neither is a percentage above 0, a
+  `space_left` that is not larger than `admin_space_left`, with its compiled defaults for an unset setting
+  (`space_left` 0, `admin_space_left` 0, `flush` none, `freq` 0, `clear_config`), never the values of the shipped
+  file. With a percentage, auditd converts both values with the size of the log's file system only when it starts
+  (`setup_percentages`) and then only logs a conflict; the reader is stricter here: it converts with the size that
+  `audit_control` reads and refuses (cannot tell) a `space_left` that would not be larger, or any percentage when the
+  size is unknown.
+
+The rule is `compliant` only when auditd reads exactly the one line that the role sees and its value satisfies the
+check, `duplicate_setting` when the setting is set more than once (the check reads the first occurrence, auditd keeps
+the last), and `prior_too_large` for a line above 1024 characters. Before anything is written, the reader reads the file
+as it will be after the lines of the run; when auditd would refuse it, or the reader cannot tell (an `exec` action,
+bytes outside ASCII, percentages without the size of the file system), every rule to apply or found compliant is
+`invalid_config` with the reason, and nothing is written. Every line that the run writes is therefore checked against
+the reader first, and anything outside it is refused. A file whose last line has no newline is refused for every line
+to write (`invalid_config`) and for every cleanup (`no_final_newline`): auditd skips that line, and `lineinfile` would
+add a newline to it, so the file would not be restored byte for byte. A file that holds a carriage return anywhere is
+refused the same way for every line to write (`invalid_config`) and for every cleanup that would write (`carriage_return`):
+`lineinfile` reads the file with universal newlines, so it drops a CR before a newline and splits a line at a lone CR
+(in a comment, for example) on every line it rewrites, where auditd reads the CR as part of the line.
+
+After a change, a running auditd is asked to read the file again (`auditctl --signal reload`), and the run fails when
+the same auditd does not run afterwards. auditd does not report whether it took the file: when its parser refuses a
+file on `SIGHUP`, it keeps its old configuration and process and sends no event (`auditd-reconfig.c`). The results say
+what can be known, as their machine-readable `reason`: `reload_not_confirmed` after the signal (the file was checked
+against the reader before it was written), `restart_required` for `local_events`, which auditd reads only when it
+starts (it is not part of `reconfigure()`), and `takes_effect_at_start` where auditd does not run. A second auditd is
+never started on a managed host to validate a file.
 
 ### 5. The ledger and cleanup
 
@@ -189,8 +246,7 @@ by removing the entry, without a write (FREES-173).
 - `auditd_rules_time` has a libvirt pre-state in both modes: its cycles load the rules in a real kernel, check every line
   with `auditctl -l` after apply and its absence after cleanup, and compare `/etc/audit/audit.rules` (rewritten by
   `augenrules`) and `audit.rules.prev` with their state before. `auditd_conf` proves its file in Docker; its reload was
-  run by hand on the virtual machines of both platforms. A further Docker pre-state of the time topic adds an
-  administrator's file that already holds the time zone watch: that rule is `compliant` and writes nothing.
+  run by hand on the virtual machines of both platforms. An administrator's file that already holds the time zone watch is covered by the regression group (below): without a running auditd it is refused unconfirmed (`duplicate_rule`), and the rule writes nothing.
 - Regression groups (one Docker leg per platform): `auditd_rules_time` `changes` (method flip, a change by hand
   kept, a drop-in removed by hand `restored` without a write, an administrator's file with the same rule next to the
   drop-in, alone and in part) and `auditd_conf` `changes` (method flip, a change by hand kept, a line

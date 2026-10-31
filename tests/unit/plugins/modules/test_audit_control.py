@@ -23,6 +23,8 @@ STATUS = b"enabled 1\nfailure 1\npid 726\nbacklog 0\n"
 LOCKED = b"enabled 2\nfailure 1\npid 726\n"
 STOPPED = b"enabled 1\nfailure 1\npid 0\n"
 LISTED = b"-w /etc/localtime -p wa -k time-change\n"
+SAME = b"/sbin/augenrules: No change\n"
+CHANGED = b"/sbin/augenrules: Rules have changed and should be updated\n"
 
 
 def result(
@@ -90,7 +92,9 @@ def test_status_reads_the_kernel_the_rules_and_the_files(
     files: list[dict[str, object]] = [
         {"path": "/etc/audit/rules.d/a.rules", "regular": True, "lines": ["-w /x -p wa -k x"]}
     ]
-    fake = install(monkeypatch, [result(stdout=STATUS), result(stdout=LISTED)], files)
+    fake = install(
+        monkeypatch, [result(stdout=STATUS), result(stdout=LISTED), result(stdout=SAME)], files
+    )
     code, output = run(
         capsys,
         {
@@ -107,8 +111,13 @@ def test_status_reads_the_kernel_the_rules_and_the_files(
     assert output["rules"] == ["-w /etc/localtime -p wa -k time-change"]
     assert output["files"] == files
     assert output["missing"] == ["-w /y -p wa -k y"]
+    assert output["current"] is True
     assert isinstance(output["log_megabytes"], int)
-    assert fake.calls == [("auditctl", ("-s",)), ("auditctl", ("-l",))]
+    assert fake.calls == [
+        ("auditctl", ("-s",)),
+        ("auditctl", ("-l",)),
+        ("augenrules", ("--check",)),
+    ]
 
 
 def test_status_without_auditctl_reports_it_unavailable(
@@ -136,12 +145,13 @@ def test_status_in_a_container_reports_no_kernel(
     capsys: pytest.CaptureFixture[str],
     answer: process.CommandResult,
 ) -> None:
-    install(monkeypatch, [answer])
+    install(monkeypatch, [answer, result(stdout=CHANGED)])
     code, output = run(capsys, {"action": "status"})
     assert code == 0
     assert output["kernel"] is False
     assert output["enabled"] is None
     assert output["rules"] == []
+    assert output["current"] is False
 
 
 def test_status_fails_when_the_listing_fails(
@@ -462,7 +472,7 @@ def test_the_rule_files_are_read_from_the_real_directory(tmp_path: Path) -> None
 def test_the_module_runs_as_a_script(
     capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    install(monkeypatch, [result(stdout=STATUS), result(stdout=LISTED)])
+    install(monkeypatch, [result(stdout=STATUS), result(stdout=LISTED), result(stdout=SAME)])
     spec = importlib.util.spec_from_file_location("__main__", MODULE_FILE)
     assert spec is not None
     assert spec.loader is not None
@@ -470,3 +480,63 @@ def test_the_module_runs_as_a_script(
     with patch_module_args({"action": "status"}), pytest.raises(SystemExit) as raised:
         spec.loader.exec_module(importlib.util.module_from_spec(spec))
     assert raised.value.code == 0
+
+
+@pytest.mark.parametrize(
+    ("answer", "expected"),
+    [
+        (result(stdout=SAME), True),
+        (result(stdout=b"/sbin/augenrules: No change\nAudit system is in immutable mode"), True),
+        (result(stdout=CHANGED), False),
+        (result(stdout=b"/usr/sbin/augenrules: No rules\n"), False),
+        (result(stdout=b"something else"), None),
+        (result(returncode=1, stdout=SAME), None),
+        (result(stdout=SAME, timed_out=True), None),
+    ],
+)
+def test_status_reports_whether_the_generated_rules_are_the_loaded_file(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    answer: process.CommandResult,
+    expected: bool | None,
+) -> None:
+    fake = install(monkeypatch, [result(stdout=STATUS), result(stdout=LISTED), answer])
+    code, output = run(capsys, {"action": "status"})
+    assert code == 0
+    assert output["current"] is expected
+    assert fake.calls[-1] == ("augenrules", ("--check",))
+
+
+def test_status_without_augenrules_reports_current_unknown(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    fake = install(monkeypatch, [result(stdout=STATUS), result(stdout=LISTED)])
+
+    def resolve(name: str) -> str:
+        if name == "augenrules":
+            message = "augenrules not found"
+            raise process.ProcessExecutionError(message)
+        return f"/usr/sbin/{name}"
+
+    monkeypatch.setattr(process, "resolve_executable", resolve)
+    code, output = run(capsys, {"action": "status"})
+    assert code == 0
+    assert output["current"] is None
+    assert [call[0] for call in fake.calls] == ["auditctl", "auditctl"]
+
+
+def test_an_unsafe_augenrules_fails_the_status(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    install(monkeypatch, [result(stdout=STATUS), result(stdout=LISTED)])
+
+    def resolve(name: str) -> str:
+        if name == "augenrules":
+            message = "augenrules is writable by others"
+            raise process.ProcessPolicyError(message)
+        return f"/usr/sbin/{name}"
+
+    monkeypatch.setattr(process, "resolve_executable", resolve)
+    code, output = run(capsys, {"action": "status"})
+    assert code == 1
+    assert "writable by others" in str(output["msg"])

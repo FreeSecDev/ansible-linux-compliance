@@ -356,6 +356,48 @@
         "{{ item }}": false
       loop: "{{ regression_toggles }}"
 
+- name: Auditd settings regressions | Read files that auditd reads differently from a plain pattern, or refuses
+  ansible.builtin.include_tasks:
+    file: lifecycle_auditd_conf_reader.yml
+  loop:
+    - name: a space_left_action line padded beyond 158 bytes, which auditd skips
+      content: >-
+        {{ regression_built_text | regex_replace('(?m)^(space_left_action = .*)$', '\1' ~ ' ' * 180) }}
+      refused: false
+      reason: ""
+    - name: a last line without a newline, which auditd skips
+      content: "{{ regression_built_text | regex_replace('\\n$', '') }}"
+      refused: true
+      reason: does not end with a newline
+    - name: a line with a NUL byte, after which auditd skips a line
+      content: "{{ regression_built_text ~ '# x' ~ ('AA==' | b64decode) ~ regression_newline }}"
+      refused: true
+      reason: NUL byte
+    - name: a space_left_action line that ends in a carriage return, which lineinfile would drop
+      content: >-
+        {{ regression_built_text
+           | regex_replace('(?m)^(space_left_action = [A-Za-z]+)$', '\1' ~ ('DQ==' | b64decode)) }}
+      refused: true
+      reason: holds a carriage return
+    - name: a comment that holds a carriage return before a setting, which lineinfile would split
+      content: >-
+        {{ regression_built_text ~ '# note' ~ ('DQ==' | b64decode) ~ 'num_logs = 1' ~ regression_newline }}
+      refused: true
+      reason: holds a carriage return
+    - name: a num_logs line that ends in a carriage return, which auditd refuses
+      content: >-
+        {{ regression_built_text | regex_replace('(?m)^(num_logs = [0-9]+)$', '\1' ~ ('DQ==' | b64decode)) }}
+      refused: true
+      reason: auditd refuses
+    - name: a priority_boost line that ends in a tab, which auditd refuses
+      content: >-
+        {{ regression_built_text | regex_replace('(?m)^(priority_boost = [0-9]+)$', '\1' ~ ('CQ==' | b64decode)) }}
+      refused: true
+      reason: auditd refuses
+  loop_control:
+    loop_var: regression_reader_case
+    label: "{{ regression_reader_case.name }}"
+
 - name: Auditd settings regressions | Put the configuration file back as built
   ansible.builtin.copy:
     content: "{{ regression_built_text }}"

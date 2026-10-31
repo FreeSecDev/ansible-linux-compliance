@@ -758,19 +758,26 @@ The auditd topics ([ADR 0030](adr/0030-native-auditd-settings-and-audit-rules.md
 with `profiles`: `auditd_conf` runs with `cis_level2_server` on Ubuntu and `stig` on Rocky Linux, `auditd_rules_time`
 with `cis_level2_server` and `e8`. The images ship the audit packages (`auditd` and `audit`, pinned), so the drop-ins,
 `auditd.conf` and their checksums are proven in the containers, where auditd does not run and nothing is loaded.
-`auditd_rules_time` has three pre-states: as built with real scans, an administrator's `40-site.rules` that already holds
-the time zone watch (that rule is `compliant` and writes nothing; rule toggle only), and a pre-state that requires
+`auditd_rules_time` has two pre-states: as built with real scans, and a pre-state that requires
 libvirt, where the cycles load the rules with `augenrules` and the `audit_rules` items check each line with
 `auditctl -l` after apply and its absence after cleanup ([libvirt guide](molecule-libvirt.md#driver-requirements-of-a-topic)).
 Each has one regression group, `changes`, a Docker leg per platform. `shared/tasks/lifecycle_auditd_rules_regressions.yml`
 covers a ledger entry of another method (`method_changed`, nothing touched), a change by hand to a drop-in kept as
 `modified_since_apply`, a drop-in removed by hand `restored` without a write, and an administrator's file with the
-time zone watch next to the drop-in (`duplicate_rule`), alone (`compliant`, not recorded) and, on Rocky Linux, in part
-(`duplicate_rule` without a drop-in). `shared/tasks/lifecycle_auditd_conf_regressions.yml` covers the method change, a
-line changed by hand and one put back by hand, a repeated setting (`duplicate_setting`), on Rocky Linux an
-`admin_space_left` that the profile's `space_left` would not exceed (`invalid_config` for every line, nothing written),
-and, through `lifecycle_auditd_conf_profiles.yml`, the rules that only other profiles select (`stig` on Ubuntu, `cis`
-and `ospp` on Rocky Linux) with their own values, applied, applied again, cleaned up and the file compared byte for byte.
+time zone watch next to the drop-in (`duplicate_rule`), alone (`duplicate_rule`, unconfirmed without a running
+auditd, not recorded) and, on Rocky Linux, in part (`duplicate_rule` without a drop-in), and a file that deletes the
+rules of the key with `-D -k time-change` (`conflicting_rule` for every rule, nothing changed).
+`shared/tasks/lifecycle_auditd_conf_regressions.yml` covers the method change, a line changed by hand and one put back
+by hand, a repeated setting (`duplicate_setting`), on Rocky Linux an `admin_space_left` that the profile's `space_left`
+would not exceed (`invalid_config` for every line, nothing written), and, through `lifecycle_auditd_conf_reader.yml`,
+files that auditd reads differently from a plain pattern: a `space_left_action` line padded beyond 158 bytes (not taken
+as compliant, rewritten, and written back byte for byte), a last line without a newline, a NUL byte, a CR at the end of
+`space_left_action` or `num_logs`, a comment holding a CR before a setting and a TAB at the end of `priority_boost`
+(`invalid_config`, nothing written). Through
+`lifecycle_auditd_conf_profiles.yml` it applies the rules that only other profiles select (`stig` on Ubuntu, `cis` and
+`ospp` on Rocky Linux) with their own values, applied, applied again, cleaned up and the file compared byte for byte,
+and with `ospp` incremental flushing while `freq` is unset and its rule off (`invalid_config`: auditd's default `freq`
+is 0).
 
 `login_defs` (FREES-185) has four groups, all on both platforms. In `changes`,
 `shared/tasks/lifecycle_login_defs_regressions.yml` applies the topic and checks the SHA-256 of the whole

@@ -44,10 +44,33 @@ def test_rule_lines_leave_out_what_augenrules_leaves_out() -> None:
         "-a always,exit -F arch=b32 -S adjtimex -F key=time-change"
     )
     assert auditrules.rule_lines(text) == [
-        "--backlog_wait_time 60000",
-        "-D -k x",
         "-w /var/log/lastlog -p wa -k logins",
         "-a always,exit -F arch=b32 -S adjtimex -k time-change",
+    ]
+    assert auditrules.deleting_lines(text) == ["-D -k x"]
+
+
+def test_the_lines_that_delete_rules_are_found() -> None:
+    text = (
+        "-W /etc/localtime -p wa -k time-change\r\n"
+        "-d always,exit -F arch=b64 -S adjtimex -F key=time-change\n"
+        "-D -k time-change\n"
+        "-D\n"
+        "-w /etc/localtime -p wa -k time-change\n"
+    )
+    assert auditrules.deleting_lines(text) == [
+        "-W /etc/localtime -p wa -k time-change",
+        "-d always,exit -F arch=b64 -S adjtimex -k time-change",
+        "-D -k time-change",
+    ]
+
+
+def test_rule_file_names_are_sorted_as_ls_v_sorts_them() -> None:
+    assert auditrules.rule_file_names(["10-b.rules", "9-a.rules", "50-x.rules", "a.rules"]) == [
+        "9-a.rules",
+        "10-b.rules",
+        "50-x.rules",
+        "a.rules",
     ]
 
 
@@ -86,14 +109,16 @@ def test_read_rule_files_follows_links_to_files_and_lists_other_entries_without_
             "path": str(base / "10-base.rules"),
             "regular": True,
             "lines": ["-w /etc/passwd -p wa -k identity"],
+            "deletes": [],
         },
-        {"path": str(base / "20-dir.rules"), "regular": False, "lines": []},
+        {"path": str(base / "20-dir.rules"), "regular": False, "lines": [], "deletes": []},
         {
             "path": str(base / "30-link.rules"),
             "regular": True,
             "lines": ["-w /etc/group -p wa -k identity"],
+            "deletes": [],
         },
-        {"path": str(base / "40-broken.rules"), "regular": False, "lines": []},
+        {"path": str(base / "40-broken.rules"), "regular": False, "lines": [], "deletes": []},
     ]
 
 

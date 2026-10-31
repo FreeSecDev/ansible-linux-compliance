@@ -351,12 +351,16 @@ process helper ([ADR 0030](../adr/0030-native-auditd-settings-and-audit-rules.md
 - **Mitigation:** every rule line has a strict form without control lines; a rule whose lines another file holds in
   part is refused before anything is written; the module refuses to load a set with a repeated rule; after the load
   every applied line is checked with `auditctl -l`, and a refused or failed load rolls back the drop-ins and ledger
-  entries of the run, loads the set again and fails the run. The settings that auditd checks together are computed as
-  they will be after the run and refused as a whole when auditd would refuse them; the line always has the spaces
-  around `=` that auditd requires.
+  entries of the run, loads the set again and fails the run. A rule held by another file counts as compliant only
+  when the running auditd lists it and `augenrules --check` finds the files unchanged; a file that deletes matching
+  rules (`-W`, `-d`, `-D -k`) refuses the rule. `auditd.conf` is read by the collection's model of auditd's parser,
+  checked against a verdict table of the real auditd of each Molecule image; the whole file as it will be after the run
+  is read that way before anything is written, and anything that auditd refuses or the model cannot tell is refused.
 - **Residual:** two rules that differ only in a spelling the normalisation does not cover are found only by the load,
-  which is then rolled back; a broken rule of an administrator makes every load fail until it is fixed. auditd has no
-  configuration test, so a check that the collection does not know about is not made.
+  which is then rolled back; a broken rule of an administrator makes every load fail until it is fixed. auditd does
+  not confirm that it took a file on `SIGHUP`, so the result says `reload_not_confirmed`; values that depend on the
+  host (a group, a mail domain, the size of a file system) are refused when the model cannot tell. The table holds
+  the auditd versions of the Molecule images; a test fails when an image pins another version until it is regenerated.
 
 ### T-AUDIT-2: the audit tools are turned into something else
 
@@ -365,7 +369,8 @@ process helper ([ADR 0030](../adr/0030-native-auditd-settings-and-audit-rules.md
   (`-f`), or loads an arbitrary rule file (`-R`).
 - **Impact:** auditing switched off as root.
 - **Mitigation:** the helper's policies accept only the exact forms `auditctl -s`, `auditctl -l`,
-  `auditctl --signal reload` and `augenrules --load`; no argument comes from a variable. The executables are resolved
+  `auditctl --signal reload`, `augenrules --load` and `augenrules --check` (which writes only a temporary file below
+  `/tmp` and loads nothing); no argument comes from a variable. The executables are resolved
   in the trusted directories, root-owned and not writable by group or others.
 - **Residual:** `augenrules --load` loads whatever `/etc/audit/rules.d` holds, as auditd does at boot; a root-owned
   malicious rule file is already a root compromise.

@@ -381,11 +381,11 @@ def test_every_rule_toggle_is_unique_and_a_valid_variable_name() -> None:
 
 def test_a_disabled_topic_excludes_every_catalogued_rule_of_its_family() -> None:
     result = plan(toggles={"linux_compliance_auditd_enabled": False})
-    auditd = {
-        str(rule["rule_id"])
-        for rule in rules()
-        if rule["family"] in {"auditd", "auditd_conf", "auditd_rules_time"}
+    families = {"auditd"} | {
+        str(family["name"]) for family in registry() if family.get("umbrella") == "auditd"
     }
+    assert {"auditd_conf", "auditd_rules_time"} <= families
+    auditd = {str(rule["rule_id"]) for rule in rules() if rule["family"] in families}
     disabled = cast("list[dict[str, object]]", result["disabled_rules"])
     assert len(auditd) > 100
     assert {str(item["rule_id"]) for item in disabled} == auditd

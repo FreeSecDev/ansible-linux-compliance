@@ -315,6 +315,7 @@ Tests
   molecule-images-plan  Print the tag of each Docker instance image for $$GITHUB_OUTPUT
   molecule-images-ids   Print the verified image ID of each Docker instance image
   molecule-matrix       Print the CI matrix of the toggle lifecycle legs of MOLECULE_MATRIX_DRIVER (docker or libvirt)
+  auditd-conf-verdicts  Run the auditd of each Docker Molecule image on the auditd.conf cases and record the verdict table
   molecule-plan         Print the legs that a pull request against MOLECULE_PLAN_BASE runs, as the base's planner decides
   molecule-affected     Keep the legs of the topics that a change affects (run by the base revision's planner in CI)
   test-molecule-libvirt Molecule libvirt scenarios on KVM virtual machines and their self-test (requires KVM and libvirt)
@@ -366,7 +367,7 @@ export HELP_TEXT
 .PHONY: help bootstrap install format lint lint-ansible lint-toggles toggles lint-role-guards role-guards lint-lifecycle content catalogue stig-mapping lint-python lint-yaml lint-actions \
 	lint-containerfile oscap-image scc-expiry-check scc-fetch scc-image scc-image-ubuntu2604 scc-smoke scc-integration scc-own-expiry-check scc-image-clean scc-release-watch lint-iac lock-check tofu-validate aws-bootstrap-render lint-packer lint-repo lint-skills security typecheck test test-unit test-sanity test-audit-exceptions test-evidence test-remediate-check test-remediate-disruptive test-role-guards test-verify \
 	test-ansible-units package-check collection-tree collection-link sanity-pythons name-sets test-name-sets \
-	test-integration test-coverage test-content-golden test-oscap-integration test-browser browser-test-deps molecule-dependencies molecule-content molecule-matrix \
+	test-integration test-coverage test-content-golden test-oscap-integration test-browser browser-test-deps molecule-dependencies molecule-content molecule-matrix auditd-conf-verdicts \
 	molecule-affected molecule-plan molecule-collections-fetch molecule-collections-lock molecule-images-build molecule-images-plan molecule-images-ids \
 	test-molecule-docker test-molecule-docker-selftest test-molecule-libvirt \
 	test-molecule-libvirt-selftest molecule-libvirt-images molecule-libvirt-preflight \
@@ -432,6 +433,12 @@ lint-role-guards: require-uv collection-link
 
 lint-lifecycle: require-uv collection-link
 	PYTHONPATH='$(CURDIR)/build/collections' $(RUN) python -m tools.roles.check_lifecycle_topics
+
+auditd-conf-verdicts: require-uv collection-link
+	@docker info >/dev/null 2>&1 || { printf 'error: a running Docker daemon is required\n' >&2; exit 1; }
+	$(call MOLECULE_IMAGES_READY,extensions/molecule/docker-ubuntu-lifecycle/molecule.yml extensions/molecule/docker-rhel-compatible-lifecycle/molecule.yml)
+	PYTHONPATH='$(CURDIR)/build/collections' tools/molecule/auditd-conf-verdicts.sh '$(MOLECULE_IMAGES_PLAN)' \
+		tests/fixtures/auditd_conf/verdicts.json
 
 molecule-matrix: require-uv collection-link
 	@PYTHONPATH='$(CURDIR)/build/collections' $(RUN) python -m tools.roles.molecule_matrix --driver '$(MOLECULE_MATRIX_DRIVER)'

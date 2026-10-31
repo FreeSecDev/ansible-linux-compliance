@@ -30,10 +30,14 @@ if TYPE_CHECKING:
 
 RULES_DIRECTORY: Final[str] = "/etc/audit/rules.d"
 RULES_SUFFIX: Final[str] = ".rules"
+CHECK_SAME: Final[str] = ": No change"
+CHECK_CHANGED: Final[str] = ": Rules have changed and should be updated"
+CHECK_EMPTY: Final[str] = ": No rules"
 MAX_FILES: Final[int] = 512
 MAX_FILE_BYTES: Final[int] = 1024 * 1024
 MAX_LINE_LENGTH: Final[int] = 4096
-CONTROL_LINE: Final[str] = r"\s*-[efb].*|\s*-D\s*"
+CONTROL_LINE: Final[str] = r"\s*-[efb](?:\s.*)?|\s*-D\s*|\s*--[a-z].*"
+DELETING_LINE: Final[str] = r"\s*-[Wd]\s.*|\s*-D\s+\S.*"
 COMMENT_LINE: Final[str] = r"\s*#.*"
 STATUS_LINE: Final[str] = r"([a-z_]+) (-?[0-9]+)(?: .*)?"
 UNSET_FORMS: Final[frozenset[str]] = frozenset({"auid!=-1", "auid!=4294967295"})
@@ -71,8 +75,10 @@ def normalise(line: str) -> str:
 def rule_lines(text: str) -> list[str]:
     """Return the rule lines of a rule file as ``augenrules`` keeps them, normalised.
 
-    Empty lines, comment lines and the control lines ``-D``, ``-b``, ``-f`` and ``-e`` are left
-    out; a carriage return at the end of a line is ignored, as ``augenrules`` does.
+    Empty lines, comment lines, the control lines ``-D``, ``-b``, ``-f`` and ``-e``, the long
+    options such as ``--backlog_wait_time`` (which set the kernel, not a rule) and the lines that
+    delete rules (:func:`deleting_lines`) are left out; a carriage return at the end of a line is
+    ignored, as ``augenrules`` does.
     """
     found: list[str] = []
     for raw in text.split("\n"):
@@ -81,14 +87,43 @@ def rule_lines(text: str) -> list[str]:
             continue
         if re.fullmatch(COMMENT_LINE, line) or re.fullmatch(CONTROL_LINE, line):
             continue
+        if re.fullmatch(DELETING_LINE, line):
+            continue
         found.append(normalise(line))
     return found
 
 
+def deleting_lines(text: str) -> list[str]:
+    """Return the lines of a rule file that delete rules, normalised.
+
+    These are ``-W``, ``-d`` and ``-D`` with a selection such as ``-D -k time-change``.
+    ``augenrules`` moves only a bare ``-D`` to the start of the set and keeps these where they
+    are, so they delete the matching rules that files read before them added.
+    """
+    return [
+        normalise(raw.removesuffix("\r"))
+        for raw in text.split("\n")
+        if re.fullmatch(DELETING_LINE, raw.removesuffix("\r"))
+    ]
+
+
+def _version_key(name: str) -> tuple[tuple[int, int | str], ...]:
+    return tuple(
+        (0, int(part)) if part.isdigit() else (1, part)
+        for part in re.split(r"([0-9]+)", name)
+        if part
+    )
+
+
 def rule_file_names(names: Iterable[str]) -> list[str]:
-    """Return the names that ``augenrules`` reads, sorted: ``*.rules`` without a leading dot."""
+    """Return the names that ``augenrules`` reads, in its order.
+
+    These are the ``*.rules`` names without a leading dot, sorted as ``ls -1v`` sorts them, with
+    the numbers inside a name compared by their value.
+    """
     return sorted(
-        name for name in names if name.endswith(RULES_SUFFIX) and not name.startswith(".")
+        (name for name in names if name.endswith(RULES_SUFFIX) and not name.startswith(".")),
+        key=_version_key,
     )
 
 
@@ -128,8 +163,15 @@ def read_rule_files(directory: str = RULES_DIRECTORY) -> list[dict[str, object]]
             regular = stat.S_ISREG(path.stat().st_mode)
         except OSError:
             regular = False
-        lines = rule_lines(_read_bounded(path)) if regular else []
-        files.append({"path": str(path), "regular": regular, "lines": lines})
+        text = _read_bounded(path) if regular else ""
+        files.append(
+            {
+                "path": str(path),
+                "regular": regular,
+                "lines": rule_lines(text),
+                "deletes": deleting_lines(text),
+            }
+        )
     return files
 
 
@@ -156,6 +198,24 @@ def parse_status(text: str) -> dict[str, int]:
         if found is not None:
             fields[found.group(1)] = int(found.group(2))
     return fields
+
+
+def parse_check(text: str) -> bool | None:
+    """Return whether ``augenrules --check`` found the generated rules unchanged.
+
+    That is whether the rules generated from ``/etc/audit/rules.d`` equal
+    ``/etc/audit/audit.rules``, the file the last load read.
+
+    ``True`` for ``No change``; ``False`` for ``Rules have changed and should be updated`` and for
+    ``No rules`` (the directory holds no rule, so nothing it holds can be confirmed); ``None`` for
+    any other output, which the caller must treat as unknown.
+    """
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    if any(line.endswith((CHECK_CHANGED, CHECK_EMPTY)) for line in lines):
+        return False
+    if any(line.endswith(CHECK_SAME) for line in lines):
+        return True
+    return None
 
 
 def _without_syscalls(line: str) -> str:

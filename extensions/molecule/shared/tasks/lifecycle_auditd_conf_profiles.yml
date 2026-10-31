@@ -101,6 +101,63 @@
     fail_msg: "{{ regression_label }}, {{ regression_other_profile }}, cleanup: {{ lifecycle_results }}"
     quiet: true
 
+- name: Auditd settings of another profile | Refuse incremental flushing when freq is unset and its rule is off
+  when: >-
+    'xccdf_org.ssgproject.content_rule_auditd_data_retention_flush'
+    in regression_other_rules | map(attribute='rule_id') | list
+  block:
+    - name: Auditd settings of another profile | Remove freq and set flush to NONE, which auditd starts with
+      ansible.builtin.copy:
+        content: >-
+          {{ regression_built_text | regex_replace('(?m)^freq = .*\n', '')
+             | regex_replace('(?m)^flush = .*$', 'flush = NONE') }}
+        dest: "{{ regression_conf }}"
+        mode: "0640"
+        owner: root
+        group: root
+      register: regression_other_no_freq
+
+    - name: Auditd settings of another profile | Switch the rules of the other profile on, with freq left off
+      ansible.builtin.set_fact:
+        "{{ item }}": true
+      loop: "{{ regression_other_rules | map(attribute='toggle') | list }}"
+
+    - name: Auditd settings of another profile | Apply flush without freq
+      ansible.builtin.include_tasks:
+        file: lifecycle_remediate.yml
+      vars:
+        lifecycle_check_mode: false
+        lifecycle_family: auditd_conf
+        lifecycle_rule_ids: "{{ regression_other_rules | map(attribute='rule_id') | list }}"
+
+    - name: Auditd settings of another profile | Check that incremental flushing with freq 0 is refused
+      ansible.builtin.assert:
+        that:
+          - >-
+            lifecycle_results | selectattr('rule_id', 'equalto',
+            'xccdf_org.ssgproject.content_rule_auditd_data_retention_flush') | map(attribute='status') | list
+            == ['invalid_config']
+          - lifecycle_results | selectattr('status', 'equalto', 'applied') | list == []
+          - >-
+            lifecycle_results | selectattr('status', 'equalto', 'invalid_config') | map(attribute='reason') | first
+            is search('flush is incremental, but freq is 0')
+          - lifecycle_results | selectattr('changed') | list == []
+        fail_msg: "{{ regression_label }}, {{ regression_other_profile }}, flush without freq: {{ lifecycle_results }}"
+        quiet: true
+
+    - name: Auditd settings of another profile | Switch the rules of the other profile off again
+      ansible.builtin.set_fact:
+        "{{ item }}": false
+      loop: "{{ regression_other_rules | map(attribute='toggle') | list }}"
+
+    - name: Auditd settings of another profile | Put the configuration file back as built
+      ansible.builtin.copy:
+        content: "{{ regression_built_text }}"
+        dest: "{{ regression_conf }}"
+        mode: "0640"
+        owner: root
+        group: root
+
 - name: Auditd settings of another profile | Give the profile of the topic back to the role inputs
   ansible.builtin.set_fact:
     molecule_profile: "{{ lifecycle_topic_profile }}"

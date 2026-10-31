@@ -117,7 +117,7 @@ SSHD_KEYWORDS: Final[tuple[str, ...]] = (
 SSHD_VALUE: Final[str] = r"[A-Za-z0-9@.,:/_+][A-Za-z0-9@.,:/_+-]{0,1023}"
 SSHD_SETTING: Final[str] = "(?:" + "|".join(SSHD_KEYWORDS) + ")=" + SSHD_VALUE
 AUDITCTL_FORMS: Final[tuple[tuple[str, ...], ...]] = (("-s",), ("-l",), ("--signal", "reload"))
-AUGENRULES_FORMS: Final[tuple[tuple[str, ...], ...]] = (("--load",),)
+AUGENRULES_FORMS: Final[tuple[tuple[str, ...], ...]] = (("--load",), ("--check",))
 
 FORBIDDEN_OPTIONS: Final[frozenset[str]] = frozenset({"--fetch-remote-resources"})
 FORBIDDEN_WORDS: Final[frozenset[str]] = frozenset({"remediate", "--remediate"})

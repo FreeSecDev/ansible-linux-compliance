@@ -13,7 +13,11 @@ description:
   - With O(action=status), reports whether C(auditctl) is installed, what C(auditctl -s) and
     C(auditctl -l) say about the kernel (whether auditing is enabled or locked with C(-e 2), the
     process of auditd and the loaded rules), and the rule lines of every file below
-    C(/etc/audit/rules.d) that C(augenrules) reads. Nothing is changed.
+    C(/etc/audit/rules.d) that C(augenrules) reads, and whether C(augenrules --check) finds the
+    rules generated from that directory equal to C(/etc/audit/audit.rules), the file the last load
+    read.
+    Nothing is changed, as C(augenrules --check) only writes a temporary file below C(/tmp),
+    which it removes, and loads nothing.
   - With O(action=load), refuses to load when two places of C(/etc/audit/rules.d) hold the same
     rule (C(auditctl -R) would stop at the second and leave every later rule unloaded) or when the
     loaded rules are locked (C(enabled 2)). Otherwise runs C(augenrules --load), exactly as
@@ -119,6 +123,14 @@ log_megabytes:
   returned: when O(action=status)
   type: int
   sample: 10240
+current:
+  description:
+    - Whether C(augenrules --check) printed C(No change), so the rules of C(/etc/audit/rules.d) are
+      the ones the last load read; false for C(Rules have changed and should be updated) or
+      C(No rules); null when C(augenrules) is not installed or printed anything else.
+  returned: when O(action=status)
+  type: bool
+  sample: true
 files:
   description: Every file of C(/etc/audit/rules.d) that C(augenrules) reads, with its rule lines.
   returned: when O(action=status)
@@ -235,6 +247,20 @@ def kernel_status() -> dict[str, object]:
     }
 
 
+def rules_current() -> bool | None:
+    """Return what ``augenrules --check`` says about the generated rules, or ``None``."""
+    try:
+        process.resolve_executable("augenrules")
+    except process.ProcessExecutionError:
+        return None
+    except process.ProcessPolicyError as error:
+        raise ControlError(printable(str(error))) from error
+    check = _run("augenrules", ("--check",), TIMEOUT_SECONDS)
+    if check.timed_out or check.returncode != 0:
+        return None
+    return auditrules.parse_check(_text(check))
+
+
 def unavailable() -> dict[str, object]:
     """Return the result fields when ``auditctl`` is not installed."""
     return {
@@ -259,6 +285,7 @@ def status(expect: list[str], log_directory: str) -> dict[str, object]:
         **fields,
         "files": files,
         "missing": missing,
+        "current": rules_current(),
         "log_megabytes": auditrules.log_megabytes(log_directory),
     }
 
@@ -410,6 +437,7 @@ def main() -> None:
             message=outcome["message"],
             files=outcome["files"],
             missing=outcome["missing"],
+            current=outcome["current"],
             log_megabytes=outcome["log_megabytes"],
         )
     elif action == "load":

@@ -332,12 +332,15 @@
     action: list
   register: regression_ledger_elsewhere
 
-- name: Audit rule regressions | Check that the time zone rule is compliant through the administrator's file alone
+- name: Audit rule regressions | Check that the time zone rule only in the administrator's file is refused, unconfirmed
   ansible.builtin.assert:
     that:
       - >-
         lifecycle_results | selectattr('rule_id', 'equalto', regression_localtime) | map(attribute='status') | list
-        == ['compliant']
+        == ['duplicate_rule']
+      - >-
+        lifecycle_results | selectattr('rule_id', 'equalto', regression_localtime) | map(attribute='reason') | first
+        is search('no running auditd whose rules can be read here')
       - lifecycle_results | selectattr('rule_id', 'equalto', regression_localtime) | selectattr('changed') | list == []
       - >-
         regression_ledger_elsewhere.entries | selectattr('rule_id', 'equalto', regression_localtime) | list == []
@@ -397,6 +400,45 @@
       - lifecycle_results | map(attribute='status') | unique | list == ['restored']
     fail_msg: "{{ regression_label }}, cleanup after the administrator's file: {{ lifecycle_results }}"
     quiet: true
+
+- name: Audit rule regressions | Add an administrator's file that deletes the rules of the key time-change
+  ansible.builtin.copy:
+    content: "-D -k time-change\n"
+    dest: "{{ regression_admin_file }}"
+    mode: "0600"
+    owner: root
+    group: root
+
+- name: Audit rule regressions | Switch every rule of the topic on next to the deleting file
+  ansible.builtin.set_fact:
+    "{{ item }}": true
+  loop: "{{ regression_toggles }}"
+
+- name: Audit rule regressions | Apply next to a file that deletes the rules of the topic's key
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+    lifecycle_family: auditd_rules_time
+
+- name: Audit rule regressions | Check that every rule is refused, as the later file could delete it, nothing changed
+  ansible.builtin.assert:
+    that:
+      - lifecycle_results | map(attribute='status') | unique | list == ['conflicting_rule']
+      - lifecycle_results | map(attribute='reason') | reject('search', '-D -k time-change') | list == []
+      - lifecycle_results | selectattr('changed') | list == []
+    fail_msg: "{{ regression_label }}, apply next to a deleting file: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Audit rule regressions | Remove the deleting file
+  ansible.builtin.file:
+    path: "{{ regression_admin_file }}"
+    state: absent
+
+- name: Audit rule regressions | Switch every rule of the topic off after the deleting file
+  ansible.builtin.set_fact:
+    "{{ item }}": false
+  loop: "{{ regression_toggles }}"
 
 - name: Audit rule regressions | Give the profile of this platform back
   ansible.builtin.set_fact:

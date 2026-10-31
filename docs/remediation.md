@@ -510,26 +510,44 @@ After the drop-ins of a rule topic changed, and only where `service_facts` repor
 module `freesecdev.linux_compliance.audit_control` loads the rule set with `augenrules --load`, as `auditd.service`
 does at boot: it first refuses a set in which two places hold the same rule, and afterwards checks every applied line
 against `auditctl -l`. A refused or failed load rolls back the drop-ins and ledger entries of the run, loads the set
-again and fails the run. `/etc/audit/audit.rules.prev`, which `augenrules` writes, is put back as it was. With the
-rules locked (`-e 2`) the files change and take effect at the next boot; where auditd does not run (containers) the
-rules load when it starts. After `auditd.conf` changed, a running auditd reads it again (`auditctl --signal reload`).
+again and fails the run. `/etc/audit/audit.rules.prev`, which `augenrules` writes, is put back as it was.
+
+What `auditd.conf` sets is decided by the collection's reader of auditd's own rules
+(`plugins/module_utils/compliance/auditconf.py`), which the unit tests check against a verdict table of the real auditd
+of each Molecule image (`tests/fixtures/auditd_conf/verdicts.json`, made with `make auditd-conf-verdicts`; ADR 0030).
+Every file the role would write is read that way first, and anything that auditd refuses, or that the reader cannot
+tell, is refused. After `auditd.conf` changed, a running auditd is asked to read it again (`auditctl --signal reload`);
+auditd does not report whether it took the file.
+
+A result that changed something carries what is known about its effect as its `reason`:
+
+| Reason of an `applied` or `restored` result | Meaning |
+|---|---|
+| none (audit rules) | The rule set was loaded and every line checked with `auditctl -l` |
+| `locked_until_reboot` (audit rules) | The loaded rules are locked (`-e 2`): the files changed, the kernel's rules change at the next boot |
+| `takes_effect_at_start` | auditd does not run here (containers): the rules or the file take effect when it starts |
+| `reload_not_confirmed` (auditd.conf) | The running auditd was asked to reload and still runs, but does not report whether it took the file |
+| `restart_required` (auditd.conf) | `local_events`, which auditd reads only when it starts |
 
 The statuses that refuse to act, each with a reason, nothing changed and the ledger entry kept:
 
 | Status (apply) or reason (cleanup) | When |
 |---|---|
 | `notapplicable` (apply) | `/etc/audit/rules.d` or `/etc/audit/auditd.conf` does not exist (no audit package), or the host is not x86_64, whose system call tables the lines name |
-| `compliant` (apply) | Every line of an audit rule is already in another file of `/etc/audit/rules.d`; nothing is written or recorded |
-| `duplicate_rule` (apply) | Some lines of the rule are in another file, or they are there and the drop-in exists as well: `auditctl` would stop at the repeated rule |
+| `compliant` (apply) | Every line of an audit rule is already in another file of `/etc/audit/rules.d`, and the running auditd (rules not locked) lists them while `augenrules --check` finds the files unchanged since the load; nothing is written or recorded |
+| `duplicate_rule` (apply) | Some lines of the rule are in another file, they are there and the drop-in exists as well (`auditctl` would stop at the repeated rule), or they are all there but the running auditd cannot confirm them (no running auditd, locked rules, a line not loaded, files changed since the load) |
+| `conflicting_rule` (apply) | Another rule file deletes rules that match this one (`-W`, `-d`, or `-D` with a selection such as `-D -k <key>`), which `augenrules` keeps in place |
 | `watch_target_missing` (apply) | The directory of a watched path does not exist; the kernel refuses such a watch |
 | `duplicate_setting` (apply) | `auditd.conf` sets the setting more than once (the check reads the first, auditd keeps the last) |
-| `invalid_config` (apply) | With the lines of the run, `space_left` would not be larger than `admin_space_left` (percentages converted with the size of the log's file system) or incremental flushing would have `freq = 0`; auditd would refuse the file at its next start |
+| `invalid_config` (apply) | auditd would refuse `auditd.conf` with the lines of the run, or as it is (a line it cannot read: a TAB, CR, VT or FF in a word, a trailing comment, an unknown keyword or value; `space_left` not larger than `admin_space_left`; incremental flushing with `freq` 0, with auditd's compiled defaults for unset settings), the reader cannot tell (an `exec` action, a NUL byte, bytes outside ASCII, percentages it cannot compare), or the file does not end with a newline or holds a carriage return anywhere; nothing is written |
 | `unsupported_value` (apply) | An alternation of the profile offers none of the values that the collection writes |
 | `prior_too_large` (apply) | The line that sets the setting is longer than 1024 characters |
 | `not_regular_file`, `not_directory` | A drop-in, `auditd.conf` or `/etc/audit/rules.d` is a symbolic link or of the wrong type |
 | `not_owned` | A file at the drop-in's path does not carry the collection's header |
 | `method_changed` | The ledger entry records another method, or none |
 | `modified_since_apply` (cleanup) | The drop-in or the line is no longer what the collection wrote |
+| `no_final_newline` (cleanup) | `auditd.conf` no longer ends with a newline, so a line could not be written back byte for byte |
+| `carriage_return` (cleanup) | `auditd.conf` holds a carriage return, which `lineinfile` would drop or read as a line break, so a line could not be written back byte for byte |
 | `invalid_record`, `target_absent` (cleanup) | The record is malformed, or `auditd.conf` is gone |
 
 A drop-in that is already gone at cleanup, or a setting that is already back at its recorded prior line, is

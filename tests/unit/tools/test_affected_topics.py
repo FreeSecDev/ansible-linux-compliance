@@ -203,9 +203,9 @@ def role_task_files() -> list[str]:
 def test_every_role_task_file_belongs_to_the_native_topic_of_its_name(trees: Trees) -> None:
     """A task file belongs to the native family that names it; a helper that no family names,
     such as the audit rule drop-ins that several auditd topics share (named as helpers of the
-    ``auditd`` umbrella family), to the topics of the task
-    files that include it. Families without native rules (``auditd``, whose name starts
-    ``auditd_conf``) may own a file as well; they plan no leg."""
+    ``auditd`` umbrella family), to the topics of the task files that include it. A family
+    without native rules may own a file as well, as ``auditd`` owns ``auditd_conf.yml``, whose
+    name starts with ``auditd_``; it plans no leg."""
     files = role_task_files()
     assert files
     families = native()

@@ -213,23 +213,6 @@ applied:
 pre_states:
   - name: as built
     audit: true
-  - name: an administrator's file with the time zone watch
-    audit: false
-    modes:
-      - rule
-    files:
-      - path: /etc/audit/rules.d/40-site.rules
-        content: |
-          -w /etc/localtime -p wa -k time-change
-          -a always,exit -F arch=b32 -F path=/etc/localtime -F perm=wa -k time-change
-          -a always,exit -F arch=b64 -F path=/etc/localtime -F perm=wa -k time-change
-    unchanged:
-      - rule: audit_rules_time_watch_localtime
-        status: compliant
-    applied:
-      files:
-        - path: /etc/audit/rules.d/50-freesecdev-audit-rules-time-watch-localtime.rules
-          exists: false
   - name: auditd running in a virtual machine
     audit: false
     requires:

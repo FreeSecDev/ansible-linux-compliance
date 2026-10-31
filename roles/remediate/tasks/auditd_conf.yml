@@ -150,10 +150,15 @@
             'method_changed' if prior.method | default('unknown') != 'conf_line'
             else 'target_absent' if not exists
             else 'not_regular_file' if not regular
+            else 'no_final_newline' if __linux_compliance_remediate_ac_lines | length > 0
+                 and __linux_compliance_remediate_ac_lines | last != ''
             else 'invalid_record' if written is not string or prior.setting | default('') != setting
                  or written is not match('^' ~ setting ~ ' = [^ ]+$')
                  or (original is not none and (original is not string
                      or __linux_compliance_remediate_newline in original))
+            else 'carriage_return' if found == [written] and (__linux_compliance_remediate_ac_lines
+                 | select('search', __linux_compliance_remediate_carriage_return) | list | length > 0
+                 or (original is string and __linux_compliance_remediate_carriage_return in original))
             else none if found == [written]
             else none if original is none and found == []
             else none if original is string and found == [original]
@@ -239,12 +244,41 @@
   tags:
     - always
 
+- name: Audit daemon settings | Read the file as auditd reads it, to find the log whose file system sizes percentages
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_ac_first_reading: >-
+      {{ __linux_compliance_remediate_ac_lines | join(__linux_compliance_remediate_newline)
+         | freesecdev.linux_compliance.auditd_conf_reading }}
+  tags:
+    - always
+
+- name: Audit daemon settings | Read the size of the file system of the audit log, for limits in percent
+  freesecdev.linux_compliance.audit_control:
+    action: status
+    log_directory: >-
+      {{ ((__linux_compliance_remediate_ac_first_reading.settings.log_file | default([]) | last).value
+          if __linux_compliance_remediate_ac_first_reading.settings.log_file | default([]) | length > 0
+          else __linux_compliance_remediate_auditd_log_file) | dirname }}
+  register: __linux_compliance_remediate_ac_space
+  tags:
+    - always
+
+- name: Audit daemon settings | Read the file as auditd reads it, with the size of the log's file system
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_ac_reading: >-
+      {{ __linux_compliance_remediate_ac_lines | join(__linux_compliance_remediate_newline)
+         | freesecdev.linux_compliance.auditd_conf_reading(__linux_compliance_remediate_ac_space.log_megabytes) }}
+  tags:
+    - always
+
 - name: Audit daemon settings | Decide for every rule to apply whether its line can be written and satisfies the check
   ansible.builtin.set_fact:
     __linux_compliance_remediate_ac_plan: >-
       {%- set plan = {} -%}
       {%- set exists = __linux_compliance_remediate_ac_stat.stat.exists | default(false) -%}
       {%- set regular = __linux_compliance_remediate_ac_stat.stat.isreg | default(false) -%}
+      {%- set reading = __linux_compliance_remediate_ac_reading -%}
+      {%- set accepted = reading.accepted is sameas true -%}
       {%- for rule in __linux_compliance_remediate_family.apply -%}
       {%- set prior = __linux_compliance_remediate_ac_records[rule.rule_id] -%}
       {%- set setting = rule.parameters.setting -%}
@@ -253,8 +287,9 @@
       {%- set write = __linux_compliance_remediate_ac_writes[rule.rule_id] -%}
       {%- set found = __linux_compliance_remediate_ac_lines
             | select('match', '(?i)^[ \t]*' ~ setting ~ '[ \t]*=') | list -%}
-      {%- set strict = found | length == 1 and found[0] is match('^ *' ~ setting ~ ' += +[^ ]+ *$') -%}
-      {%- set current = (found[0].split('=', 1)[1] | trim) if strict else none -%}
+      {%- set read = reading.settings[setting] | default([]) -%}
+      {%- set own = found | length == 1 and read | length == 1 and read[0].text == found[0] -%}
+      {%- set current = read[0].value if accepted and own else none -%}
       {%- set satisfied = current is not none and (
             (compare == 'choice' and (current | lower) in (value.split('|') | map('lower') | list))
             or (compare == 'exact' and current == value)
@@ -269,7 +304,8 @@
             else 'not_regular_file' if not regular
             else 'duplicate_setting' if found | length > 1
             else 'compliant' if satisfied
-            else 'compliant' if found | length == 0 and rule.parameters.absent_compliant | default(false)
+            else 'compliant' if accepted and found | length == 0 and read | length == 0
+                 and rule.parameters.absent_compliant | default(false)
             else 'unsupported_value' if write is none
             else 'prior_too_large' if found | length == 1 and found[0] | length > 1024
             else 'applied' -%}
@@ -293,81 +329,71 @@
   tags:
     - always
 
-- name: Audit daemon settings | Read the size of the file system of the audit log, for limits in percent
+- name: Audit daemon settings | Read the file as auditd will read it after the lines of this run
   vars:
-    __linux_compliance_remediate_ac_log_lines: >-
-      {{ __linux_compliance_remediate_ac_lines | select('match', '(?i)^[ \t]*log_file[ \t]*=') | list }}
-  freesecdev.linux_compliance.audit_control:
-    action: status
-    log_directory: >-
-      {{ ((__linux_compliance_remediate_ac_log_lines | last | regex_replace('(?i)^[ \t]*log_file[ \t]*=[ \t]*', '')
-          | trim) if __linux_compliance_remediate_ac_log_lines | length > 0
-         else __linux_compliance_remediate_auditd_defaults.log_file) | dirname }}
-  register: __linux_compliance_remediate_ac_space
-  when: >-
-    __linux_compliance_remediate_ac_plan | dict2items | selectattr('value.status', 'equalto', 'applied')
-    | selectattr('value.setting', 'in', ['space_left', 'admin_space_left']) | list | length > 0
-  tags:
-    - always
-
-- name: Audit daemon settings | Check the settings that auditd refuses together, as they will be after this run
-  vars:
-    __linux_compliance_remediate_ac_applied: >-
-      {{ __linux_compliance_remediate_ac_plan | dict2items | selectattr('value.status', 'equalto', 'applied')
-         | map(attribute='value') | items2dict(key_name='setting', value_name='value') }}
-    __linux_compliance_remediate_ac_effective: >-
-      {%- set effective = {} -%}
-      {%- for key, fallback in __linux_compliance_remediate_auditd_defaults.items() -%}
-      {%- set found = __linux_compliance_remediate_ac_lines
-            | select('match', '(?i)^[ \t]*' ~ key ~ '[ \t]*=') | list -%}
-      {%- set current = (found | last | regex_replace('(?i)^[ \t]*' ~ key ~ '[ \t]*=[ \t]*', '') | trim)
-            if found | length > 0 else fallback -%}
-      {%- set _ = effective.update({key: __linux_compliance_remediate_ac_applied[key] | default(current)}) -%}
+    __linux_compliance_remediate_ac_final_lines: >-
+      {%- set ns = namespace(lines=__linux_compliance_remediate_ac_lines | list) -%}
+      {%- for rule in __linux_compliance_remediate_family.apply
+            if __linux_compliance_remediate_ac_plan[rule.rule_id].status == 'applied' -%}
+      {%- set planned = __linux_compliance_remediate_ac_plan[rule.rule_id] -%}
+      {%- set pattern = '(?i)^[ \t]*' ~ planned.setting ~ '[ \t]*=' -%}
+      {%- set matches = ns.lines | select('match', pattern) | list -%}
+      {%- if matches | length > 0 -%}
+      {%- set lines = [] -%}
+      {%- for line in ns.lines -%}
+      {%- set _ = lines.append(planned.written if line is match(pattern) else line) -%}
       {%- endfor -%}
-      {{ effective }}
-    __linux_compliance_remediate_ac_size_mb: >-
-      {{ __linux_compliance_remediate_ac_space.log_megabytes | default(none) }}
+      {%- set ns.lines = lines -%}
+      {%- elif ns.lines | length > 0 and ns.lines | last == '' -%}
+      {%- set ns.lines = ns.lines[:-1] + [planned.written, ''] -%}
+      {%- else -%}
+      {%- set ns.lines = ns.lines + [planned.written, ''] -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {{ ns.lines }}
   ansible.builtin.set_fact:
-    __linux_compliance_remediate_ac_conflict: >-
-      {%- set effective = __linux_compliance_remediate_ac_effective -%}
-      {%- set size = __linux_compliance_remediate_ac_size_mb -%}
-      {%- set space = effective.space_left | string -%}
-      {%- set admin = effective.admin_space_left | string -%}
-      {%- set numbers = space is match('^[0-9]{1,9}%?$') and admin is match('^[0-9]{1,9}%?$') -%}
-      {%- set both = numbers and (space.endswith('%')) == (admin.endswith('%')) -%}
-      {%- set space_mb = (space[:-1] | int * (size | int)) // 100 if space.endswith('%') else space | int -%}
-      {%- set admin_mb = (admin[:-1] | int * (size | int)) // 100 if admin.endswith('%') else admin | int -%}
-      {%- set touched = __linux_compliance_remediate_ac_applied.keys() | list -%}
-      {{ none if touched | length == 0
-         else ('auditd refuses space_left ' ~ space ~ ' that is not larger than admin_space_left ' ~ admin)
-         if (('space_left' in touched or 'admin_space_left' in touched) and numbers
-             and ((both and space.rstrip('%') | int <= admin.rstrip('%') | int)
-                  or (not both and size not in [none, '', 'None'] and space_mb <= admin_mb)))
-         else ('space_left ' ~ space ~ ' and admin_space_left ' ~ admin ~ ' differ in unit and the size of the file'
-               ~ ' system of ' ~ effective.log_file ~ ' is unknown, so the collection cannot check that auditd'
-               ~ ' accepts them')
-         if (('space_left' in touched or 'admin_space_left' in touched) and numbers and not both
-             and size in [none, '', 'None'])
-         else ('auditd refuses incremental flushing with freq 0')
-         if (('flush' in touched or 'freq' in touched)
-             and (effective.flush | lower) in ['incremental', 'incremental_async']
-             and (effective.freq | string) is match('^0+$'))
-         else none }}
+    __linux_compliance_remediate_ac_final_reading: >-
+      {{ __linux_compliance_remediate_ac_final_lines | join(__linux_compliance_remediate_newline)
+         | freesecdev.linux_compliance.auditd_conf_reading(__linux_compliance_remediate_ac_space.log_megabytes) }}
   tags:
     - always
 
-- name: Audit daemon settings | Refuse every line of this run when auditd would refuse the settings together
+- name: Audit daemon settings | Refuse every line of this run when auditd would not read the file as the run means
+  vars:
+    __linux_compliance_remediate_ac_changing: >-
+      {{ __linux_compliance_remediate_ac_plan.values() | selectattr('status', 'equalto', 'applied') | list
+         | length > 0 }}
+    __linux_compliance_remediate_ac_unterminated: >-
+      {{ __linux_compliance_remediate_ac_lines | length > 0 and __linux_compliance_remediate_ac_lines | last != '' }}
+    __linux_compliance_remediate_ac_carriage: >-
+      {{ __linux_compliance_remediate_ac_lines | select('search', __linux_compliance_remediate_carriage_return) | list
+         | length > 0 }}
   ansible.builtin.set_fact:
     __linux_compliance_remediate_ac_plan: >-
-      {{ __linux_compliance_remediate_ac_plan
-         | combine(dict(__linux_compliance_remediate_ac_plan | dict2items
-                        | selectattr('value.status', 'equalto', 'applied') | map(attribute='key')
-                        | zip(__linux_compliance_remediate_ac_plan | dict2items
-                              | selectattr('value.status', 'equalto', 'applied') | map(attribute='value')
-                              | map('combine', {'status': 'invalid_config',
-                                                'reason': __linux_compliance_remediate_ac_conflict}))),
-                   recursive=true) }}
-  when: __linux_compliance_remediate_ac_conflict is string
+      {%- set plan = {} -%}
+      {%- set final = __linux_compliance_remediate_ac_final_reading -%}
+      {%- set refused = final.accepted is not sameas true -%}
+      {%- set reason = ('auditd would ' ~ ('refuse' if final.accepted is sameas false else 'not be known to accept')
+                        ~ ' ' ~ __linux_compliance_remediate_auditd_conf
+                        ~ (' with the lines of this run: ' if __linux_compliance_remediate_ac_changing
+                           else ' as it is: ') ~ final.reason)
+            if refused
+            else (__linux_compliance_remediate_auditd_conf ~ ' holds a carriage return, which lineinfile reads as'
+                  ~ ' the end of a line where auditd does not, so writing a line would drop it or split the line it'
+                  ~ ' is in')
+            if __linux_compliance_remediate_ac_carriage
+            else (__linux_compliance_remediate_auditd_conf ~ ' does not end with a newline, so auditd skips its last'
+                  ~ ' line, and writing a line would change that line as well') -%}
+      {%- set statuses = ['applied', 'compliant'] if refused else ['applied'] -%}
+      {%- for rule_id, planned in __linux_compliance_remediate_ac_plan.items() -%}
+      {%- set _ = plan.update({rule_id: planned | combine({'status': 'invalid_config', 'reason': reason})
+            if planned.status in statuses else planned}) -%}
+      {%- endfor -%}
+      {{ plan }}
+  when: >-
+    __linux_compliance_remediate_ac_final_reading.accepted is not sameas true
+    or ((__linux_compliance_remediate_ac_unterminated or __linux_compliance_remediate_ac_carriage)
+        and __linux_compliance_remediate_ac_changing)
   tags:
     - always
 
@@ -462,7 +488,7 @@
   tags:
     - always
 
-- name: Audit daemon settings | Ask the running auditd to read the checked configuration again
+- name: Audit daemon settings | Ask the running auditd to read the checked file again, which it does not confirm
   freesecdev.linux_compliance.audit_control:
     action: reload
   register: __linux_compliance_remediate_ac_reload
@@ -495,20 +521,30 @@
             | map(attribute='__linux_compliance_remediate_ac_rule.rule_id') | list)
          + (__linux_compliance_remediate_ac_record.results | default([]) | selectattr('changed')
             | map(attribute='__linux_compliance_remediate_ac_rule.rule_id') | list) }}
-    __linux_compliance_remediate_ac_loading: >-
-      {{ '; auditd read the configuration again' if __linux_compliance_remediate_ac_reload.reloaded | default(false)
-         else '; auditd does not run here, so it reads the configuration when it starts' }}
+    __linux_compliance_remediate_ac_signalled: "{{ __linux_compliance_remediate_ac_reload.reloaded | default(false) }}"
+    __linux_compliance_remediate_ac_effect: >-
+      {{ {'reload_not_confirmed': '; the running auditd was asked to read the file again and still runs, but auditd'
+                                  ~ ' does not report whether it took the file (it keeps its old configuration when'
+                                  ~ ' it refuses one); the file was checked against the reader of auditd first',
+          'restart_required': '; auditd reads this setting only when it starts, so it takes effect at the next start',
+          'takes_effect_at_start': '; auditd does not run here, so it reads the file when it starts'} }}
   ansible.builtin.set_fact:
     __linux_compliance_remediate_results: >-
       {%- set results = [] -%}
+      {%- set startup = __linux_compliance_remediate_auditd_startup_settings -%}
       {%- for rule in __linux_compliance_remediate_family.cleanup -%}
       {%- set planned = __linux_compliance_remediate_ac_cleanup_plan[rule.rule_id] -%}
+      {%- set changed = rule.rule_id in __linux_compliance_remediate_ac_changed_ids and planned.edit != 'none' -%}
+      {%- set effect = none if not changed
+            else ('restart_required' if rule.parameters.setting in startup else 'reload_not_confirmed')
+            if __linux_compliance_remediate_ac_signalled
+            else 'takes_effect_at_start' -%}
       {%- set _ = results.append({
             'rule_id': rule.rule_id,
             'family': rule.family,
             'action': 'cleanup',
             'status': 'restored' if planned.reason is none else 'cleanup_incomplete',
-            'reason': planned.reason,
+            'reason': planned.reason if planned.reason is not none else effect,
             'changed': rule.rule_id in __linux_compliance_remediate_ac_changed_ids,
             'message': __linux_compliance_remediate_auditd_conf ~ ': '
                        ~ (('restored (' ~ ('the original line was written back' if planned.edit == 'restore'
@@ -516,23 +552,28 @@
                                           if planned.edit == 'remove'
                                           else 'the setting was already back at its recorded prior state, so'
                                                ~ ' nothing was written')
-                           ~ __linux_compliance_remediate_ac_loading ~ ')') if planned.reason is none
+                           ~ __linux_compliance_remediate_ac_effect[effect] | default('') ~ ')')
+                          if planned.reason is none
                           else 'cleanup_incomplete (' ~ planned.reason
                                ~ '; nothing was changed, the ledger entry is kept and the cleanup is retried on the'
                                ~ ' next run)')}) -%}
       {%- endfor -%}
       {%- for rule in __linux_compliance_remediate_family.apply -%}
       {%- set planned = __linux_compliance_remediate_ac_plan[rule.rule_id] -%}
+      {%- set effect = none if planned.status != 'applied'
+            else ('restart_required' if planned.setting in startup else 'reload_not_confirmed')
+            if __linux_compliance_remediate_ac_signalled
+            else 'takes_effect_at_start' -%}
       {%- set _ = results.append({
             'rule_id': rule.rule_id,
             'family': rule.family,
             'action': 'apply',
             'status': planned.status,
-            'reason': planned.reason,
+            'reason': planned.reason if planned.status != 'applied' else effect,
             'changed': rule.rule_id in __linux_compliance_remediate_ac_changed_ids,
             'message': __linux_compliance_remediate_auditd_conf ~ ': ' ~ planned.setting ~ ' ' ~ planned.status
                        ~ ((' (' ~ planned.reason ~ '; nothing was changed)') if planned.reason
-                          else (' (' ~ planned.written ~ __linux_compliance_remediate_ac_loading ~ ')')
+                          else (' (' ~ planned.written ~ __linux_compliance_remediate_ac_effect[effect] ~ ')')
                           if planned.status == 'applied' else '')}) -%}
       {%- endfor -%}
       {{ __linux_compliance_remediate_results + results }}

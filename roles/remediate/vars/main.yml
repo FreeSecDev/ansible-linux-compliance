@@ -17,6 +17,7 @@ __linux_compliance_remediate_login_defs_umask_read_pattern: '^(0[0-7]{0,2}|00[0-
 __linux_compliance_remediate_login_defs_base0_pattern: '^"?[+-]?(0[xX][0-9a-fA-F]+|0[0-7]*|[1-9][0-9]*)"?$'
 __linux_compliance_remediate_login_defs_getdef_number_pattern: '^\+?(0[xX][0-9a-fA-F]+|0[0-7]*|[1-9][0-9]*)$'
 __linux_compliance_remediate_newline: "\n"
+__linux_compliance_remediate_carriage_return: "\r"
 __linux_compliance_remediate_backslash: "\\"
 __linux_compliance_remediate_sshd_main: /etc/ssh/sshd_config
 __linux_compliance_remediate_sshd_directory: /etc/ssh/sshd_config.d
@@ -55,9 +56,6 @@ __linux_compliance_remediate_auditd_choice_order:
   - numeric
   - single
   - halt
-__linux_compliance_remediate_auditd_defaults:
-  space_left: "75"
-  admin_space_left: "50"
-  flush: incremental_async
-  freq: "50"
-  log_file: /var/log/audit/audit.log
+__linux_compliance_remediate_auditd_log_file: /var/log/audit/audit.log
+__linux_compliance_remediate_auditd_startup_settings:
+  - local_events

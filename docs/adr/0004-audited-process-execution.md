@@ -1071,6 +1071,17 @@ and resolved in the trusted directories like `oscap`:
   and loads that file with `auditctl -R`. The helper runs it without a shell of its own, with the fixed environment and
   a timeout; its command line takes nothing from the caller. Reimplementing how it joins the files would risk loading
   now a set that differs from the one loaded at the next boot.
+- `augenrules` with exactly `--check` as well, the second of `AUGENRULES_FORMS`: the helper's argv is
+  `["<trusted directory>/augenrules", "--check"]`, nothing else. With `--check` the script of the audit packages pinned
+  in the Molecule images (3.1.2 and 3.1.5) joins the files of `/etc/audit/rules.d` into a temporary file that it makes
+  with `mktemp /tmp/aurules.XXXXXXXX`, compares that file with `/etc/audit/audit.rules`, prints `No change`,
+  `Rules have changed and should be updated` or `No rules`, removes the temporary file and exits 0. It never copies the
+  result to `/etc/audit/audit.rules`, never writes `audit.rules.prev` and never runs `auditctl -R`: the load runs only
+  with `--load`. When nothing changed it also runs `auditctl -s` to report locked rules, which reads only. The module
+  `audit_control` runs it in `status` to learn whether the rules of the files are the ones the last load read
+  (`current`), so that the remediate role reports a rule that another file holds as compliant only when the real
+  reader confirms it: the running auditd lists it (`auditctl -l`) and `augenrules --check` finds the files unchanged.
+  Any other output, a timeout or a non-zero status gives `current: null`, which the role treats as unconfirmed.
 
 The module never passes a rule on a command line. Before it runs `augenrules --load` it reads every file that
 `augenrules` reads (bounded: 512 files of at most 1 MiB, regular files and links to them, names that end in `.rules`
@@ -1079,7 +1090,7 @@ without a leading dot) and refuses to load when two places hold the same rule or
 drop-ins of its run when the load fails. Only an `auditctl` that is not found in the trusted directories is reported as
 `available: false`; one that the helper refuses fails the module. Unit tests in
 `tests/unit/plugins/module_utils/compliance/test_process.py` refuse every other form, and
-`tests/unit/plugins/modules/test_audit_control.py` covers the module.
+`tests/unit/plugins/modules/test_audit_control.py` covers the module, including every output of `--check`.
 
 To compare a `space_left` or `admin_space_left` given in percent, the auditd.conf topic needs the size of the file
 system of the audit log, which the mount facts of ansible-core did not report on the hosts tried. The file helper
