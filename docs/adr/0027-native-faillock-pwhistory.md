@@ -168,7 +168,7 @@ Rocky Linux, `apt-get source` on Ubuntu), compiles the module's own `args_parse`
 (`pam_faillock.c`, `faillock_config.c`) and `parse_option` and `parse_config_file` (`pam_pwhistory.c`,
 `pwhistory_config.c`, `pam_modutil_searchkey.c`) into a small probe with stubs for logging, and records what each reader
 stores. The table `tests/fixtures/pam_conf/reader_verdicts.json` names the installed and source versions of both
-platforms. `tests/unit/plugins/filter/test_pam_conf_oracle.py` requires that the filter reads every case exactly as
+platforms. `tests/unit/tools/test_pam_conf_oracle.py` requires that the filter reads every case exactly as
 both readers do, that the module lines yield the arguments that libpam passes, and that no decision is `compliant` or
 `applied` while a real reader reads the file, before or after the change, looser than the profile requires. Only the
 generator runs compilers, and only inside the Molecule images; CI reads the committed table.

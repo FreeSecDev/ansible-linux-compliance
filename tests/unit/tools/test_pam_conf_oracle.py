@@ -21,7 +21,7 @@ import pytest
 from ansible_collections.freesecdev.linux_compliance.plugins.filter import pam_conf
 from tools.pam import reader_corpus
 
-REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
+REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 TABLE = REPOSITORY_ROOT / reader_corpus.TABLE
 PLATFORMS = frozenset({"ubuntu", "rhel_compatible"})
 Key = tuple[str, str, tuple[str, ...], str]

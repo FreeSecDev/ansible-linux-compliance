@@ -829,7 +829,7 @@ The reader verdict table of ADR 0027 (`tests/fixtures/pam_conf/reader_verdicts.j
 `make pam-reader-verdicts` builds the images if needed and runs `tools/pam/oracle/probe-in-image.sh` in a container of
 each, which fetches the source package of the installed `pam`, compiles the readers of `pam_faillock` and
 `pam_pwhistory` into a probe and records what they read for every case of `tools/pam/reader_corpus.py`. Run it after a
-change of the corpus or of the images' pam package and commit the table; `tests/unit/plugins/filter/test_pam_conf_oracle.py`
+change of the corpus or of the images' pam package and commit the table; `tests/unit/tools/test_pam_conf_oracle.py`
 fails until the table covers the corpus.
 
 ### CI legs
