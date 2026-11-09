@@ -82,9 +82,17 @@ UFW_CONF: Final[str] = "/etc/ufw/ufw.conf"
 UFW_DEFAULT: Final[str] = "/etc/default/ufw"
 UFW_SYSCTL: Final[str] = "/etc/ufw/sysctl.conf"
 UFW_ENABLED: Final[frozenset[str]] = frozenset({"yes", "YES"})
-SHELL_ASSIGNMENT: Final[str] = r"^(?:export\s+)?{name}=([\"']?)([^\"'\s]*)\1$"
+SHELL_PLAIN: Final[str] = (
+    r"(?:export[ \t]+)?([A-Za-z_][A-Za-z0-9_]*)="
+    r"(?:([A-Za-z0-9_./,:+@%-]*)|'([^']*)'|\"([^\"$`\\]*)\")"
+)
+SHELL_BLANK: Final[str] = " \t"
+UFW_VALUE: Final[str] = r"[A-Za-z0-9_./-]*"
+UFW_VARIABLES: Final[tuple[str, ...]] = ("ENABLED", "IPT_SYSCTL")
 KINDS: Final[frozenset[str]] = frozenset({"file", "link", "directory", "other"})
 READABLE_KINDS: Final[frozenset[str]] = frozenset({"file", "link"})
+LINK_TARGETS: Final[frozenset[str]] = frozenset({"file", "null"})
+KERNEL_INTEGER: Final[str] = r"-?(?:0|[1-9][0-9]{0,18})"
 
 
 class ConfigError(ValueError):
@@ -93,11 +101,16 @@ class ConfigError(ValueError):
 
 @dataclass(frozen=True)
 class Entry:
-    """One entry of a configuration directory, ``/etc/sysctl.conf`` or a file read after boot."""
+    """One entry of a configuration directory, ``/etc/sysctl.conf`` or a file read after boot.
+
+    ``target`` says what a link points to: ``file`` (a regular file, whose content is ``text``),
+    ``null`` (``/dev/null``) or anything else (a FIFO, a device, a directory or nothing).
+    """
 
     path: str
     kind: str
     text: str | None
+    target: str | None = None
 
 
 @dataclass(frozen=True)
@@ -119,20 +132,40 @@ class Assignment:
 
 
 def load_entries(raw: Iterable[Mapping[str, object]]) -> list[Entry]:
-    """Return the entries of ``raw``, each a mapping with ``path``, ``kind`` and ``text``."""
+    """Return the entries of ``raw``.
+
+    Each is a mapping with ``path``, ``kind``, ``text`` and, for a link, ``target``.
+    """
     entries: list[Entry] = []
     for item in raw:
         path = item.get("path")
         kind = item.get("kind")
         text = item.get("text")
+        target = item.get("target")
         if not isinstance(path, str) or not path.startswith("/") or kind not in KINDS:
             message = f"an entry needs an absolute path and a kind of {sorted(KINDS)}: {dict(item)}"
             raise ConfigError(message)
         if text is not None and not isinstance(text, str):
             message = f"the text of {path} must be a string or null"
             raise ConfigError(message)
-        entries.append(Entry(path=path, kind=str(kind), text=text))
+        if target is not None and not isinstance(target, str):
+            message = f"the target of {path} must be a string or null"
+            raise ConfigError(message)
+        entries.append(Entry(path=path, kind=str(kind), text=text, target=target))
     return entries
+
+
+def kernel_integer(value: object) -> int | None:
+    """Return the integer that the kernel takes from ``value`` for an integer parameter, or None.
+
+    The kernel reads an integer with ``proc_get_long``, in base 0: a leading ``0`` is octal and
+    ``0x`` hexadecimal, a leading ``+`` and a value of 21 characters or more are refused. Only
+    the plain decimal form (``^-?(0|[1-9][0-9]{0,18})$``) reads the same in base 10 and base 0, so
+    any other form gives None, which the caller treats as a value that is not accepted.
+    """
+    if not isinstance(value, str) or re.fullmatch(KERNEL_INTEGER, value) is None:
+        return None
+    return int(value)
 
 
 def _bytes(text: str) -> bytes:
@@ -178,7 +211,9 @@ def unsupported(entries: Sequence[Entry]) -> list[str]:
 
     procps lists every ``*.conf`` name of its directories, whatever the kind of the entry, and
     expands it with glob(3), so a name with a glob, brace, tilde or backslash character may read
-    other files a second time, at its own place in the order; procps opens a key with a ``..``
+    other files a second time, at its own place in the order; a reader blocks on a FIFO and reads
+    a device such as ``/dev/zero`` without end, so such an entry, and a link to anything but a
+    regular file or ``/dev/null``, is refused; procps opens a key with a ``..``
     component as the kernel resolves it, which may leave ``/proc/sys`` and come back; systemd stops
     reading a file at a line of 1 MiB or more; and some keys are refused line by line (see
     :func:`assignments`).
@@ -189,6 +224,12 @@ def unsupported(entries: Sequence[Entry]) -> list[str]:
         for entry in _listed(entries)
         if PROCPS_NAME_EXPANSION & set(entry.path.rsplit("/", 1)[1])
     ]
+    reasons.extend(
+        f"{entry.path}: a FIFO, socket or device, or a link to something other than a regular"
+        " file or /dev/null, on which a reader may block or which it may read without end"
+        for entry in _listed(entries)
+        if entry.kind == "other" or (entry.kind == "link" and entry.target not in LINK_TARGETS)
+    )
     for entry in ordered_files(entries, PROCPS):
         lines = list(assignments(entry, PROCPS))
         if any(item.escapes for item in lines):
@@ -207,52 +248,79 @@ def unsupported(entries: Sequence[Entry]) -> list[str]:
     return list(dict.fromkeys(reasons))
 
 
-def _shell_value(text: str | None, name: str) -> tuple[str | None, bool]:
-    """Return the last value that a sourced shell file assigns to ``name``, and whether it is plain.
+def _shell_assignments(text: str) -> dict[str, str] | None:
+    """Return the variables that a sourced shell file assigns, or None when it does more.
 
-    Only ``NAME=value``, quoted or not and optionally exported, is plain; any other line that
-    names the variable makes the file unreadable for the model.
+    Only comments, blank lines and plain ``NAME=value`` assignments, optionally exported, whose
+    value is a word without expansions or a quoted string without ``$``, backticks or
+    backslashes, are read; any other line (``;``, ``&&``, a command, ``.`` or ``source``, an
+    expansion, a line continuation) makes the file one that the model does not follow.
     """
-    value = None
-    for raw in (text or "").split("\n"):
-        line = raw.strip()
-        if not line or line.startswith("#") or name not in line:
+    values: dict[str, str] = {}
+    for raw in text.split("\n"):
+        line = raw.strip(SHELL_BLANK)
+        if not line or line.startswith("#"):
             continue
-        found = re.match(SHELL_ASSIGNMENT.format(name=name), line)
+        found = re.fullmatch(SHELL_PLAIN, line)
         if found is None:
-            return None, False
-        value = found.group(2)
-    return value, True
+            return None
+        name, word, single, double = found.groups()
+        values[name] = word if word is not None else single if single is not None else double
+    return values
 
 
-def _ufw_enabled(text: str) -> tuple[bool, list[str]]:
-    """Return whether ufw's sourced files enable it, and what is unclear."""
-    enabled, plain = _shell_value(text, "ENABLED")
-    if not plain:
-        return False, [f"{UFW_CONF}: ENABLED is set in a form the model does not read"]
-    if enabled not in UFW_ENABLED and (enabled or "").lower() == "yes":
-        return False, [f"{UFW_CONF}: ENABLED is a spelling of yes that ufw may not read as yes"]
-    return enabled in UFW_ENABLED, []
+def _ufw_values(by_path: Mapping[str, Entry]) -> tuple[dict[str, str] | None, list[str]]:
+    """Return the variables of ufw's sourced files, in ufw's order, and what is unclear."""
+    if UFW_CONF not in by_path:
+        return {}, []
+    values: dict[str, str] = {}
+    for path in (UFW_DEFAULT, UFW_CONF):
+        if path not in by_path:
+            continue
+        found = _shell_assignments(by_path[path].text or "")
+        if found is None:
+            return None, [
+                (
+                    f"{path}: a line other than a comment or a plain NAME=value assignment, which"
+                    " ufw's start script runs and the collection cannot follow"
+                )
+            ]
+        values.update(found)
+    if any(re.fullmatch(UFW_VALUE, values.get(name, "")) is None for name in UFW_VARIABLES):
+        return None, [
+            (
+                f"{UFW_CONF}: ENABLED or IPT_SYSCTL holds a character other than a letter, a"
+                " digit or one of _./-, which the collection cannot follow"
+            )
+        ]
+    return values, []
 
 
 def ufw_files(entries: Sequence[Entry]) -> tuple[list[str], list[str]]:
     """Return the file that ufw applies with ``sysctl -p`` when it starts, and what is unclear.
 
     ufw sources ``/etc/default/ufw`` and then ``/etc/ufw/ufw.conf``, so a variable of either counts
-    and the later assignment wins. It applies ``IPT_SYSCTL`` only when ``ENABLED`` is ``yes`` or
+    and the later assignment wins. Both files must hold only comments, blank lines and plain
+    assignments, and ``ENABLED`` and ``IPT_SYSCTL`` only letters, digits and ``_./-``; anything
+    else is refused as unclear. ufw applies ``IPT_SYSCTL`` only when ``ENABLED`` is ``yes`` or
     ``YES``; another spelling of yes is refused as unclear. Without ``ufw.conf`` ufw is not
     installed; without ``/etc/default/ufw`` its start script may stop before it applies anything,
     which is refused as unclear when ``ufw.conf`` alone would apply the file.
     """
     by_path = {entry.path: entry for entry in entries}
-    text = "\n".join(
-        by_path[path].text or "" for path in (UFW_DEFAULT, UFW_CONF) if path in by_path
-    )
-    enabled, unclear = _ufw_enabled(text) if UFW_CONF in by_path else (False, [])
-    target, plain = _shell_value(text, "IPT_SYSCTL")
-    if not enabled or (plain and not target):
+    values, unclear = _ufw_values(by_path)
+    if values is None:
         return [], unclear
-    if not plain or target != UFW_SYSCTL:
+    enabled = values.get("ENABLED", "")
+    target = values.get("IPT_SYSCTL", "")
+    if enabled not in UFW_ENABLED or not target:
+        spelling = enabled not in UFW_ENABLED and enabled.lower() == "yes"
+        return [], (
+            [f"{UFW_CONF}: ENABLED is a spelling of yes that ufw may not read as yes"]
+            if spelling
+            else []
+        )
+    if target != UFW_SYSCTL:
         return [], [f"{UFW_DEFAULT}: ufw applies IPT_SYSCTL, which the collection cannot follow"]
     if UFW_DEFAULT not in by_path:
         return [], [f"{UFW_DEFAULT}: missing, so ufw may not start; the collection cannot follow"]
@@ -377,9 +445,10 @@ def _members(body: str) -> str | None:
 def _bracket(path: str, start: int) -> tuple[str, int] | None:
     """Return the expression of the bracket at ``start`` and the index of its ``]``, or None.
 
-    glob(3) splits a pattern at ``/`` first, so a ``[`` without a ``]`` in its component is
-    literal; a ``]`` right after ``[``, ``[!`` or ``[^`` is a member. None means that the bracket
-    holds a class, an equivalence class, a collating symbol or a range that does not translate.
+    glob(3) splits a pattern at ``/`` first, and a ``]`` right after ``[``, ``[!`` or ``[^`` is a
+    member. None means that the bracket is not closed within its component (glob(3) and fnmatch
+    disagree with each other about such a ``[`` followed by ``-`` or ``[.``) or holds a class, an
+    equivalence class, a collating symbol or a range that does not translate.
     """
     component_end = path.find("/", start)
     if component_end == -1:
@@ -389,10 +458,8 @@ def _bracket(path: str, start: int) -> tuple[str, int] | None:
     if negate:
         first += 1
     end = path.find("]", first + 1, component_end) if first < component_end else -1
-    if end == -1:
-        return re.escape("["), start
     body = path[first:end]
-    members = None if "[" in body else _members(body)
+    members = None if end == -1 or "[" in body else _members(body)
     if members is None:
         return None
     return f"[{'^/' if negate else ''}{members}]", end
@@ -402,10 +469,11 @@ def glob_pattern(path: str) -> str | None:
     """Return the regular expression, for ``re.fullmatch``, of a glob(7) pattern over a path.
 
     Both readers expand a glob with glob(3) below ``/proc/sys``: ``*`` and ``?`` never match a
-    ``/``, a bracket expression matches one character other than ``/``, an unclosed ``[`` is
-    literal, and none of them matches a ``.`` at the start of a component. A pattern that does not
-    translate exactly (a backslash escape, a brace, a character class, a range other than of
-    digits or ASCII letters, a character outside ASCII) gives None, which the model refuses.
+    ``/``, a bracket expression matches one character other than ``/``, and none of them matches a
+    ``.`` at the start of a component. A pattern that does not translate exactly (a ``[`` that is
+    not closed within its component, a backslash escape, a brace, a character class, a range other
+    than of digits or ASCII letters, a character outside ASCII) gives None, which the model
+    refuses.
     """
     if not path.isascii() or GLOB_REFUSED & set(path):
         return None
@@ -423,7 +491,7 @@ def glob_pattern(path: str) -> str | None:
             if found is None:
                 return None
             expression, end = found
-            parts.append(expression if end == index else f"{guard}{expression}")
+            parts.append(f"{guard}{expression}")
             index = end
         else:
             parts.append(re.escape(character))

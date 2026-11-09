@@ -73,7 +73,9 @@ def case_entries(name: str) -> list[dict[str, object]]:
             entries.append({"path": path, "kind": "directory", "text": None})
         elif "link" in file:
             target = posixpath.normpath(posixpath.join(posixpath.dirname(path), str(file["link"])))
-            entries.append({"path": path, "kind": "link", "text": texts.get(target)})
+            text = texts.get(target)
+            kind = "null" if target == "/dev/null" else "file" if text is not None else "other"
+            entries.append({"path": path, "kind": "link", "text": text, "target": kind})
         else:
             entries.append({"path": path, "kind": "file", "text": texts[path]})
     return entries
@@ -205,6 +207,105 @@ def test_a_key_with_a_dot_dot_component_in_ufw_s_file_is_unsupported() -> None:
     ]
 
 
+UBUNTU_UFW_DEFAULT = """# /etc/default/ufw
+#
+
+# Set to yes to apply rules to support IPv6 (no means only IPv6 on loopback
+# accepted). You will need to 'disable' and then 'enable' the firewall for
+# the changes to take affect.
+IPV6=yes
+DEFAULT_INPUT_POLICY="DROP"
+DEFAULT_OUTPUT_POLICY="ACCEPT"
+MANAGE_BUILTINS=no
+IPT_SYSCTL=/etc/ufw/sysctl.conf
+IPT_MODULES="nf_conntrack_ftp nf_nat_ftp nf_conntrack_netbios_ns"
+"""
+PLAIN_DEFAULT = "IPT_SYSCTL=/etc/ufw/sysctl.conf\n"
+UFW_APPLIED = {
+    "systemd": {"value": "2", "source": UFW},
+    "procps": {"value": "2", "source": UFW},
+}
+UFW_IGNORED = {
+    "systemd": {"value": "1", "source": "/usr/lib/sysctl.d/60-b.conf"},
+    "procps": {"value": "1", "source": "/usr/lib/sysctl.d/60-b.conf"},
+}
+
+
+@pytest.mark.parametrize(
+    ("enabled", "default"),
+    [
+        ("ENABLED=yes\nLOGLEVEL=low", UBUNTU_UFW_DEFAULT),
+        ("\tENABLED=yes\n  LOGLEVEL='low  medium'", UBUNTU_UFW_DEFAULT),
+        ("export ENABLED=yes", "export IPT_SYSCTL='/etc/ufw/sysctl.conf'\n"),
+        ('ENABLED="yes"', 'IPT_SYSCTL="/etc/ufw/sysctl.conf"\nX=a,b:c+d@e%f\n'),
+    ],
+)
+def test_plain_assignments_in_ufw_s_files_are_read(enabled: str, default: str) -> None:
+    found = sysctl_config.effective(ufw_entries(enabled, default), RP_FILTER)
+    assert readers(found) == UFW_APPLIED
+    assert found["unsupported"] == []
+
+
+@pytest.mark.parametrize(
+    ("enabled", "default", "path"),
+    [
+        ("ENABLED=yes;", PLAIN_DEFAULT, sysctl_config.UFW_CONF),
+        ("ENABLED=$VAR", PLAIN_DEFAULT, sysctl_config.UFW_CONF),
+        ("ENABLED=${E:-yes}", PLAIN_DEFAULT, sysctl_config.UFW_CONF),
+        ('ENABLED="$E"', PLAIN_DEFAULT, sysctl_config.UFW_CONF),
+        ("ENABLED=`echo yes`", PLAIN_DEFAULT, sysctl_config.UFW_CONF),
+        ("ENABLED=$(echo yes)", PLAIN_DEFAULT, sysctl_config.UFW_CONF),
+        ("ENABLED=y\\es", PLAIN_DEFAULT, sysctl_config.UFW_CONF),
+        ('ENABLED="y\\es"', PLAIN_DEFAULT, sysctl_config.UFW_CONF),
+        ("ENABLED=no \\\n", PLAIN_DEFAULT, sysctl_config.UFW_CONF),
+        ("ENABLED=\\\nyes", PLAIN_DEFAULT, sysctl_config.UFW_CONF),
+        (". /etc/ufw/more", PLAIN_DEFAULT, sysctl_config.UFW_CONF),
+        ("source /etc/ufw/more", PLAIN_DEFAULT, sysctl_config.UFW_CONF),
+        ("eval ENABLED=yes", PLAIN_DEFAULT, sysctl_config.UFW_CONF),
+        ("true && ENABLED=yes", PLAIN_DEFAULT, sysctl_config.UFW_CONF),
+        ("ENABLED=no || ENABLED=yes", PLAIN_DEFAULT, sysctl_config.UFW_CONF),
+        ("ENABLED=yes # on", PLAIN_DEFAULT, sysctl_config.UFW_CONF),
+        ("ENABLED=yes\r", PLAIN_DEFAULT, sysctl_config.UFW_CONF),
+        ("ENABLED='yes", PLAIN_DEFAULT, sysctl_config.UFW_CONF),
+        ("ENABLED=~/yes", PLAIN_DEFAULT, sysctl_config.UFW_CONF),
+        ("ENABLED=yes", "IPT_SYSCTL=/etc/ufw/sysctl.conf;\n", sysctl_config.UFW_DEFAULT),
+        ("ENABLED=yes", ". /etc/ufw/more\n" + PLAIN_DEFAULT, sysctl_config.UFW_DEFAULT),
+        ("ENABLED=yes", "IPT_SYSCTL=/etc/ufw/sysctl.conf \\\n", sysctl_config.UFW_DEFAULT),
+        ("ENABLED=yes", "ENABLED=$(true)\n" + PLAIN_DEFAULT, sysctl_config.UFW_DEFAULT),
+    ],
+)
+def test_a_line_of_ufw_s_files_other_than_a_plain_assignment_is_unsupported(
+    enabled: str, default: str, path: str
+) -> None:
+    found = sysctl_config.effective(ufw_entries(enabled, default), RP_FILTER)
+    assert found["unsupported"] == [
+        (
+            f"{path}: a line other than a comment or a plain NAME=value assignment, which ufw's"
+            " start script runs and the collection cannot follow"
+        )
+    ]
+    assert readers(found) == UFW_IGNORED
+
+
+@pytest.mark.parametrize(
+    ("enabled", "default"),
+    [
+        ('ENABLED="yes no"', PLAIN_DEFAULT),
+        ("ENABLED='y:es'", PLAIN_DEFAULT),
+        ("ENABLED=yes", 'IPT_SYSCTL="/etc/ufw/sysctl conf"\n'),
+        ("ENABLED=yes", "IPT_SYSCTL=/etc/ufw/sysctl.conf,x\n"),
+    ],
+)
+def test_a_ufw_value_with_another_character_is_unsupported(enabled: str, default: str) -> None:
+    found = sysctl_config.effective(ufw_entries(enabled, default), RP_FILTER)
+    assert found["unsupported"] == [
+        (
+            f"{sysctl_config.UFW_CONF}: ENABLED or IPT_SYSCTL holds a character other than a"
+            " letter, a digit or one of _./-, which the collection cannot follow"
+        )
+    ]
+
+
 def test_ufw_s_file_is_ignored_without_ufw_conf() -> None:
     entries = [entry for entry in ufw_entries("", None) if entry["path"] != sysctl_config.UFW_CONF]
     assert sysctl_config.effective(entries, RP_FILTER)["systemd"] == {
@@ -216,11 +317,11 @@ def test_ufw_s_file_is_ignored_without_ufw_conf() -> None:
 @pytest.mark.parametrize(
     ("enabled", "default", "reason"),
     [
-        ("ENABLED=$(echo yes)", None, "ENABLED is set in a form"),
+        ("ENABLED=$(echo yes)", None, "plain NAME=value"),
         ("ENABLED=yes", "IPT_SYSCTL=${X}\n", "cannot follow"),
         ("ENABLED=yes", "IPT_SYSCTL=/etc/other.conf\n", "cannot follow"),
         ("ENABLED=Yes", "IPT_SYSCTL=/etc/ufw/sysctl.conf\n", "a spelling of yes"),
-        ("# ufw", "ENABLED=$(echo yes)\n", "ENABLED is set in a form"),
+        ("# ufw", "ENABLED=$(echo yes)\n", "plain NAME=value"),
         ("IPT_SYSCTL=${X}", "ENABLED=yes\n", "cannot follow"),
         ("ENABLED=yes\nIPT_SYSCTL=/etc/ufw/sysctl.conf", None, "may not start"),
     ],
@@ -288,7 +389,6 @@ def test_each_reader_opens_its_own_path_for_a_key(key: str, reader: str, path: s
         ("net/ipv4/conf/[^a]*/rp_filter", "net/ipv4/conf/default/rp_filter", True),
         ("net/ipv4/conf/[a-c]ll/rp_filter", "net/ipv4/conf/bll/rp_filter", True),
         ("net/ipv4/conf/[!x]/rp_filter", "net/ipv4/conf///rp_filter", False),
-        ("net/ipv4/conf/[all/rp_filter", "net/ipv4/conf/[all/rp_filter", True),
         ("net/ipv4/conf/*/rp_filter", "net/ipv4/conf/all/rp_filter/x", False),
     ],
 )
@@ -307,16 +407,11 @@ def test_a_glob_matches_as_glob_3_does(pattern: str, path: str, *, matches: bool
         ("conf/[]x]ll/rp_filter", "conf/]ll/rp_filter", True),
         ("conf/[-a]ll/rp_filter", "conf/-ll/rp_filter", True),
         ("conf/[a-]ll/rp_filter", "conf/-ll/rp_filter", True),
-        ("conf/[]/rp_filter", "conf/[]/rp_filter", True),
-        ("conf/[!/rp_filter", "conf/[!/rp_filter", True),
-        ("conf/a[b/c]d/rp_filter", "conf/a[b/c]d/rp_filter", True),
-        ("conf/a[b/c]d/rp_filter", "conf/ab/rp_filter", False),
         ("conf/*/rp_filter", "conf/.hidden/rp_filter", False),
         ("conf/?all/rp_filter", "conf/.all/rp_filter", False),
         ("conf/[!x]all/rp_filter", "conf/.all/rp_filter", False),
         ("conf/a*/rp_filter", "conf/a.b/rp_filter", True),
         ("conf/all/rp_filte[r]", "conf/all/rp_filter", True),
-        ("conf/all/rp_filte[r", "conf/all/rp_filte[r", True),
     ],
 )
 def test_a_bracket_and_a_leading_period_match_as_glob_3_does(
@@ -341,6 +436,13 @@ def test_a_bracket_and_a_leading_period_match_as_glob_3_does(
         "conf/[a-c-e]ll/rp_filter",
         "conf/[a--]ll/rp_filter",
         "conf/\u00e9*/rp_filter",
+        "net/ipv4/conf/[all/rp_filter",
+        "conf/[]/rp_filter",
+        "conf/[!/rp_filter",
+        "conf/a[b/c]d/rp_filter",
+        "conf/all/rp_filte[r",
+        "conf/[-a/rp_filter",
+        "conf/[[.a/rp_filter",
     ],
 )
 def test_a_glob_that_does_not_translate_exactly_gives_none(pattern: str) -> None:
@@ -457,22 +559,119 @@ def test_procps_excludes_from_a_glob_only_a_key_written_as_its_matches(
     assert cast("dict[str, object]", found["procps"])["value"] == procps
 
 
-@pytest.mark.parametrize("kind", ["file", "link", "directory", "other"])
+PATTERN_NAME_REASON = (
+    "sysctl --system expands the name of this entry as a pattern, which may read other files a"
+    " second time"
+)
+UNSAFE_ENTRY_REASON = (
+    "a FIFO, socket or device, or a link to something other than a regular file or /dev/null, on"
+    " which a reader may block or which it may read without end"
+)
+
+
+@pytest.mark.parametrize(
+    ("kind", "target"), [("file", None), ("link", "file"), ("link", "null"), ("directory", None)]
+)
 @pytest.mark.parametrize("directory", sysctl_config.DIRECTORIES)
 def test_a_pattern_name_is_unsupported_whatever_the_kind_of_the_entry(
-    kind: str, directory: str
+    kind: str, target: str | None, directory: str
 ) -> None:
     entries: list[dict[str, object]] = [
         DROP_IN,
-        {"path": f"{directory}/[1]0-loose.conf", "kind": kind, "text": None},
+        {"path": f"{directory}/[1]0-loose.conf", "kind": kind, "text": None, "target": target},
         {"path": "/usr/lib/sysctl.d/10-loose.conf", "kind": "file", "text": f"{RP_FILTER}=0\n"},
     ]
     assert sysctl_config.effective(entries, RP_FILTER)["unsupported"] == [
-        (
-            f"{directory}/[1]0-loose.conf: sysctl --system expands the name of this entry as a"
-            " pattern, which may read other files a second time"
-        )
+        f"{directory}/[1]0-loose.conf: {PATTERN_NAME_REASON}"
     ]
+
+
+@pytest.mark.parametrize(
+    ("kind", "target"),
+    [("other", None), ("link", "other"), ("link", None), ("link", "directory")],
+)
+@pytest.mark.parametrize("directory", sysctl_config.DIRECTORIES)
+@pytest.mark.parametrize("name", ["70-x.conf", ".70-hidden.conf"])
+def test_a_fifo_a_device_or_an_unsafe_link_is_unsupported(
+    kind: str, target: str | None, directory: str, name: str
+) -> None:
+    entries: list[dict[str, object]] = [
+        DROP_IN,
+        {"path": f"{directory}/{name}", "kind": kind, "text": None, "target": target},
+    ]
+    assert sysctl_config.effective(entries, RP_FILTER)["unsupported"] == [
+        f"{directory}/{name}: {UNSAFE_ENTRY_REASON}"
+    ]
+
+
+@pytest.mark.parametrize(
+    ("kind", "target", "text"),
+    [
+        ("link", "null", None),
+        ("link", "file", f"{RP_FILTER} = 1\n"),
+        ("directory", None, None),
+        ("file", None, ""),
+    ],
+)
+def test_a_file_a_directory_and_a_link_to_a_file_or_dev_null_are_followed(
+    kind: str, target: str | None, text: str | None
+) -> None:
+    entries: list[dict[str, object]] = [
+        DROP_IN,
+        {"path": "/usr/lib/sysctl.d/70-x.conf", "kind": kind, "text": text, "target": target},
+    ]
+    assert sysctl_config.effective(entries, RP_FILTER)["unsupported"] == []
+
+
+def test_an_unsafe_entry_outside_the_conf_files_is_not_listed() -> None:
+    entries: list[dict[str, object]] = [
+        DROP_IN,
+        {"path": "/etc/sysctl.d/70-x.conf.fifo", "kind": "other", "text": None},
+        {"path": "/srv/70-x.conf", "kind": "other", "text": None},
+    ]
+    assert sysctl_config.effective(entries, RP_FILTER)["unsupported"] == []
+
+
+def test_a_target_that_is_not_a_string_is_refused() -> None:
+    with pytest.raises(sysctl_config.ConfigError, match="target"):
+        sysctl_config.load_entries(
+            [{"path": "/etc/sysctl.d/x.conf", "kind": "link", "text": None, "target": 1}]
+        )
+
+
+@pytest.mark.parametrize(
+    ("value", "integer"),
+    [
+        ("0", 0),
+        ("-0", 0),
+        ("1", 1),
+        ("-1", -1),
+        ("65536", 65536),
+        ("1234567890123456789", 1234567890123456789),
+        ("-1234567890123456789", -1234567890123456789),
+        ("065536", None),
+        ("010", None),
+        ("00", None),
+        ("+1", None),
+        ("0x10", None),
+        ("0X10", None),
+        ("000000000000000000001", None),
+        ("12345678901234567890", None),
+        ("1 ", None),
+        (" 1", None),
+        ("1\n", None),
+        ("1.0", None),
+        ("", None),
+        ("-", None),
+        ("\u0661", None),
+        (1, None),
+        (None, None),
+    ],
+)
+def test_an_integer_counts_only_in_the_form_that_the_kernel_reads_as_written(
+    value: object, integer: int | None
+) -> None:
+    assert sysctl_config.kernel_integer(value) == integer
 
 
 def test_a_pattern_name_outside_the_conf_files_is_not_read() -> None:

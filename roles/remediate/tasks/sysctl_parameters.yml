@@ -102,7 +102,7 @@
       - >-
         not __linux_compliance_remediate_sc_applies
         or __linux_compliance_remediate_sc_rule.parameters.datatype | default('') != 'int'
-        or __linux_compliance_remediate_sc_wanted.value is match('^-?[0-9]{1,19}$')
+        or (__linux_compliance_remediate_sc_wanted.value | freesecdev.linux_compliance.sysctl_integer) is not none
     fail_msg: >-
       {{ __linux_compliance_remediate_sc_rule.rule_id }} needs a kernel parameter key, a drop-in named
       /etc/sysctl.d/999-freesecdev-*.conf of its own, the datatype int or string and, to be applied, the value
@@ -241,11 +241,28 @@
   tags:
     - always
 
+- name: Kernel parameters | Inspect /dev/null, a link to which masks a configuration file
+  ansible.builtin.stat:
+    path: /dev/null
+    follow: true
+    get_checksum: false
+    get_mime: false
+    get_attributes: false
+  register: __linux_compliance_remediate_sc_dev_null
+  tags:
+    - always
+
 - name: Kernel parameters | Name every configuration entry, whether it is a regular file or a link to one
   vars:
     __linux_compliance_remediate_sc_linked: >-
       {{ __linux_compliance_remediate_sc_link_targets.results | default([])
          | selectattr('stat.isreg', 'defined') | selectattr('stat.isreg')
+         | map(attribute='__linux_compliance_remediate_sc_link') | list }}
+    __linux_compliance_remediate_sc_nulled: >-
+      {{ __linux_compliance_remediate_sc_link_targets.results | default([])
+         | selectattr('stat.ischr', 'defined') | selectattr('stat.ischr')
+         | selectattr('stat.dev', 'equalto', __linux_compliance_remediate_sc_dev_null.stat.dev | default(none))
+         | selectattr('stat.inode', 'equalto', __linux_compliance_remediate_sc_dev_null.stat.inode | default(none))
          | map(attribute='__linux_compliance_remediate_sc_link') | list }}
   ansible.builtin.set_fact:
     __linux_compliance_remediate_sc_entries: >-
@@ -254,6 +271,8 @@
       {%- set _ = entries.update({item.path: {'isreg': item.isreg, 'islnk': item.islnk,
             'isdir': item.isdir | default(false),
             'readable': item.isreg or item.path in __linux_compliance_remediate_sc_linked,
+            'target': 'file' if item.path in __linux_compliance_remediate_sc_linked
+                      else 'null' if item.path in __linux_compliance_remediate_sc_nulled else 'other',
             'checksum': item.checksum | default('')}}) -%}
       {%- endfor -%}
       {%- for path in __linux_compliance_remediate_sc_single_files
@@ -261,7 +280,10 @@
       {%- set item = __linux_compliance_remediate_sc_stats[path] -%}
       {%- set _ = entries.update({path: {'isreg': item.isreg, 'islnk': item.islnk,
             'isdir': item.isdir | default(false),
-            'readable': item.isreg or path in __linux_compliance_remediate_sc_linked, 'checksum': ''}}) -%}
+            'readable': item.isreg or path in __linux_compliance_remediate_sc_linked,
+            'target': 'file' if path in __linux_compliance_remediate_sc_linked
+                      else 'null' if path in __linux_compliance_remediate_sc_nulled else 'other',
+            'checksum': ''}}) -%}
       {%- endfor -%}
       {{ entries }}
   tags:
@@ -615,6 +637,7 @@
       {%- set _ = boot_entries.append({'path': entry_path,
             'kind': 'file' if item.isreg else 'link' if item.islnk else 'directory' if item.isdir | default(false)
                     else 'other',
+            'target': item.target if item.islnk else none,
             'text': texts[entry_path] | default(none)}) -%}
       {%- endfor -%}
       {%- for rule in __linux_compliance_remediate_family.apply -%}
@@ -624,7 +647,8 @@
       {%- set wanted = __linux_compliance_remediate_sc_values[rule.rule_id] -%}
       {%- set value = wanted.value -%}
       {%- set integer = rule.parameters.datatype == 'int' -%}
-      {%- set accepted_ints = (wanted.accepted | default([], true) | map('int') | list) if integer else [] -%}
+      {%- set accepted_ints = (wanted.accepted | default([], true) | map('freesecdev.linux_compliance.sysctl_integer')
+            | reject('none') | list) if integer else [] -%}
       {%- set pattern = (__linux_compliance_remediate_sysctl_empty_line_pattern if rule.parameters.empty_value
             | default(false) else __linux_compliance_remediate_sysctl_line_pattern) | replace('{key}', key) -%}
       {%- set prior = __linux_compliance_remediate_sc_records[rule.rule_id] -%}
@@ -639,7 +663,7 @@
       {%- set found = texts[other] | regex_findall(pattern, multiline=true) -%}
       {%- set bad = [] -%}
       {%- for candidate in found -%}
-      {%- set good = (candidate is match('^[+-]?[0-9]+$') and (candidate | int) in accepted_ints) if integer
+      {%- set good = ((candidate | freesecdev.linux_compliance.sysctl_integer) in accepted_ints) if integer
             else (candidate is search(wanted.pattern)) if wanted.pattern is string
             else candidate in wanted.accepted -%}
       {%- set ns.user = ns.user + [good] -%}
@@ -664,7 +688,7 @@
       {%- endfor -%}
       {%- for other in package_files if other in texts -%}
       {%- for candidate in texts[other] | regex_findall(pattern, multiline=true) -%}
-      {%- set good = (candidate is match('^[+-]?[0-9]+$') and (candidate | int) in accepted_ints) if integer
+      {%- set good = ((candidate | freesecdev.linux_compliance.sysctl_integer) in accepted_ints) if integer
             else (candidate is search(wanted.pattern)) if wanted.pattern is string
             else candidate in wanted.accepted -%}
       {%- set ns.package = ns.package + [good] -%}
@@ -690,7 +714,7 @@
       {%- for setting, planned in [[planned_readers[reader], true], [current_readers[reader], false]] -%}
       {%- set candidate = setting.value -%}
       {%- set good = (rule.parameters.absent_accepted | default(false)) if candidate is none
-            else (candidate is match('^[+-]?[0-9]+$') and (candidate | int) in accepted_ints) if integer
+            else ((candidate | freesecdev.linux_compliance.sysctl_integer) in accepted_ints) if integer
             else (candidate is search(wanted.pattern)) if wanted.pattern is string
             else candidate in wanted.accepted -%}
       {%- if planned and not good -%}
@@ -709,7 +733,7 @@
       {%- set current_normal = (current.split() | join(' ')) if current is string else none -%}
       {%- set runtime_ok = not __linux_compliance_remediate_sc_runtime
             or (current_normal is string
-                and ((current_normal is match('^[+-]?[0-9]+$') and (current_normal | int) in accepted_ints)
+                and (((current_normal | freesecdev.linux_compliance.sysctl_integer) in accepted_ints)
                      if integer else (current_normal is search(wanted.pattern)) if wanted.pattern is string
                      else current_normal in (wanted.accepted | map('split') | map('join', ' ') | list))) -%}
       {%- set exact = entry is not none and entry.isreg and entry.checksum == sha -%}
@@ -964,7 +988,8 @@
       {%- set key = rule.parameters.key -%}
       {%- set planned = __linux_compliance_remediate_sc_plan[rule.rule_id] -%}
       {%- set wanted = __linux_compliance_remediate_sc_values[rule.rule_id] -%}
-      {%- set accepted_ints = wanted.accepted | default([], true) | map('int') | list -%}
+      {%- set accepted_ints = wanted.accepted | default([], true) | map('freesecdev.linux_compliance.sysctl_integer')
+            | reject('none') | list -%}
       {%- set combination = __linux_compliance_remediate_sysctl_interface_combination[key] -%}
       {%- set parts = key.split('.') -%}
       {%- set all_text = (wanted.value | string) if planned.runtime | length > 0 else now[key] | default(none) -%}

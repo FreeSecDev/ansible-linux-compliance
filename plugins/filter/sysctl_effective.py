@@ -33,11 +33,13 @@ options:
     description:
       - The entries of the configuration directories, C(/etc/sysctl.conf) and ufw's
         C(/etc/ufw/ufw.conf), C(/etc/default/ufw) and C(/etc/ufw/sysctl.conf), each a mapping
-        with C(path), C(kind) (C(file), C(link), C(directory) or C(other)) and C(text), the
-        content of a file or of a link's regular target, or null.
+        with C(path), C(kind) (C(file), C(link), C(directory) or C(other)), C(text), the
+        content of a file or of a link's regular target, or null, and, for a link, C(target):
+        C(file) for a regular file, C(null) for C(/dev/null), anything else otherwise.
       - ufw's C(/etc/ufw/sysctl.conf) counts, after every other file, only when C(ENABLED) is
         C(yes) or C(YES) and C(IPT_SYSCTL) names that file, each read from C(/etc/default/ufw)
-        and then C(ufw.conf), as ufw sources them.
+        and then C(ufw.conf), as ufw sources them; a line of either file other than a comment or
+        a plain assignment is refused.
     type: list
     elements: dict
     required: true
@@ -59,7 +61,8 @@ _value:
   description:
     - V(systemd) and V(procps), each with C(value) and C(source), null when the reader sets
       nothing, and V(unsupported), the reasons why the model cannot decide what a reader sets
-      (an entry name that procps expands as a pattern, a key with a C(..) component, a procps
+      (an entry name that procps expands as a pattern, a FIFO, socket or device, a link to
+      something other than a regular file or C(/dev/null), a key with a C(..) component, a procps
       key with a second leading C(-), a procps glob that is not in canonical form, a glob
       component that starts with C(.), a glob that the model cannot translate exactly, a line
       at which systemd-sysctl stops reading, or a ufw setting the model does not follow); the

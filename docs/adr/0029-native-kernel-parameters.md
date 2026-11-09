@@ -107,7 +107,14 @@ at them: `plugins/module_utils/compliance/sysctl_config.py`, used through the fi
 `freesecdev.linux_compliance.sysctl_effective`. For each rule it computes the value that `systemd-sysctl` (at boot)
 and `sysctl --system` (procps, run by administrators and packages) write last, once for the files as they are and
 once with the planned drop-in and vendor edits. A rule is `overridden` unless both readers would then write an
-accepted value, and `compliant` without a write only when both already do. The model follows what the readers do:
+accepted value, and `compliant` without a write only when both already do. A value of an integer parameter is
+accepted only in the plain decimal form `^-?(0|[1-9][0-9]{0,18})$` and only when that integer is one the check accepts
+(the filter `freesecdev.linux_compliance.sysctl_integer`): the kernel reads an integer with `proc_get_long` in base 0,
+so `vm.mmap_min_addr = 065536` sets 0o65536 (27486) and `0x10` is 16, and it refuses a leading `+` and a value of 21
+characters or more, so `kernel.dmesg_restrict = +1` leaves the kernel default. Any other form of a value in a file,
+read by a reader or running, counts as not accepted, so the rule is `overridden` or written, never `compliant` or
+`applied` on its strength; the values that the collection writes must be in that form as well. The model follows
+what the readers do:
 
 - Files: the directories `/etc/sysctl.d`, `/run/sysctl.d`, `/usr/local/lib/sysctl.d`, `/usr/lib/sysctl.d`,
   `/lib/sysctl.d`, the first winning for a file name, every `*.conf` name sorted bytewise; an entry that is a
@@ -128,8 +135,8 @@ accepted value, and `compliant` without a write only when both already do. The m
   first: an assignment with another value moves the key to the end, one with the same value keeps its place, and a
   `-key` line without `=` assigns no value, so a later `-net.ipv4.conf.all.rp_filter` leaves the kernel default at
   boot. For procps such a line only excludes the key from globs.
-- Globs: `*`, `?` and `[...]`, never across `/` and never matching a `.` at the start of a component; a `[` without
-  a `]` in its component is literal, and a `]` right after `[`, `[!` or `[^` is a member. systemd never sets a key
+- Globs: `*`, `?` and `[...]`, never across `/` and never matching a `.` at the start of a component; a `]` right
+  after `[`, `[!` or `[^` is a member. systemd never sets a key
   that its table holds by a glob; of the globs that match a key, it applies the last in its table order. procps skips
   a path that a glob returns only when some line names exactly that path as written (`strcmp`), so
   `net/ipv4//conf/all/rp_filter` or `-/net/ipv4/conf/all/rp_filter` excludes nothing from `net.ipv4.conf.*.rp_filter`;
@@ -153,9 +160,14 @@ accepted value, and `compliant` without a write only when both already do. The m
     explicit line names: any procps glob with a repeated slash, a `.` component or a leading or trailing slash;
   - a glob component that starts with `.` can match the entries `.` and `..`, which name the directory itself or its
     parent: any glob of either reader with such a component;
-  - a glob that the model cannot translate exactly into a regular expression: a backslash escape, a brace, a
-    character class, equivalence class or collating symbol, a range other than within the digits or the lower-case or
-    upper-case ASCII letters, a `-` between members other than in such a range, or a character outside ASCII.
+  - a glob that the model cannot translate exactly into a regular expression: a `[` that is not closed within its
+    path component (glob(3) and fnmatch disagree about such a `[` followed by `-` or `[.`), a backslash escape, a
+    brace, a character class, equivalence class or collating symbol, a range other than within the digits or the
+    lower-case or upper-case ASCII letters, a `-` between members other than in such a range, or a character outside
+    ASCII;
+  - a reader blocks on a FIFO and reads a device such as `/dev/zero` without end: any `*.conf` entry of the five
+    directories that is a FIFO, a socket or a device, or a link whose target is not a regular file or `/dev/null`
+    (a broken link included). The role tells a link to `/dev/null` by the device and inode of its target.
 
   procps lists every `*.conf` name of its directories in `PreloadSystem`, whatever the kind of the entry (a
   directory, a FIFO, a socket, a broken link), and only then globs it, so the name check covers every entry of the
@@ -164,11 +176,15 @@ accepted value, and `compliant` without a write only when both already do. The m
   `ENABLED` and `IPT_SYSCTL` and the later assignment wins; it applies the file named by `IPT_SYSCTL` with
   `sysctl -p` when it starts, and only when `ENABLED` is `yes` or `YES`; ufw ships disabled. Only then is
   `/etc/ufw/sysctl.conf` read last, with the rules of procps, for both readers; with ufw disabled, without
-  `ufw.conf` or with an empty `IPT_SYSCTL` it counts for neither. An `ENABLED` or `IPT_SYSCTL` line other than a
-  plain `NAME=value` (quoted or exported), another spelling of yes such as `Yes`, or an `IPT_SYSCTL` that names
-  another file, is refused as `unparsed_configuration`: the model does not follow what ufw would apply then; so is
-  `ufw.conf` alone enabling the file while `/etc/default/ufw` is missing, where ufw's start script may stop first.
-  The refusals of the line list above apply to ufw's file too.
+  `ufw.conf` or with an empty `IPT_SYSCTL` it counts for neither. ufw's start script runs both files as shell, so the
+  model reads them only when every line is a comment, a blank line or a plain assignment `NAME=value`, optionally
+  exported, whose value is a word without expansions (letters, digits and `_./,:+@%-`) or a quoted string without
+  `$`, backticks or backslashes; any other line (`ENABLED=yes;`, `$VAR`, `${E:-yes}`, a command substitution, a
+  backslash, a line continuation, `.` or `source`, `eval`, `&&`, a trailing comment) is refused as
+  `unparsed_configuration`, and so is an `ENABLED` or `IPT_SYSCTL` value with a character other than letters,
+  digits and `_./-`, another spelling of yes such as `Yes`, and an `IPT_SYSCTL` that names another file: the model
+  does not follow what ufw would apply then; so is `ufw.conf` alone enabling the file while `/etc/default/ufw` is
+  missing, where ufw's start script may stop first. The refusals of the line list above apply to ufw's file too.
 
 The model is not trusted on its own. `make sysctl-reader-verdicts` (`tools/molecule/sysctl-reader-verdicts.sh`) runs
 the real readers of the Molecule images on the cases of `tests/fixtures/sysctl_reader/cases.json` (72, among them
@@ -217,6 +233,15 @@ its files in its own order, and `YES` counts as yes. These rules are proven by u
 are not yet in `cases.json`, because the verdict table can only be regenerated with Docker
 (`make sysctl-reader-verdicts`), and the verdict test requires a recorded verdict for every case. Until then they are
 refusals or follow the readers' source code: the model refuses rather than guesses wherever it cannot be proven.
+
+**Amendment (fourth review).** The fourth review found that the role read the value of an integer parameter in base
+10 while the kernel reads it in base 0 and refuses a leading `+`, so `065536` or `+1` could make a rule `applied` or
+`compliant` while the kernel sets another value or keeps its default; only the plain decimal form is accepted now,
+in the files, for the readers and for the running value, through one filter. It also found shell forms in ufw's
+files that ufw reads as enabled while the model read them as disabled; both files must now consist of plain
+assignments. An unclosed `[` in a glob, a FIFO, socket or device in the configuration directories, and a link to
+anything but a regular file or `/dev/null` are refused. These rules are proven by unit tests; like those of the
+third review, their cases wait for the verdict table to be regenerated with Docker.
 
 ### 2a. A conflicting line in a vendor file is set to the compliant value
 
@@ -269,14 +294,15 @@ Writing the stricter `all` value never loosens anything under any of these combi
 an interface. The family always writes the drop-in and, with the running values on, the running value; then, after
 every running value of the family is set, every rule of `net.ipv4.conf.all.*` or `net.ipv6.conf.all.*` in
 `__linux_compliance_remediate_sysctl_interface_combination` that is `applied` or `compliant` reads the value of every
-interface again (they are read once before anything is written as well, so a host with more than 512 entries below
-`net.ipv4.conf` or `net.ipv6.conf`, which the module refuses as `too_large`, fails the family before any change) (`all`, `default` and the loopback interface excluded, which neither sends nor accepts redirects or
+interface again (`all`, `default` and the loopback interface excluded, which neither sends nor accepts redirects or
 router advertisements and whose packets are not reverse-path filtered) and combines it with the running `all` value
 as the kernel does (`accept_redirects` as if the interface did not forward, the stricter assumption;
 `accept_source_route` of IPv6, whose minimum makes `-1`, no routing header at all, stricter than `0`, counts any value
 below the accepted ones as compliant). When an interface still has a value that the check does not accept, the rule
 keeps its status `applied` or `compliant`, but with the reason `interface_override` instead of none, and its message
-names each such interface, its own value and the value the kernel then uses. An interface whose name the module does
+names each such interface, its own value and the value the kernel then uses. The interfaces are read once before
+anything is written as well, so a host with more than 512 entries below `net.ipv4.conf` or `net.ipv6.conf`, which the
+module refuses as `too_large`, fails the family before any change. An interface whose name the module does
 not accept as a component of a parameter name (a character other than letters, digits, `_`, `-`, `+`, `@` and `.`)
 is not read; the module returns it in `unnamed`, and the rule names it with an unknown value and the reason
 `interface_override` too, instead of passing over it. So a rule is reported without a reason

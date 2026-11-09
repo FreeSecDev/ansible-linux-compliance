@@ -909,6 +909,9 @@
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_sc_contents$') == [] or
         '__linux_compliance_remediate_sc_contents' in (hostvars[inventory_hostname] | list)
       - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_sc_dev_null$') == [] or
+        '__linux_compliance_remediate_sc_dev_null' in (hostvars[inventory_hostname] | list)
+      - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_sc_directories$') == [] or
         '__linux_compliance_remediate_sc_directories' in (hostvars[inventory_hostname] | list)
       - >-
@@ -977,6 +980,9 @@
       - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_sc_name$') == [] or
         '__linux_compliance_remediate_sc_name' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_sc_nulled$') == [] or
+        '__linux_compliance_remediate_sc_nulled' in (hostvars[inventory_hostname] | list)
       - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_sc_owned$') == [] or
         '__linux_compliance_remediate_sc_owned' in (hostvars[inventory_hostname] | list)
@@ -1719,6 +1725,7 @@
     __linux_compliance_remediate_sc_checked: __linux_compliance_unset__
     __linux_compliance_remediate_sc_cleanup_plan: __linux_compliance_unset__
     __linux_compliance_remediate_sc_contents: __linux_compliance_unset__
+    __linux_compliance_remediate_sc_dev_null: __linux_compliance_unset__
     __linux_compliance_remediate_sc_directories: __linux_compliance_unset__
     __linux_compliance_remediate_sc_directory_created: __linux_compliance_unset__
     __linux_compliance_remediate_sc_directory_missing: __linux_compliance_unset__
@@ -2091,6 +2098,7 @@
       - __linux_compliance_remediate_sc_checked == '__linux_compliance_unset__'
       - __linux_compliance_remediate_sc_cleanup_plan == '__linux_compliance_unset__'
       - __linux_compliance_remediate_sc_contents == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_sc_dev_null == '__linux_compliance_unset__'
       - __linux_compliance_remediate_sc_directories == '__linux_compliance_unset__'
       - __linux_compliance_remediate_sc_directory_created == '__linux_compliance_unset__'
       - __linux_compliance_remediate_sc_directory_missing == '__linux_compliance_unset__'
@@ -2294,6 +2302,7 @@
       - __linux_compliance_remediate_sc_known_texts == '__linux_compliance_unset__'
       - __linux_compliance_remediate_sc_link == '__linux_compliance_unset__'
       - __linux_compliance_remediate_sc_linked == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_sc_nulled == '__linux_compliance_unset__'
       - __linux_compliance_remediate_sc_path == '__linux_compliance_unset__'
       - __linux_compliance_remediate_sc_read_texts == '__linux_compliance_unset__'
       - __linux_compliance_remediate_sc_restore == '__linux_compliance_unset__'
@@ -2733,6 +2742,7 @@
     __linux_compliance_remediate_sc_known_texts: __linux_compliance_unset__
     __linux_compliance_remediate_sc_link: __linux_compliance_unset__
     __linux_compliance_remediate_sc_linked: __linux_compliance_unset__
+    __linux_compliance_remediate_sc_nulled: __linux_compliance_unset__
     __linux_compliance_remediate_sc_path: __linux_compliance_unset__
     __linux_compliance_remediate_sc_read_texts: __linux_compliance_unset__
     __linux_compliance_remediate_sc_restore: __linux_compliance_unset__
@@ -3013,6 +3023,7 @@
     __linux_compliance_remediate_sc_checked: __linux_compliance_unset_again__
     __linux_compliance_remediate_sc_cleanup_plan: __linux_compliance_unset_again__
     __linux_compliance_remediate_sc_contents: __linux_compliance_unset_again__
+    __linux_compliance_remediate_sc_dev_null: __linux_compliance_unset_again__
     __linux_compliance_remediate_sc_directories: __linux_compliance_unset_again__
     __linux_compliance_remediate_sc_directory_created: __linux_compliance_unset_again__
     __linux_compliance_remediate_sc_directory_missing: __linux_compliance_unset_again__
@@ -3385,6 +3396,7 @@
       - __linux_compliance_remediate_sc_checked == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_sc_cleanup_plan == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_sc_contents == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_sc_dev_null == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_sc_directories == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_sc_directory_created == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_sc_directory_missing == '__linux_compliance_unset_again__'
@@ -3588,6 +3600,7 @@
       - __linux_compliance_remediate_sc_known_texts == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_sc_link == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_sc_linked == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_sc_nulled == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_sc_path == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_sc_read_texts == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_sc_restore == '__linux_compliance_unset_again__'
@@ -3707,6 +3720,7 @@
     __linux_compliance_remediate_sc_known_texts: __linux_compliance_unset_again__
     __linux_compliance_remediate_sc_link: __linux_compliance_unset_again__
     __linux_compliance_remediate_sc_linked: __linux_compliance_unset_again__
+    __linux_compliance_remediate_sc_nulled: __linux_compliance_unset_again__
     __linux_compliance_remediate_sc_path: __linux_compliance_unset_again__
     __linux_compliance_remediate_sc_read_texts: __linux_compliance_unset_again__
     __linux_compliance_remediate_sc_restore: __linux_compliance_unset_again__
@@ -3987,6 +4001,7 @@
     __linux_compliance_remediate_sc_checked: __linux_compliance_unset__
     __linux_compliance_remediate_sc_cleanup_plan: __linux_compliance_unset__
     __linux_compliance_remediate_sc_contents: __linux_compliance_unset__
+    __linux_compliance_remediate_sc_dev_null: __linux_compliance_unset__
     __linux_compliance_remediate_sc_directories: __linux_compliance_unset__
     __linux_compliance_remediate_sc_directory_created: __linux_compliance_unset__
     __linux_compliance_remediate_sc_directory_missing: __linux_compliance_unset__
