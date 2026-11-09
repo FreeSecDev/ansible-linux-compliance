@@ -1,6 +1,6 @@
 # 0025. Remediation is our own Ansible only; scanner remediation content is never used
 
-- **Status:** accepted (amended by [ADR 0032](0032-operator-control-community-modules-and-value-overrides.md))
+- **Status:** accepted (to be widened by [ADR 0032](0032-operator-control-community-modules-and-value-overrides.md) once it is accepted)
 - **Date:** 2026-10-30
 - **Deciders:** lead architect; project owner (requirement of 2026-10-30: remediation is written in Ansible by this
   project, and the code of the scanner content is not trusted)
@@ -176,9 +176,10 @@ A change to the rule group or to its pinned exceptions changes the repository gu
 - The documentation says this plainly: [README](../../README.md), [remediation guide](../remediation.md) and
   [native remediation guide](../native-remediation-guide.md).
 
-## Amendment 2026-11-09: community modules (ADR 0032, FREES-203)
+## Amendment 2026-11-09: community modules, pending ADR 0032 (FREES-203)
 
-Decision 1 is widened by [ADR 0032](0032-operator-control-community-modules-and-value-overrides.md) §1:
-remediation may also use modules of community collections that are pinned to an exact version in `galaxy.yml` and
-the requirements files and are on the reviewed allow list of the `ansible_tasks` repository rule group. The ban on
-`shell`, `command`, `raw` and `script` and on every form of scanner remediation is unchanged.
+[ADR 0032](0032-operator-control-community-modules-and-value-overrides.md) §1 proposes to widen the module rule.
+**Once ADR 0032 is accepted**, remediation may also use modules of community collections that are pinned to an exact
+version in `galaxy.yml` and the requirements files, are on the allow list of a new repository rule, and run no
+process outside ADR 0004. Until then this ADR applies unchanged. The ban on `shell`, `command`, `raw` and `script`
+and on every form of scanner remediation stays either way.
