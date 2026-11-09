@@ -41,7 +41,7 @@ duplicate pull requests. Pinning rules from `AGENTS.md` are kept current, not re
 - Renovate's Python managers are explicitly disabled to avoid duplicate pull requests.
 - Group related updates; weekly schedule for routine updates; security updates are raised immediately only for ecosystems in GitHub's dependency graph (Python and GitHub Actions) through Dependabot; other ecosystems receive fixes on the Renovate schedule (documented residual risk).
 - Set pull request concurrency and hourly limits.
-- Major updates are never gated on dashboard approval (the owner is not asked to approve). They wait 14 days, are labelled `breaking-change`, get their own pull request and are reviewed by the `freesecdev-review` App with all required checks.
+- Major updates are never gated on dashboard approval (the owner is not asked to approve). They wait 14 days, are labelled `breaking-change`, get their own pull request and get an independent reviewer's verdict (ADR 0033) and pass all required checks.
 - Labels: `dependencies` plus an ecosystem label.
 - Pull request body includes `Refs: FREES-<maintenance-issue>`; commits follow Conventional Commits.
 - No automerge that bypasses required checks. Automerge, if allowed at all, applies only to digest and patch updates after every required check passes; an ADR decides.

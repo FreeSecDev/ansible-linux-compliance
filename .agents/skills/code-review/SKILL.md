@@ -50,8 +50,9 @@ an independent agent or a human.
 ## Quality gates
 
 - Every checklist item is recorded as satisfied, not applicable or violated.
-- The reviewer is not the author: a separate agent or a human that did not write the change. The verdict names
-  the reviewed head SHA, and a new push needs a new verdict (ADR 0033).
+- The reviewer is not the author: a separate agent or a human that did not write the change. The verdict ends with
+  the marker `<!-- freesecdev-verdict: <verdict> head=<sha> reviewer=<id> -->`, and a new push needs a new verdict
+  (ADR 0033).
 - No unresolved blocking finding; no new lint, test or scanner suppression without a written justification.
 - CI status is read from the actual run, not from the description.
 

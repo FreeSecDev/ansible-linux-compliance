@@ -37,7 +37,8 @@ described in [SECURITY.md](SECURITY.md), never in a public issue or pull request
 5. Open a pull request into `main`. Never push to `main` directly. The title is a Conventional Commit and includes the
    Jira key, for example `feat: add OpenSCAP audit module (FREES-42)`. Fill in the pull request template.
 6. An independent reviewer, an agent or a human that did not write the change, reviews the current head and posts the
-   verdict on the pull request, naming the reviewed head SHA. A pull request merges only with an `approve` or
+   verdict on the pull request, ending with the marker
+   `<!-- freesecdev-verdict: <verdict> head=<sha> reviewer=<id> -->`. A pull request merges only with an `approve` or
    `approve-with-follow-ups` verdict for its current head. All review threads must be resolved and `ci-gate` must
    pass. GitHub does not require an approving review
    ([ADR 0033](docs/adr/0033-review-policy-independent-verdict-without-required-approval.md)). The repository has no
