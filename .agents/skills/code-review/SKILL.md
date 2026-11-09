@@ -4,7 +4,7 @@ description: Pull request review and acceptance for the FreeSecDev compliance pl
 license: Apache-2.0
 metadata:
   owner: lead-architect
-  version: "1.0.0"
+  version: "1.1.0"
 ---
 
 # Code review
@@ -50,14 +50,15 @@ an independent agent or a human.
 ## Quality gates
 
 - Every checklist item is recorded as satisfied, not applicable or violated.
-- Reviewer identity differs from the author identity.
+- The reviewer is not the author: a separate agent or a human that did not write the change. The verdict names
+  the reviewed head SHA, and a new push needs a new verdict (ADR 0033).
 - No unresolved blocking finding; no new lint, test or scanner suppression without a written justification.
 - CI status is read from the actual run, not from the description.
 
 ## Common failures
 
 - Approving from the description without opening the diff or the CI run.
-- Author and reviewer being the same agent or account.
+- Author and reviewer being the same agent, or a verdict for an older head than the one merged.
 - Accepting a new interface without an ADR.
 - Missing documentation or changelog fragment because "it is small".
 - Tolerating a `# noqa` or skipped test with no justification.
@@ -79,7 +80,8 @@ an independent agent or a human.
 
 ## Completion criteria
 
-- A verdict is posted on the pull request by an independent reviewer.
+- A verdict for the current head is posted on the pull request by an independent reviewer. GitHub requires no
+  approving review (ADR 0033); the verdict and a green `ci-gate` are the merge condition.
 - All blocking findings are fixed and re-verified.
 - The pull request is squash merged and its branch deleted.
 - The Jira issue records the verdict, reviewer and pull request link.

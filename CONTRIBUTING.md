@@ -36,8 +36,11 @@ described in [SECURITY.md](SECURITY.md), never in a public issue or pull request
 4. Keep the branch rebased on the latest `main`. The history is linear.
 5. Open a pull request into `main`. Never push to `main` directly. The title is a Conventional Commit and includes the
    Jira key, for example `feat: add OpenSCAP audit module (FREES-42)`. Fill in the pull request template.
-6. A reviewer other than the author must approve. All review threads must be resolved and required checks must pass.
-   Approvals come from an independent review agent through the `freesecdev-review` GitHub App. The repository has no
+6. An independent reviewer, an agent or a human that did not write the change, reviews the current head and posts the
+   verdict on the pull request, naming the reviewed head SHA. A pull request merges only with an `approve` or
+   `approve-with-follow-ups` verdict for its current head. All review threads must be resolved and `ci-gate` must
+   pass. GitHub does not require an approving review
+   ([ADR 0033](docs/adr/0033-review-policy-independent-verdict-without-required-approval.md)). The repository has no
    `CODEOWNERS` file on purpose: code-owner rules would automatically request the maintainer's review, and the project
    owner decided not to be asked for reviews.
 7. Pull requests are merged by squash merge only.
