@@ -1,0 +1,157 @@
+---
+- name: Login defaults bytes | Refuse to run unless the login_defs topic has just run its cycles
+  ansible.builtin.assert:
+    that:
+      - lifecycle_topic.family == 'login_defs'
+      - lifecycle_rule_ids | length > 0
+      - lifecycle_allow_disruptive == ['login_defs']
+    fail_msg: >-
+      The login_defs byte cases reuse the facts of the login_defs lifecycle, which must have just run; the topic was
+      {{ lifecycle_topic.family | default('none') }}.
+    quiet: true
+
+- name: Login defaults bytes | Name the rules, the toggles and the cases of the bytes
+  ansible.builtin.set_fact:
+    ldf_label: login_defs bytes of the readers
+    ldf_toggles: "{{ lifecycle_rules | map(attribute='toggle') | list }}"
+    ldf_max: xccdf_org.ssgproject.content_rule_accounts_maximum_age_login_defs
+    ldf_warn: xccdf_org.ssgproject.content_rule_accounts_password_warn_age_login_defs
+    ldf_umask: xccdf_org.ssgproject.content_rule_accounts_umask_etc_login_defs
+
+- name: Login defaults bytes | Take the state of the whole instance before the byte cases
+  ansible.builtin.include_tasks:
+    file: lifecycle_broad.yml
+
+- name: Login defaults bytes | Remember the state of the whole instance before the byte cases
+  ansible.builtin.set_fact:
+    ldf_broad_before: "{{ lifecycle_broad_record }}"
+
+- name: Login defaults bytes | Read login.defs as built
+  ansible.builtin.slurp:
+    src: /etc/login.defs
+  register: ldf_original
+
+- name: Login defaults bytes | Inspect login.defs as built
+  ansible.builtin.stat:
+    path: /etc/login.defs
+    follow: false
+  register: ldf_original_stat
+
+- name: Login defaults bytes | Name the text as built and the bytes of the cases
+  ansible.builtin.set_fact:
+    ldf_text: "{{ ldf_original.content | b64decode }}"
+    ldf_cases:
+      - name: Windows line endings, which shadow-utils trims, so it reads a maximum and a warning age of 30
+        text: >-
+          {{ ldf_original.content | b64decode
+             | regex_replace('(?m)^PASS_MAX_DAYS[ \t].*$', 'PASS_MAX_DAYS 30')
+             | regex_replace('(?m)^PASS_WARN_AGE[ \t].*$', 'PASS_WARN_AGE 30 # site')
+             | regex_replace('\n', '\r\n') }}
+        expected:
+          max: compliant
+          warn: applied
+          umask: applied
+        lines:
+          - PASS_WARN_AGE 30
+          - UMASK 027
+      - name: the file as built with Windows line endings, whose maximum age of 99999 the profile's value makes stricter
+        text: >-
+          {{ ldf_original.content | b64decode | regex_replace('\n', '\r\n') }}
+        expected:
+          max: applied
+          warn: compliant
+          umask: applied
+        lines:
+          - PASS_MAX_DAYS 365
+          - UMASK 027
+      - name: a vertical tab and a form feed before the number, which the state ledger cannot record to restore
+        text: >-
+          {{ ldf_original.content | b64decode
+             | regex_replace('(?m)^PASS_MAX_DAYS[ \t].*$', 'PASS_MAX_DAYS \v30')
+             | regex_replace('(?m)^PASS_WARN_AGE[ \t].*$', 'PASS_WARN_AGE \f30') }}
+        expected:
+          max: unreadable_value
+          warn: unreadable_value
+          umask: applied
+      - name: a vertical tab and a form feed after the number, which shadow-utils trims, so both are compliant
+        text: >-
+          {{ ldf_original.content | b64decode
+             | regex_replace('(?m)^PASS_MAX_DAYS[ \t].*$', 'PASS_MAX_DAYS 30\v')
+             | regex_replace('(?m)^PASS_WARN_AGE[ \t].*$', 'PASS_WARN_AGE 30\f') }}
+        expected:
+          max: compliant
+          warn: compliant
+          umask: applied
+      - name: a vertical tab and a carriage return inside the number, which shadow-utils does not parse
+        text: >-
+          {{ ldf_original.content | b64decode
+             | regex_replace('(?m)^PASS_MAX_DAYS[ \t].*$', 'PASS_MAX_DAYS 30\v5')
+             | regex_replace('(?m)^PASS_WARN_AGE[ \t].*$', 'PASS_WARN_AGE 3\r0') }}
+        expected:
+          max: unreadable_value
+          warn: unreadable_value
+          umask: applied
+      - name: a NUL after the number, where shadow-utils stops reading the line, so it reads 30
+        text: >-
+          {{ ldf_original.content | b64decode
+             | regex_replace('(?m)^PASS_MAX_DAYS[ \t].*$', 'PASS_MAX_DAYS 30\000')
+             | regex_replace('(?m)^PASS_WARN_AGE[ \t].*$', 'PASS_WARN_AGE 30\000junk') }}
+        expected:
+          max: unreadable_value
+          warn: unreadable_value
+          umask: applied
+      - name: lines of more than 1023 bytes, which shadow-utils reads in pieces that set a maximum and a warning age
+        text: >-
+          {{ ldf_original.content | b64decode
+             | regex_replace('(?m)^PASS_MAX_DAYS[ \t].*$', '#' ~ ('x' * 1022) ~ 'PASS_MAX_DAYS 30')
+             | regex_replace('(?m)^PASS_WARN_AGE[ \t].*$', 'PASS_WARN_AGE' ~ (' ' * 1008) ~ '30junk') }}
+        expected:
+          max: long_line
+          warn: long_line
+          umask: long_line
+
+- name: Login defaults bytes | Switch every rule of the topic on
+  ansible.builtin.set_fact:
+    "{{ item }}": true
+  loop: "{{ ldf_toggles }}"
+
+- name: Login defaults bytes | Run every byte case through an apply and a cleanup
+  ansible.builtin.include_tasks:
+    file: lifecycle_login_defs_case.yml
+  loop: "{{ ldf_cases }}"
+  loop_control:
+    loop_var: ldf_case
+    label: "{{ ldf_case.name }}"
+
+- name: Login defaults bytes | Give login.defs its content as built back
+  ansible.builtin.copy:
+    content: "{{ ldf_text }}"
+    dest: /etc/login.defs
+    follow: false
+    mode: "{{ ldf_original_stat.stat.mode }}"
+    owner: root
+    group: root
+
+- name: Login defaults bytes | Read the ledger after the byte cases
+  freesecdev.linux_compliance.control_state:
+    action: list
+  register: ldf_ledger_after
+
+- name: Login defaults bytes | Check that the ledger records no rule of the topic any more
+  ansible.builtin.assert:
+    that:
+      - ldf_ledger_after.entries | selectattr('rule_id', 'in', lifecycle_rule_ids) | list == []
+    fail_msg: "{{ ldf_label }}: the ledger still holds {{ ldf_ledger_after.entries }}"
+    quiet: true
+
+- name: Login defaults bytes | Assert that the whole instance is back to its state before the byte cases
+  ansible.builtin.include_tasks:
+    file: lifecycle_broad_compare.yml
+  vars:
+    lifecycle_label: login_defs bytes of the readers
+    lifecycle_broad_step: the byte cases
+    lifecycle_broad_reference: "{{ ldf_broad_before }}"
+
+- name: Login defaults bytes | Record that this regression file ran to its end
+  ansible.builtin.set_fact:
+    lifecycle_regression_files_run: "{{ lifecycle_regression_files_run + ['lifecycle_login_defs_bytes.yml'] }}"

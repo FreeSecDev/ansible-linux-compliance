@@ -974,6 +974,8 @@ def test_the_repository_declares_regression_groups_for_pwquality_ssh_and_sudo() 
         "refusals": frozenset({"ubuntu", "rhel_compatible"}),
         "values": frozenset({"ubuntu", "rhel_compatible"}),
         "profiles": frozenset({"ubuntu", "rhel_compatible"}),
+        "bytes": frozenset({"ubuntu", "rhel_compatible"}),
+        "readers": frozenset({"rhel_compatible"}),
     }
     assert found["filesystem_modules"] == {"changes": frozenset({"ubuntu", "rhel_compatible"})}
     assert found["protocol_modules"] == {}
@@ -981,7 +983,7 @@ def test_the_repository_declares_regression_groups_for_pwquality_ssh_and_sudo() 
     assert found["file_permissions"] == {}
     assert found["auditd_conf"] == {"changes": frozenset({"ubuntu", "rhel_compatible"})}
     assert found["auditd_rules_time"] == {"changes": frozenset({"ubuntu", "rhel_compatible"})}
-    assert len(lifecycle.dispatched_regressions(REPOSITORY_ROOT)) == 16
+    assert len(lifecycle.dispatched_regressions(REPOSITORY_ROOT)) == 18
 
 
 @pytest.mark.parametrize(

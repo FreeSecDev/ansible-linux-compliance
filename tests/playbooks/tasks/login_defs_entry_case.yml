@@ -33,6 +33,7 @@
       umask: '^[0-7]{3}$'
       equal: '^[a-z]{1,8}$'
     __linux_compliance_remediate_ld_dropin_texts: {}
+    __linux_compliance_remediate_ld_dropin_links_unread: []
     __linux_compliance_remediate_ld_not_directory: false
 
 - name: Login defaults entry | Run the apply helper

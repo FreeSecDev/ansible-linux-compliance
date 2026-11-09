@@ -4,10 +4,13 @@ The family file ``roles/remediate/tasks/login_defs.yml`` writes one line per set
 ``/etc/login.defs`` and decides ``compliant`` by mirroring each check: the comparison of the
 rule's parameters must be the operation of the check's state, the value must be the external
 variable that the check reads, and the only files read must be ``/etc/login.defs`` (and, for
-``CREATE_HOME``, the drop-in directory ``/etc/login.defs.d``). The object patterns are pinned
-literally, so a content update that changes what a check reads fails here until the family and
-ADR 0024 follow. The set of rules whose checks read ``/etc/login.defs`` is pinned as well, so a
-new rule of the content is either made native or documented as ``audit_only``.
+``CREATE_HOME``, the drop-in directory ``/etc/login.defs.d``). ``FAIL_DELAY`` and ``UMASK`` carry
+``libeconf``, because util-linux ``login`` and Rocky Linux's ``pam_umask`` read them through
+libeconf (FREES-198). The object
+patterns are pinned literally, so a content update that changes what a check reads fails here
+until the family and ADR 0024 follow. The set of rules whose checks read ``/etc/login.defs`` is
+pinned as well, so a new rule of the content is either made native or documented as
+``audit_only``.
 """
 
 from __future__ import annotations
@@ -45,6 +48,7 @@ PATTERNS = {
     "FAIL_DELAY": r"^[\s]*(?i)FAIL_DELAY(?-i)[\s]+([^#\s]*)",
     "CREATE_HOME": r"^[\s]*(?i)CREATE_HOME(?-i)[\s]+yes[\s]*(?:#.*)?$",
 }
+LIBECONF_READERS = {"FAIL_DELAY": "util-linux", "UMASK": "pam"}
 AUDIT_ONLY_READERS = {
     "set_password_hashing_algorithm_logindefs",
     "no_shelllogin_for_systemaccounts",
@@ -183,6 +187,7 @@ def assert_mirrors(rule_id: str, parameters: dict[str, object], check: Check) ->
     )
     assert others == expected_others, (rule_id, others)
     assert parameters.get("reads_dropins", False) is bool(expected_others), rule_id
+    assert parameters.get("libeconf") == LIBECONF_READERS.get(setting), rule_id
     comparison = str(parameters["comparison"])
     if comparison == "equal":
         assert check.operations == frozenset(), (rule_id, check.operations)

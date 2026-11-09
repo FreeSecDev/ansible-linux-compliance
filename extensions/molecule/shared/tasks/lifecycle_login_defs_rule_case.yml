@@ -1,0 +1,123 @@
+---
+- name: Login defaults rule case | Name the rule, its toggle and its ledger entry
+  ansible.builtin.set_fact:
+    ldr_rule_id: "{{ ldo_prefix ~ ldr_case.rule }}"
+    ldr_toggle: "{{ 'linux_compliance_rule_' ~ ldr_case.rule ~ '_enabled' }}"
+
+- name: Login defaults rule case | Remove the drop-in directory, or the link in its place, that came before the case
+  ansible.builtin.file:
+    path: /etc/login.defs.d
+    state: absent
+
+- name: Login defaults rule case | Write the login.defs of the case
+  ansible.builtin.copy:
+    content: "{{ ldr_case.text }}"
+    dest: /etc/login.defs
+    follow: false
+    mode: "{{ ldo_original_stat.stat.mode }}"
+    owner: root
+    group: root
+
+- name: Login defaults rule case | Create the drop-in directory of the case
+  ansible.builtin.file:
+    path: /etc/login.defs.d
+    state: directory
+    mode: "0755"
+    owner: root
+    group: root
+  when: ldr_case.dropin is defined
+
+- name: Login defaults rule case | Put the drop-in of the case
+  ansible.builtin.copy:
+    content: "{{ ldr_case.dropin }}"
+    dest: /etc/login.defs.d/50-site.defs
+    mode: "0644"
+    owner: root
+    group: root
+  when: ldr_case.dropin is defined
+
+- name: Login defaults rule case | Inspect the login.defs of the case before the apply
+  ansible.builtin.stat:
+    path: /etc/login.defs
+    follow: false
+    get_checksum: true
+    checksum_algorithm: sha256
+  register: ldr_before
+
+- name: Login defaults rule case | Pretend that the STIG profile selects the rule alone and switch it on
+  ansible.builtin.set_fact:
+    linux_compliance_remediate_profile: stig
+    linux_compliance_discovered: >-
+      {{ ldo_profile | combine({'profile_id': 'xccdf_org.ssgproject.content_profile_stig',
+                                'rule_ids': [ldr_rule_id]}) }}
+    "{{ ldr_toggle }}": true
+
+- name: Login defaults rule case | Apply the rule to the login.defs of the case
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+    lifecycle_family: login_defs
+    lifecycle_rule_ids:
+      - "{{ ldr_rule_id }}"
+
+- name: Login defaults rule case | Read login.defs and the ledger after the apply of the case
+  ansible.builtin.slurp:
+    src: /etc/login.defs
+  register: ldr_applied
+
+- name: Login defaults rule case | Read the ledger after the apply of the case
+  freesecdev.linux_compliance.control_state:
+    action: list
+  register: ldr_ledger
+
+- name: Login defaults rule case | Check the status, the line written and what the ledger records
+  vars:
+    ldr_newline: "\n"
+    ldr_text: "{{ ldr_applied.content | b64decode }}"
+  ansible.builtin.assert:
+    that:
+      - lifecycle_results | map(attribute='status') | list == [ldr_case.expected]
+      - >-
+        (ldr_ledger.entries | selectattr('rule_id', 'equalto', ldr_rule_id) | list | length == 1)
+        == (ldr_case.expected == 'applied')
+      - ldr_case.expected == 'applied' or lifecycle_results | selectattr('changed') | list == []
+      - ldr_case.expected in ['applied', 'compliant'] or lifecycle_results[0].reason is string
+      - ldr_case.lines | default([]) | reject('in', ldr_text.split(ldr_newline)) | list == []
+      - ldr_case.expected == 'applied' or ldr_text == ldr_case.text
+    fail_msg: "{{ ldo_label }}, {{ ldr_case.name }}, apply: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Login defaults rule case | Switch the rule off for the cleanup of the case
+  ansible.builtin.set_fact:
+    "{{ ldr_toggle }}": false
+
+- name: Login defaults rule case | Clean up the rule of the case
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+    lifecycle_family: login_defs
+    lifecycle_rule_ids:
+      - "{{ ldr_rule_id }}"
+
+- name: Login defaults rule case | Inspect the login.defs of the case after the cleanup
+  ansible.builtin.stat:
+    path: /etc/login.defs
+    follow: false
+    get_checksum: true
+    checksum_algorithm: sha256
+  register: ldr_after
+
+- name: Login defaults rule case | Check that the cleanup restored the login.defs of the case byte for byte
+  ansible.builtin.assert:
+    that:
+      - lifecycle_results | map(attribute='status') | unique | list in [['restored'], []]
+      - ldr_after.stat.checksum == ldr_before.stat.checksum
+    fail_msg: "{{ ldo_label }}, {{ ldr_case.name }}, cleanup: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Login defaults rule case | Remove the drop-in directory of the case
+  ansible.builtin.file:
+    path: /etc/login.defs.d
+    state: absent

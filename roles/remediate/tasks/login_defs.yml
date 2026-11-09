@@ -146,6 +146,12 @@
               | map(attribute='__linux_compliance_remediate_ld_source')
               | zip(__linux_compliance_remediate_ld_read.results | default([]) | map(attribute='content')
                     | map('b64decode'))) }}
+    __linux_compliance_remediate_ld_dropin_links_unread: >-
+      {{ __linux_compliance_remediate_ld_link_targets.results | default([])
+         | rejectattr('stat.isreg', 'defined') | map(attribute='__linux_compliance_remediate_ld_link') | list
+         + (__linux_compliance_remediate_ld_link_targets.results | default([])
+            | selectattr('stat.isreg', 'defined') | rejectattr('stat.isreg')
+            | map(attribute='__linux_compliance_remediate_ld_link') | list) }}
     __linux_compliance_remediate_ld_not_directory: >-
       {{ (__linux_compliance_remediate_ld_directory.stat.exists | default(false))
          and not (__linux_compliance_remediate_ld_directory.stat.isdir | default(false)) }}

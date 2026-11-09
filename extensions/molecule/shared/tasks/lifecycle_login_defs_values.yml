@@ -108,25 +108,6 @@
         lines:
           - PASS_MAX_DAYS 365
           - PASS_WARN_AGE 7
-      - name: Windows line endings, which shadow-utils trims, so it reads a maximum and a warning age of 30
-        text: >-
-          {{ ldf_original.content | b64decode
-             | regex_replace('(?m)^PASS_MAX_DAYS[ \t].*$', 'PASS_MAX_DAYS 30')
-             | regex_replace('(?m)^PASS_WARN_AGE[ \t].*$', 'PASS_WARN_AGE 30 # site')
-             | regex_replace('\n', '\r\n') }}
-        expected:
-          max: unreadable_value
-          warn: unreadable_value
-          umask: unreadable_value
-      - name: a vertical tab and a form feed before the number, which shadow-utils skips and reads as 30
-        text: >-
-          {{ ldf_original.content | b64decode
-             | regex_replace('(?m)^PASS_MAX_DAYS[ \t].*$', 'PASS_MAX_DAYS \v30')
-             | regex_replace('(?m)^PASS_WARN_AGE[ \t].*$', 'PASS_WARN_AGE \f30') }}
-        expected:
-          max: unreadable_value
-          warn: unreadable_value
-          umask: applied
       - name: no limit (-1) and a warning age without a value, which the profile's values make stricter
         text: >-
           {{ ldf_original.content | b64decode

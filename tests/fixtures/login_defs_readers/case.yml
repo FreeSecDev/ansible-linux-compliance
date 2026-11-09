@@ -1,0 +1,40 @@
+---
+- name: Give the decision tasks the facts that login_defs.yml and login_defs_apply.yml give them for the case
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_ld_current:
+      content: "{{ readers_case.text | b64encode }}"
+    __linux_compliance_remediate_ld_stat:
+      stat:
+        exists: true
+        isreg: true
+    __linux_compliance_remediate_rule:
+      rule_id: "{{ readers_case.name }}"
+      family: login_defs
+      parameters: >-
+        {{ {'setting': readers_case.setting, 'comparison': readers_case.comparison}
+           | combine({'libeconf': readers_case.libeconf} if readers_case.libeconf is defined else {})
+           | combine({'reads_dropins': true} if readers_case.reads_dropins | default(false) else {}) }}
+    __linux_compliance_remediate_ld_values: "{{ {readers_case.name: readers_case.required} }}"
+    __linux_compliance_remediate_ld_dropin_texts: >-
+      {{ dict(readers_case.dropins | default({}) | dict2items | map(attribute='key')
+              | map('regex_replace', '^', '/etc/login.defs.d/')
+              | zip(readers_case.dropins | default({}) | dict2items | map(attribute='value'))) }}
+    __linux_compliance_remediate_ld_dropin_links_unread: >-
+      {{ readers_case.links | default([])
+         | map('regex_replace', '^', '/etc/login.defs.d/') | list }}
+    __linux_compliance_remediate_ld_entry_method: null
+    __linux_compliance_remediate_ld_not_directory: false
+
+- name: Decide the case with the decision tasks of the remediate role
+  ansible.builtin.include_role:
+    name: freesecdev.linux_compliance.remediate
+    tasks_from: login_defs_decide.yml
+
+- name: Keep the decision of the case
+  ansible.builtin.set_fact:
+    readers_decisions: >-
+      {{ readers_decisions | combine({readers_case.name: {
+           'status': __linux_compliance_remediate_ld_status,
+           'line': __linux_compliance_remediate_ld_line,
+           'written': __linux_compliance_remediate_ld_new_text
+                      if __linux_compliance_remediate_ld_status == 'applied' else none}}) }}
