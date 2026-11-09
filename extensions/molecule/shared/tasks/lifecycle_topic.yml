@@ -69,8 +69,16 @@
       + (lifecycle_declared_applied | selectattr('platforms', 'defined')
       | selectattr('platforms', 'contains', lifecycle_platform) | list)}) }}
   vars:
-    lifecycle_declared_items: "{{ (lifecycle_topic.state | default({}, true))[item] | default([], true) }}"
-    lifecycle_declared_applied: "{{ (lifecycle_topic.applied | default({}, true))[item] | default([], true) }}"
+    lifecycle_driver_items: "{{ (lifecycle_topic.state | default({}, true))[item] | default([], true) }}"
+    lifecycle_driver_applied: "{{ (lifecycle_topic.applied | default({}, true))[item] | default([], true) }}"
+    lifecycle_declared_items: >-
+      {{ (lifecycle_driver_items | rejectattr('drivers', 'defined') | list)
+      + (lifecycle_driver_items | selectattr('drivers', 'defined')
+      | selectattr('drivers', 'contains', molecule_target.driver) | list) }}
+    lifecycle_declared_applied: >-
+      {{ (lifecycle_driver_applied | rejectattr('drivers', 'defined') | list)
+      + (lifecycle_driver_applied | selectattr('drivers', 'defined')
+      | selectattr('drivers', 'contains', molecule_target.driver) | list) }}
   loop: "{{ lifecycle_state_keys.keys() | list }}"
 
 - name: Lifecycle topic | Name the declared files whose content the topic rewrites
