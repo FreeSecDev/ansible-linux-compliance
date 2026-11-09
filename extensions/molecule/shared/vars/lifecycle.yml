@@ -9,6 +9,7 @@ lifecycle_state_keys:
   sysctl: name
   users: name
   groups: name
+  audit_rules: line
 lifecycle_applied_outcomes:
   - pass
   - fixed
@@ -42,8 +43,10 @@ lifecycle_pre_state_reading_keys:
   - unchanged
   - applied
   - requires
+  - reasons
 lifecycle_pre_state_writing_keys:
   - files
+  - loads_audit_rules
 lifecycle_watched_directories: >-
   {{ lifecycle_items.files | default([]) | map(attribute='path') | map('dirname') | unique | list }}
 lifecycle_broad_ignored_paths:

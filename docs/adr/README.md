@@ -30,6 +30,7 @@
 | [0026](0026-no-content-scripts-on-hosts.md) | No script or remediation code of the scanner content reaches a managed host | proposed |
 | [0027](0027-native-faillock-pwhistory.md) | Native account lock-out and password reuse, one recorded line per setting | proposed |
 | [0028](0028-native-kernel-module-drop-ins.md) | Native kernel module remediation through modprobe drop-ins | proposed |
+| [0030](0030-native-auditd-settings-and-audit-rules.md) | Native auditd settings and audit rule drop-ins | proposed |
 | [0031](0031-fast-records-for-the-lifecycle-harness.md) | Fast records for the Molecule lifecycle harness | proposed |
 
 Proposed ADRs are accepted through the pull request that introduces their first implementation.

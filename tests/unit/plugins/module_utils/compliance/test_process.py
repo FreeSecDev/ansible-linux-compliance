@@ -213,10 +213,17 @@ class TestCommandSpec:
 class TestPolicy:
     """Executable and option allow-list policy."""
 
-    def test_default_allow_list_is_only_oscap_the_scc_command_line_and_sshd_test_mode(
+    def test_default_allow_list_is_only_oscap_the_scc_command_line_sshd_and_the_audit_tools(
         self,
     ) -> None:
-        assert set(process.ALLOWED_EXECUTABLES) == {"oscap", "cscc", "sshd", "modprobe"}
+        assert set(process.ALLOWED_EXECUTABLES) == {
+            "oscap",
+            "cscc",
+            "sshd",
+            "auditctl",
+            "augenrules",
+            "modprobe",
+        }
         assert process.ALLOWED_EXECUTABLES["oscap"].fixed_path is None
         options = process.ALLOWED_EXECUTABLES["oscap"].allowed_options
         assert {
@@ -285,6 +292,59 @@ class TestPolicy:
     )
     def test_sshd_refuses_every_other_command_line(self, arguments: tuple[str, ...]) -> None:
         spec = process.CommandSpec("sshd", arguments, 1)
+        with pytest.raises(process.ProcessPolicyError):
+            process.check_policy(spec)
+
+    def test_audit_tools_run_only_in_their_exact_forms(self) -> None:
+        auditctl = process.ALLOWED_EXECUTABLES["auditctl"]
+        augenrules = process.ALLOWED_EXECUTABLES["augenrules"]
+        assert auditctl.fixed_path is None
+        assert augenrules.fixed_path is None
+        assert auditctl.argument_forms == (("-s",), ("-l",), ("--signal", "reload"))
+        assert augenrules.argument_forms == (("--load",), ("--check",))
+        for executable, arguments in (
+            ("auditctl", ("-s",)),
+            ("auditctl", ("-l",)),
+            ("auditctl", ("--signal", "reload")),
+            ("augenrules", ("--load",)),
+            ("augenrules", ("--check",)),
+        ):
+            spec = process.CommandSpec(executable, arguments, 1)
+            assert process.check_policy(spec).name == executable
+
+    @pytest.mark.parametrize(
+        ("executable", "arguments"),
+        [
+            ("auditctl", ()),
+            ("auditctl", ("-D",)),
+            ("auditctl", ("-e", "0")),
+            ("auditctl", ("-e", "2")),
+            ("auditctl", ("-f", "0")),
+            ("auditctl", ("-R", "/etc/audit/audit.rules")),
+            ("auditctl", ("-R", "/srv/rules")),
+            ("auditctl", ("-w", "/etc/passwd", "-p", "wa")),
+            ("auditctl", ("-W", "/etc/passwd")),
+            ("auditctl", ("-a", "always,exit", "-S", "all")),
+            ("auditctl", ("-d", "always,exit", "-S", "all")),
+            ("auditctl", ("-b", "0")),
+            ("auditctl", ("-s", "-l")),
+            ("auditctl", ("-l", "-k", "x")),
+            ("auditctl", ("--signal", "stop")),
+            ("auditctl", ("--signal", "TERM")),
+            ("auditctl", ("--signal",)),
+            ("auditctl", ("--signal=reload",)),
+            ("auditctl", ("--loginuid-immutable",)),
+            ("augenrules", ()),
+            ("augenrules", ("--load", "--check")),
+            ("augenrules", ("--check", "--load")),
+            ("augenrules", ("--load", "/srv/rules")),
+            ("augenrules", ("/etc/audit/rules.d",)),
+        ],
+    )
+    def test_audit_tools_refuse_every_other_command_line(
+        self, executable: str, arguments: tuple[str, ...]
+    ) -> None:
+        spec = process.CommandSpec(executable, arguments, 1)
         with pytest.raises(process.ProcessPolicyError):
             process.check_policy(spec)
 
@@ -865,6 +925,26 @@ class TestRunLimits:
         pid = int(result.stdout.split()[0])
         assert result.timed_out
         assert wait_until_dead(pid)
+
+    def test_a_grace_lets_a_trap_clean_up_before_the_kill(self, tmp_path: Path) -> None:
+        marker = tmp_path / "cleaned"
+        graceful = {"sh": dataclasses.replace(SHELL, term_grace_seconds=FAST)}
+        script = "trap 'echo done > \"$1\"; exit 1' TERM; while :; do sleep 0.05; done"
+        result = process.run(shell(script, str(marker), timeout=0.5), policies=graceful)
+        assert result.timed_out
+        assert marker.read_text(encoding="utf-8") == "done\n"
+
+    def test_without_a_grace_the_trap_never_runs(self, tmp_path: Path) -> None:
+        marker = tmp_path / "cleaned"
+        script = "trap 'echo done > \"$1\"; exit 1' TERM; while :; do sleep 0.05; done"
+        result = execute(shell(script, str(marker), timeout=0.5))
+        assert result.timed_out
+        assert result.returncode == -9
+        assert not marker.exists()
+
+    def test_augenrules_gets_a_grace_for_its_trap(self) -> None:
+        assert process.ALLOWED_EXECUTABLES["augenrules"].term_grace_seconds > 0
+        assert process.ALLOWED_EXECUTABLES["auditctl"].term_grace_seconds == 0
 
     def test_timeout_is_a_result_not_an_exception(self) -> None:
         result = execute(process.CommandSpec("sleep", ("30",), 0.2))

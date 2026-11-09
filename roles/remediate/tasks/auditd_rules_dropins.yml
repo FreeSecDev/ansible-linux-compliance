@@ -1,0 +1,649 @@
+---
+- name: Audit rules | Refuse to run outside a topic of audit rule drop-ins that the dispatcher planned
+  ansible.builtin.assert:
+    that:
+      - linux_compliance_remediate_enabled is boolean
+      - linux_compliance_remediate_enabled
+      - __linux_compliance_remediate_plan is defined
+      - __linux_compliance_remediate_plan is mapping
+      - __linux_compliance_remediate_plan.enabled is true
+      - __linux_compliance_remediate_family is defined
+      - __linux_compliance_remediate_family is mapping
+      - __linux_compliance_remediate_family.name in __linux_compliance_remediate_audit_rules_families
+      - >-
+        __linux_compliance_remediate_family ==
+        (__linux_compliance_remediate_plan.families
+         | selectattr('name', 'equalto', __linux_compliance_remediate_family.name) | list | first | default({}))
+    fail_msg: >-
+      auditd_rules_dropins.yml runs only for a topic of audit rule drop-ins that the remediate dispatcher planned,
+      with linux_compliance_remediate_enabled true. No change was made to the host.
+    quiet: true
+  tags:
+    - always
+
+- name: Audit rules | Read the architecture of the host, whose system call tables the rule lines name
+  ansible.builtin.setup:
+    gather_subset:
+      - "!all"
+      - "!min"
+      - platform
+  register: __linux_compliance_remediate_ar_platform
+  tags:
+    - always
+
+- name: Audit rules | Compose the lines of every rule to apply for the benchmark and the value of the profile
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_ar_machine: >-
+      {{ __linux_compliance_remediate_ar_platform.ansible_facts.ansible_architecture | default('') }}
+    __linux_compliance_remediate_ar_topic: "{{ __linux_compliance_remediate_family.name }}"
+    __linux_compliance_remediate_ar_values: >-
+      {%- set values = {} -%}
+      {%- for rule in __linux_compliance_remediate_family.apply -%}
+      {%- set found = rule.parameters.profile_values | default([])
+            | selectattr('content_sha256', 'equalto', linux_compliance_discovered.content_sha256)
+            | selectattr('profiles', 'contains', linux_compliance_remediate_profile)
+            | map(attribute='value') | map('join', '') | list -%}
+      {%- set _ = values.update({rule.rule_id: (found | first | default(none))
+            if rule.parameters.value_id is defined else ''}) -%}
+      {%- endfor -%}
+      {{ values }}
+  tags:
+    - always
+
+- name: Audit rules | Substitute the value of the profile into the lines of every rule to apply
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_ar_lines: >-
+      {%- set lines = {} -%}
+      {%- for rule in __linux_compliance_remediate_family.apply -%}
+      {%- set value = __linux_compliance_remediate_ar_values[rule.rule_id] -%}
+      {%- set raw = (rule.parameters.lines | default({}))[linux_compliance_discovered.benchmark_id]
+            | default(none) -%}
+      {%- set _ = lines.update({rule.rule_id: none if raw is none or value is none
+            else raw | map('replace', '{value}', value) | list}) -%}
+      {%- endfor -%}
+      {{ lines }}
+  tags:
+    - always
+
+- name: Audit rules | Refuse a rule without a usable drop-in path, rule lines or value before anything changes
+  ansible.builtin.assert:
+    that:
+      - __linux_compliance_remediate_ar_rule.parameters.method | default('') == 'rules_file'
+      - >-
+        __linux_compliance_remediate_ar_rule.parameters.path | default('')
+        is match(__linux_compliance_remediate_audit_dropin_pattern)
+      - >-
+        __linux_compliance_remediate_ar_rule not in __linux_compliance_remediate_family.apply
+        or (__linux_compliance_remediate_ar_lines[__linux_compliance_remediate_ar_rule.rule_id] is sequence
+            and __linux_compliance_remediate_ar_lines[__linux_compliance_remediate_ar_rule.rule_id] is not string
+            and __linux_compliance_remediate_ar_lines[__linux_compliance_remediate_ar_rule.rule_id] | length > 0
+            and __linux_compliance_remediate_ar_lines[__linux_compliance_remediate_ar_rule.rule_id]
+                | reject('match', __linux_compliance_remediate_audit_line_pattern) | list == []
+            and (__linux_compliance_remediate_ar_rule.parameters.value_id is not defined
+                 or __linux_compliance_remediate_ar_values[__linux_compliance_remediate_ar_rule.rule_id]
+                    is match(__linux_compliance_remediate_ar_rule.parameters.value_pattern)))
+    fail_msg: >-
+      {{ __linux_compliance_remediate_ar_rule.rule_id }} cannot be written: it needs the method rules_file, a drop-in
+      named /etc/audit/rules.d/50-freesecdev-*.rules and rule lines for the benchmark
+      {{ linux_compliance_discovered.benchmark_id | default('') }} in the forms that the collection writes, and a rule
+      with a value needs the value {{ __linux_compliance_remediate_ar_rule.parameters.value_id | default('') }} that the
+      profile {{ linux_compliance_remediate_profile }} gives it, in the form
+      {{ __linux_compliance_remediate_ar_rule.parameters.value_pattern | default('') }}; the catalogue holds
+      {{ __linux_compliance_remediate_ar_lines[__linux_compliance_remediate_ar_rule.rule_id] | default('') }}. The lines
+      are generated from the catalogue (ADR 0030); no audit rule was changed.
+    quiet: true
+  loop: "{{ __linux_compliance_remediate_family.cleanup + __linux_compliance_remediate_family.apply }}"
+  loop_control:
+    loop_var: __linux_compliance_remediate_ar_rule
+    label: "{{ __linux_compliance_remediate_ar_rule.rule_id }}"
+  tags:
+    - always
+
+- name: Audit rules | Inspect the rule directory without following a symbolic link
+  ansible.builtin.stat:
+    path: "{{ __linux_compliance_remediate_audit_rules_directory }}"
+    follow: false
+    get_checksum: false
+    get_mime: false
+    get_attributes: false
+  register: __linux_compliance_remediate_ar_directory
+  tags:
+    - always
+
+- name: Audit rules | Read the audit status, the loaded rules and the rule lines of every file that augenrules reads
+  freesecdev.linux_compliance.audit_control:
+    action: status
+    expect: >-
+      {{ __linux_compliance_remediate_ar_lines.values() | select('sequence') | reject('string') | flatten | unique
+         | list }}
+  register: __linux_compliance_remediate_ar_status
+  tags:
+    - always
+
+- name: Audit rules | List every entry of the rule directory with its SHA-256, without following a symbolic link
+  ansible.builtin.find:
+    paths: "{{ __linux_compliance_remediate_audit_rules_directory }}"
+    file_type: any
+    follow: false
+    hidden: true
+    recurse: false
+    get_checksum: true
+    checksum_algorithm: sha256
+  register: __linux_compliance_remediate_ar_found
+  when: __linux_compliance_remediate_ar_directory.stat.isdir | default(false)
+  tags:
+    - always
+
+- name: Audit rules | Name the entries of the rule directory and read the prior state of every rule
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_ar_entries: >-
+      {{ dict(__linux_compliance_remediate_ar_found.files | default([]) | map(attribute='path')
+              | zip(__linux_compliance_remediate_ar_found.files | default([]))) }}
+    __linux_compliance_remediate_ar_records: >-
+      {%- set records = {} -%}
+      {%- for rule in __linux_compliance_remediate_family.apply + __linux_compliance_remediate_family.cleanup -%}
+      {%- set _ = records.update({rule.rule_id: (rule.ledger_entry.prior_values | default([])
+            | items2dict(key_name='name', value_name='value')) if rule.ledger_entry is mapping else none}) -%}
+      {%- endfor -%}
+      {{ records }}
+    __linux_compliance_remediate_ar_contents: >-
+      {%- set contents = {} -%}
+      {%- for rule in __linux_compliance_remediate_family.apply -%}
+      {%- set _ = contents.update({rule.rule_id:
+            '# Managed by freesecdev.linux_compliance for ' ~ rule.rule_id ~ '.' ~ __linux_compliance_remediate_newline
+            ~ '# Switching the rule or the ' ~ __linux_compliance_remediate_ar_topic ~ ' topic off removes this file.'
+            ~ __linux_compliance_remediate_newline
+            ~ (__linux_compliance_remediate_ar_lines[rule.rule_id] | join(__linux_compliance_remediate_newline))
+            ~ __linux_compliance_remediate_newline}) -%}
+      {%- endfor -%}
+      {{ contents }}
+  tags:
+    - always
+
+- name: Audit rules | Read the drop-ins of the topic whose content is not what the collection expects
+  ansible.builtin.slurp:
+    src: "{{ __linux_compliance_remediate_ar_rule.parameters.path }}"
+  loop: >-
+    {{ (__linux_compliance_remediate_family.apply + __linux_compliance_remediate_family.cleanup)
+       | selectattr('parameters.path', 'in', __linux_compliance_remediate_ar_entries
+                                             | dict2items | selectattr('value.isreg') | map(attribute='key') | list)
+       | list }}
+  loop_control:
+    loop_var: __linux_compliance_remediate_ar_rule
+    label: "{{ __linux_compliance_remediate_ar_rule.rule_id }}"
+  register: __linux_compliance_remediate_ar_read
+  when: >-
+    __linux_compliance_remediate_ar_entries[__linux_compliance_remediate_ar_rule.parameters.path].checksum
+    != ((__linux_compliance_remediate_ar_contents[__linux_compliance_remediate_ar_rule.rule_id] | hash('sha256'))
+        if __linux_compliance_remediate_ar_rule.rule_id in __linux_compliance_remediate_ar_contents
+        else (__linux_compliance_remediate_ar_records[__linux_compliance_remediate_ar_rule.rule_id]
+              | default({}, true)).dropin_sha256 | default(''))
+  tags:
+    - always
+
+- name: Audit rules | Keep the text of the drop-ins that were read
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_ar_texts: >-
+      {{ dict(__linux_compliance_remediate_ar_read.results | default([]) | rejectattr('skipped', 'defined')
+              | map(attribute='__linux_compliance_remediate_ar_rule.parameters.path')
+              | zip(__linux_compliance_remediate_ar_read.results | default([]) | rejectattr('skipped', 'defined')
+                    | map(attribute='content') | map('b64decode'))) }}
+  tags:
+    - always
+
+- name: Audit rules | Name the reason each rule that is no longer effective cannot be reverted, or that it is gone
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_ar_cleanup_plan: >-
+      {%- set plan = {} -%}
+      {%- for rule in __linux_compliance_remediate_family.cleanup -%}
+      {%- set prior = __linux_compliance_remediate_ar_records[rule.rule_id] | default({}, true) -%}
+      {%- set entry = __linux_compliance_remediate_ar_entries[rule.parameters.path] | default(none) -%}
+      {%- set text = __linux_compliance_remediate_ar_texts[rule.parameters.path] | default('') -%}
+      {%- set header = '# Managed by freesecdev.linux_compliance for ' ~ rule.rule_id ~ '.' -%}
+      {%- set sha = prior.dropin_sha256 | default(none) -%}
+      {%- set reason =
+            'method_changed' if prior.method | default('unknown') != 'rules_file'
+            else 'not_directory' if (__linux_compliance_remediate_ar_directory.stat.exists | default(false))
+                 and not (__linux_compliance_remediate_ar_directory.stat.isdir | default(false))
+            else none if entry is none
+            else 'not_regular_file' if not entry.isreg
+            else 'not_owned' if entry.checksum | default('') != sha and not text.startswith(header)
+            else 'invalid_record' if not (sha is string and sha is match('^[0-9a-f]{64}$'))
+            else 'modified_since_apply' if entry.checksum | default('') != sha
+            else none -%}
+      {%- set _ = plan.update({rule.rule_id: {'reason': reason, 'present': entry is not none}}) -%}
+      {%- endfor -%}
+      {{ plan }}
+  tags:
+    - always
+
+- name: Audit rules | Remove the drop-ins that the collection wrote for rules that are no longer effective
+  ansible.builtin.file:
+    path: "{{ __linux_compliance_remediate_ar_rule.parameters.path }}"
+    state: absent
+  loop: >-
+    {{ __linux_compliance_remediate_family.cleanup
+       | selectattr('rule_id', 'in', __linux_compliance_remediate_ar_cleanup_plan | dict2items
+                                     | rejectattr('value.reason') | selectattr('value.present')
+                                     | map(attribute='key') | list) | list }}
+  loop_control:
+    loop_var: __linux_compliance_remediate_ar_rule
+    label: "{{ __linux_compliance_remediate_ar_rule.rule_id }}"
+  register: __linux_compliance_remediate_ar_removal
+  tags:
+    - always
+
+- name: Audit rules | Forget the rules in the state ledger whose drop-in is gone
+  freesecdev.linux_compliance.control_state:
+    action: remove
+    rule_id: "{{ __linux_compliance_remediate_ar_rule.rule_id }}"
+  loop: >-
+    {{ __linux_compliance_remediate_family.cleanup
+       | selectattr('rule_id', 'in', __linux_compliance_remediate_ar_cleanup_plan | dict2items
+                                     | rejectattr('value.reason') | map(attribute='key') | list) | list }}
+  loop_control:
+    loop_var: __linux_compliance_remediate_ar_rule
+    label: "{{ __linux_compliance_remediate_ar_rule.rule_id }}"
+  register: __linux_compliance_remediate_ar_forget
+  tags:
+    - always
+
+- name: Audit rules | Inspect the directory of every path that a rule to apply watches
+  ansible.builtin.stat:
+    path: "{{ __linux_compliance_remediate_ar_parent }}"
+    follow: true
+    get_checksum: false
+    get_mime: false
+    get_attributes: false
+  loop: >-
+    {{ __linux_compliance_remediate_ar_lines.values() | select('sequence') | flatten
+       | map('regex_findall', '(?:^-w |-F path=)(/[^ ]+)') | flatten | map('dirname') | unique | sort | list }}
+  loop_control:
+    loop_var: __linux_compliance_remediate_ar_parent
+  register: __linux_compliance_remediate_ar_parents
+  tags:
+    - always
+
+- name: Audit rules | Decide for every rule to apply whether its drop-in can be written and would add its rules
+  vars:
+    __linux_compliance_remediate_ar_missing_parents: >-
+      {{ __linux_compliance_remediate_ar_parents.results | default([])
+         | rejectattr('stat.isdir', 'defined') | map(attribute='__linux_compliance_remediate_ar_parent') | list
+         + (__linux_compliance_remediate_ar_parents.results | default([]) | selectattr('stat.isdir', 'defined')
+            | rejectattr('stat.isdir') | map(attribute='__linux_compliance_remediate_ar_parent') | list) }}
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_ar_plan: >-
+      {%- set plan = {} -%}
+      {%- set directory = __linux_compliance_remediate_ar_directory.stat -%}
+      {%- set live = __linux_compliance_remediate_ar_status.kernel | default(false)
+            and __linux_compliance_remediate_ar_status.enabled | default(none) == 1
+            and (__linux_compliance_remediate_ar_status.pid | default(0, true) | int) > 0 -%}
+      {%- set current = __linux_compliance_remediate_ar_status.current | default(none) is sameas true -%}
+      {%- for rule in __linux_compliance_remediate_family.apply -%}
+      {%- set prior = __linux_compliance_remediate_ar_records[rule.rule_id] -%}
+      {%- set entry = __linux_compliance_remediate_ar_entries[rule.parameters.path] | default(none) -%}
+      {%- set content = __linux_compliance_remediate_ar_contents[rule.rule_id] -%}
+      {%- set sha = content | hash('sha256') -%}
+      {%- set header = '# Managed by freesecdev.linux_compliance for ' ~ rule.rule_id ~ '.' -%}
+      {%- set text = __linux_compliance_remediate_ar_texts[rule.parameters.path] | default(none) -%}
+      {%- set wanted = __linux_compliance_remediate_ar_lines[rule.rule_id] -%}
+      {%- set others = __linux_compliance_remediate_ar_status.files | default([])
+            | rejectattr('path', 'equalto', rule.parameters.path) | list -%}
+      {%- set elsewhere = wanted | select('in', others | map(attribute='lines') | flatten | list) | list -%}
+      {%- set unloaded = wanted | select('in', __linux_compliance_remediate_ar_status.missing | default(wanted))
+            | list -%}
+      {%- set confirmed = live and current and unloaded | length == 0 -%}
+      {%- set gone = namespace(lines=[]) -%}
+      {%- for item in others -%}
+      {%- for line in item.deletes | default([]) -%}
+      {%- set key = (line | regex_search('-k (\\S+)$', '\\1') or [none]) | first -%}
+      {%- set target = line.split(' ')[1] | default('') -%}
+      {%- if (line is match('^-W ') and wanted | select('search', '^-w ' ~ (target | regex_escape) ~ ' | -F path='
+                                                         ~ (target | regex_escape) ~ ' ') | list | length > 0)
+             or (line is match('^-d ') and ('-a ' ~ line[3:]) in wanted)
+             or (line is match('^-D ') and (key is none
+                 or wanted | select('search', ' -k ' ~ (key | regex_escape) ~ '$') | list | length > 0)) -%}
+      {%- set gone.lines = gone.lines + [item.path ~ ': ' ~ line] -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {%- endfor -%}
+      {%- set unconfirmed = 'no running auditd whose rules can be read here' if not live
+            else 'augenrules --check finds the rule files changed since the last load' if not current
+            else 'the running auditd has not loaded ' ~ unloaded | join('; ') -%}
+      {%- set ns = namespace(holders=[]) -%}
+      {%- for item in others if item.lines | intersect(wanted) | length > 0 -%}
+      {%- set ns.holders = ns.holders + [item.path] -%}
+      {%- endfor -%}
+      {%- set watched = wanted | map('regex_findall', '(?:^-w |-F path=)(/[^ ]+)') | flatten | map('dirname') | list -%}
+      {%- set absent = watched | select('in', __linux_compliance_remediate_ar_missing_parents) | unique | list -%}
+      {%- set status =
+            'method_changed' if prior is mapping and prior.method | default('unknown') != 'rules_file'
+            else 'notapplicable' if not (directory.exists | default(false))
+            else 'not_directory' if not (directory.isdir | default(false))
+            else 'notapplicable' if __linux_compliance_remediate_ar_machine
+                 not in __linux_compliance_remediate_audit_machines
+            else 'not_regular_file' if entry is not none and not entry.isreg
+            else 'not_owned' if entry is not none and entry.checksum | default('') != sha
+                 and not (text | default('', true)).startswith(header)
+            else 'compliant' if entry is none and elsewhere | length == wanted | length and confirmed
+            else 'conflicting_rule' if gone.lines | length > 0
+            else 'duplicate_rule' if elsewhere | length > 0
+            else 'watch_target_missing' if absent | length > 0
+            else 'compliant' if entry is not none and entry.checksum | default('') == sha
+            else 'applied' -%}
+      {%- set reason = {
+            'method_changed': 'the ledger entry was recorded by the ' ~ prior.method | default('unknown')
+                              ~ ' method; clean it up first' if prior is mapping else '',
+            'notapplicable': (__linux_compliance_remediate_audit_rules_directory
+                              ~ ' does not exist: the audit package is not installed')
+                             if not (directory.exists | default(false))
+                             else 'the rule lines are written for the system calls of '
+                                  ~ __linux_compliance_remediate_audit_machines | join(', ') ~ ', not '
+                                  ~ __linux_compliance_remediate_ar_machine,
+            'not_directory': __linux_compliance_remediate_audit_rules_directory
+                             ~ ' is a symbolic link or not a directory',
+            'not_regular_file': rule.parameters.path ~ ' is a symbolic link or another non-regular file',
+            'not_owned': rule.parameters.path ~ ' exists without the header of the collection',
+            'conflicting_rule': gone.lines | join('; ') ~ ' deletes rules that match this rule, and augenrules'
+                                ~ ' keeps such a line in place, so whether the rule stays loaded depends on the'
+                                ~ ' order of the files; the running auditd does not confirm it',
+            'duplicate_rule': (ns.holders | join(', ') ~ ' already holds ' ~ elsewhere | join('; ')
+                               ~ ', and auditctl stops at a rule that is loaded twice')
+                              if entry is not none or elsewhere | length < wanted | length
+                              else (ns.holders | join(', ') ~ ' already holds every line, but the collection'
+                                    ~ ' reports such a rule compliant only when the running auditd has it loaded'
+                                    ~ ' and augenrules --check finds the rule files unchanged since that load ('
+                                    ~ unconfirmed ~ '); a drop-in of its own would repeat the rule'),
+            'watch_target_missing': 'the directories ' ~ absent | join(', ')
+                                    ~ ' do not exist, and the kernel refuses a watch below a missing directory'}
+            [status] | default(none) -%}
+      {%- set _ = plan.update({rule.rule_id: {'status': status, 'reason': reason, 'sha': sha,
+                                              'present': entry is not none, 'previous': text}}) -%}
+      {%- endfor -%}
+      {{ plan }}
+  tags:
+    - always
+
+- name: Audit rules | Name the drop-ins to write and the ledger records to write before any change
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_ar_to_write: >-
+      {{ __linux_compliance_remediate_family.apply
+         | selectattr('rule_id', 'in', __linux_compliance_remediate_ar_plan | dict2items
+                                       | selectattr('value.status', 'equalto', 'applied')
+                                       | map(attribute='key') | list) | list }}
+    __linux_compliance_remediate_ar_record_values: >-
+      {%- set records = {} -%}
+      {%- for rule in __linux_compliance_remediate_family.apply
+            if __linux_compliance_remediate_ar_plan[rule.rule_id].status == 'applied' -%}
+      {%- set prior = __linux_compliance_remediate_ar_records[rule.rule_id] -%}
+      {%- set sha = __linux_compliance_remediate_ar_plan[rule.rule_id].sha -%}
+      {%- if prior is none -%}
+      {%- set _ = records.update({rule.rule_id: {'method': 'rules_file', 'dropin': none, 'dropin_sha256': sha}}) -%}
+      {%- elif prior.dropin_sha256 | default(none) != sha -%}
+      {%- set _ = records.update({rule.rule_id: prior | combine({'dropin_sha256': sha})}) -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {{ records }}
+  tags:
+    - always
+
+- name: Audit rules | Record that each drop-in did not exist and what it will hold, before writing it
+  freesecdev.linux_compliance.control_state:
+    action: record
+    rule_id: "{{ __linux_compliance_remediate_ar_rule.rule_id }}"
+    family: "{{ __linux_compliance_remediate_ar_rule.family }}"
+    revert_strategy: "{{ __linux_compliance_remediate_ar_rule.revert_strategy }}"
+    prior_values: >-
+      {{ __linux_compliance_remediate_ar_record_values[__linux_compliance_remediate_ar_rule.rule_id]
+         | dict2items(key_name='name', value_name='value') }}
+    collection_version: "{{ __linux_compliance_remediate_collection_version }}"
+    replace: "{{ __linux_compliance_remediate_ar_rule.ledger_entry is mapping }}"
+  loop: >-
+    {{ __linux_compliance_remediate_family.apply
+       | selectattr('rule_id', 'in', __linux_compliance_remediate_ar_record_values.keys() | list) | list }}
+  loop_control:
+    loop_var: __linux_compliance_remediate_ar_rule
+    label: "{{ __linux_compliance_remediate_ar_rule.rule_id }}"
+  register: __linux_compliance_remediate_ar_record
+  tags:
+    - always
+
+- name: Audit rules | Write the drop-in of every rule, mode 0600, owned by root
+  ansible.builtin.copy:
+    content: "{{ __linux_compliance_remediate_ar_contents[__linux_compliance_remediate_ar_rule.rule_id] }}"
+    dest: "{{ __linux_compliance_remediate_ar_rule.parameters.path }}"
+    follow: false
+    force: true
+    mode: "0600"
+    owner: root
+    group: root
+  loop: "{{ __linux_compliance_remediate_ar_to_write }}"
+  loop_control:
+    loop_var: __linux_compliance_remediate_ar_rule
+    label: "{{ __linux_compliance_remediate_ar_rule.rule_id }}"
+  register: __linux_compliance_remediate_ar_write
+  tags:
+    - always
+
+- name: Audit rules | Name whether this run changed the rule files and the rules that must then be loaded
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_ar_changed: >-
+      {%- set status = __linux_compliance_remediate_ar_status -%}
+      {%- set live = status.kernel | default(false) and status.enabled | default(none) == 1
+            and (status.pid | default(0, true) | int) > 0 -%}
+      {%- set ns = namespace(stale=false) -%}
+      {%- for rule in __linux_compliance_remediate_family.apply -%}
+      {%- set planned = __linux_compliance_remediate_ar_plan[rule.rule_id] -%}
+      {%- if planned.status == 'compliant' and planned.present
+            and __linux_compliance_remediate_ar_lines[rule.rule_id] | select('in', status.missing | default([]))
+                | list | length > 0 -%}
+      {%- set ns.stale = true -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {{ not status.check_mode
+         and (__linux_compliance_remediate_ar_write is changed or __linux_compliance_remediate_ar_removal is changed
+              or (live and ns.stale)) }}
+    __linux_compliance_remediate_ar_expect: >-
+      {%- set expect = [] -%}
+      {%- for rule in __linux_compliance_remediate_family.apply -%}
+      {%- set planned = __linux_compliance_remediate_ar_plan[rule.rule_id] -%}
+      {%- if planned.status == 'applied' or (planned.status == 'compliant' and planned.present) -%}
+      {%- set _ = expect.extend(__linux_compliance_remediate_ar_lines[rule.rule_id]) -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {{ expect }}
+  tags:
+    - always
+
+- name: Audit rules | Read the services, to load the rules only where auditd runs
+  ansible.builtin.service_facts:
+  register: __linux_compliance_remediate_ar_services
+  when: __linux_compliance_remediate_ar_changed
+  tags:
+    - always
+
+- name: Audit rules | Name whether auditd runs and whether the loaded rules are locked until the next boot
+  vars:
+    __linux_compliance_remediate_ar_known_services: >-
+      {{ (__linux_compliance_remediate_ar_services.ansible_facts | default({})).services | default({}) }}
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_ar_running: >-
+      {{ __linux_compliance_remediate_ar_changed
+         and (__linux_compliance_remediate_ar_known_services['auditd.service'] | default({})).state | default('')
+             == 'running' }}
+    __linux_compliance_remediate_ar_locked: "{{ __linux_compliance_remediate_ar_status.enabled | default(none) == 2 }}"
+  tags:
+    - always
+
+- name: Audit rules | Inspect the copy of the previous generated rule file that augenrules keeps
+  ansible.builtin.stat:
+    path: "{{ __linux_compliance_remediate_audit_rules_previous }}"
+    follow: false
+    get_checksum: false
+    get_mime: false
+    get_attributes: false
+  register: __linux_compliance_remediate_ar_previous
+  when:
+    - __linux_compliance_remediate_ar_running
+    - not __linux_compliance_remediate_ar_locked
+  tags:
+    - always
+
+- name: Audit rules | Read that copy, so it can be put back after the load
+  ansible.builtin.slurp:
+    src: "{{ __linux_compliance_remediate_audit_rules_previous }}"
+  register: __linux_compliance_remediate_ar_previous_text
+  when:
+    - __linux_compliance_remediate_ar_previous is not skipped
+    - __linux_compliance_remediate_ar_previous.stat.isreg | default(false)
+  tags:
+    - always
+
+- name: Audit rules | Load the rule set after checking it for rules that it holds twice, as auditd.service does at boot
+  freesecdev.linux_compliance.audit_control:
+    action: load
+    expect: "{{ __linux_compliance_remediate_ar_expect }}"
+  register: __linux_compliance_remediate_ar_load
+  when:
+    - __linux_compliance_remediate_ar_running
+    - not __linux_compliance_remediate_ar_locked
+  tags:
+    - always
+
+- name: Audit rules | Put back the copy of the previous generated rule file as it was before the load
+  ansible.builtin.include_tasks:
+    file: "{{ role_path }}/tasks/auditd_rules_previous.yml"
+    apply:
+      tags:
+        - always
+  when: __linux_compliance_remediate_ar_load is not skipped
+  tags:
+    - always
+
+- name: Audit rules | Roll back the drop-ins of this run when the rule set does not load with them
+  when:
+    - __linux_compliance_remediate_ar_load is not skipped
+    - not __linux_compliance_remediate_ar_load.loaded
+  tags:
+    - always
+  block:
+    - name: Audit rules | Remove the drop-ins that this run created
+      ansible.builtin.file:
+        path: "{{ __linux_compliance_remediate_ar_undo.parameters.path }}"
+        state: absent
+      loop: >-
+        {{ __linux_compliance_remediate_ar_write.results | default([]) | selectattr('changed')
+           | map(attribute='__linux_compliance_remediate_ar_rule')
+           | rejectattr('parameters.path', 'in', __linux_compliance_remediate_ar_entries.keys() | list) | list }}
+      loop_control:
+        loop_var: __linux_compliance_remediate_ar_undo
+        label: "{{ __linux_compliance_remediate_ar_undo.rule_id }}"
+      tags:
+        - always
+
+    - name: Audit rules | Write back the drop-ins that this run rewrote
+      ansible.builtin.copy:
+        content: "{{ __linux_compliance_remediate_ar_plan[__linux_compliance_remediate_ar_undo.rule_id].previous }}"
+        dest: "{{ __linux_compliance_remediate_ar_undo.parameters.path }}"
+        follow: false
+        force: true
+        mode: "0600"
+        owner: root
+        group: root
+      loop: >-
+        {{ __linux_compliance_remediate_ar_write.results | default([]) | selectattr('changed')
+           | map(attribute='__linux_compliance_remediate_ar_rule')
+           | selectattr('parameters.path', 'in', __linux_compliance_remediate_ar_entries.keys() | list)
+           | selectattr('rule_id', 'in', __linux_compliance_remediate_ar_plan | dict2items
+                                         | selectattr('value.previous', 'string') | map(attribute='key') | list)
+           | list }}
+      loop_control:
+        loop_var: __linux_compliance_remediate_ar_undo
+        label: "{{ __linux_compliance_remediate_ar_undo.rule_id }}"
+      tags:
+        - always
+
+    - name: Audit rules | Forget the ledger entries that this run created
+      freesecdev.linux_compliance.control_state:
+        action: remove
+        rule_id: "{{ __linux_compliance_remediate_ar_undo.rule_id }}"
+      loop: >-
+        {{ __linux_compliance_remediate_ar_record.results | default([]) | selectattr('changed')
+           | map(attribute='__linux_compliance_remediate_ar_rule') | selectattr('ledger_entry', 'none') | list }}
+      loop_control:
+        loop_var: __linux_compliance_remediate_ar_undo
+        label: "{{ __linux_compliance_remediate_ar_undo.rule_id }}"
+      tags:
+        - always
+
+    - name: Audit rules | Put back the ledger entries that this run rewrote
+      freesecdev.linux_compliance.control_state:
+        action: record
+        rule_id: "{{ __linux_compliance_remediate_ar_undo.rule_id }}"
+        family: "{{ __linux_compliance_remediate_ar_undo.family }}"
+        revert_strategy: "{{ __linux_compliance_remediate_ar_undo.revert_strategy }}"
+        prior_values: >-
+          {{ __linux_compliance_remediate_ar_records[__linux_compliance_remediate_ar_undo.rule_id]
+             | dict2items(key_name='name', value_name='value') }}
+        collection_version: "{{ __linux_compliance_remediate_collection_version }}"
+        replace: true
+      loop: >-
+        {{ __linux_compliance_remediate_ar_record.results | default([]) | selectattr('changed')
+           | map(attribute='__linux_compliance_remediate_ar_rule') | selectattr('ledger_entry', 'mapping') | list }}
+      loop_control:
+        loop_var: __linux_compliance_remediate_ar_undo
+        label: "{{ __linux_compliance_remediate_ar_undo.rule_id }}"
+      tags:
+        - always
+
+    - name: Audit rules | Load the rule set as it was before this run
+      freesecdev.linux_compliance.audit_control:
+        action: load
+      register: __linux_compliance_remediate_ar_reload
+      tags:
+        - always
+
+    - name: Audit rules | Put back the copy of the previous generated rule file once more
+      ansible.builtin.include_tasks:
+        file: "{{ role_path }}/tasks/auditd_rules_previous.yml"
+        apply:
+          tags:
+            - always
+      tags:
+        - always
+
+    - name: Audit rules | Stop because the rule set does not load with the drop-ins of this run
+      ansible.builtin.fail:
+        msg: >-
+          The audit rules of /etc/audit/rules.d did not load with the drop-ins of this run:
+          {{ __linux_compliance_remediate_ar_load.message }}. The drop-ins and ledger entries that this run created were
+          rolled back and the rule set was loaded again
+          ({{ 'loaded' if __linux_compliance_remediate_ar_reload.loaded else 'that load failed too: '
+              ~ __linux_compliance_remediate_ar_reload.message }}); a drop-in removed by a cleanup stays removed,
+          because that is its prior state. Fix the rule files before the next start of auditd.
+      tags:
+        - always
+
+- name: Audit rules | Add the result of every cleanup and every rule to apply
+  vars:
+    __linux_compliance_remediate_ar_changed_ids: >-
+      {{ (__linux_compliance_remediate_ar_removal.results | default([]) | selectattr('changed')
+          | map(attribute='__linux_compliance_remediate_ar_rule.rule_id') | list)
+         + (__linux_compliance_remediate_ar_forget.results | default([]) | selectattr('changed')
+            | map(attribute='__linux_compliance_remediate_ar_rule.rule_id') | list)
+         + (__linux_compliance_remediate_ar_write.results | default([]) | selectattr('changed')
+            | map(attribute='__linux_compliance_remediate_ar_rule.rule_id') | list)
+         + (__linux_compliance_remediate_ar_record.results | default([]) | selectattr('changed')
+            | map(attribute='__linux_compliance_remediate_ar_rule.rule_id') | list) }}
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_results: >-
+      {{ __linux_compliance_remediate_results
+         + (__linux_compliance_remediate_family
+            | freesecdev.linux_compliance.audit_rule_results(
+                __linux_compliance_remediate_ar_plan, __linux_compliance_remediate_ar_cleanup_plan,
+                __linux_compliance_remediate_ar_changed_ids,
+                {'changed': __linux_compliance_remediate_ar_changed,
+                 'loaded': __linux_compliance_remediate_ar_load.loaded | default(false),
+                 'locked': __linux_compliance_remediate_ar_locked})) }}
+  tags:
+    - always
