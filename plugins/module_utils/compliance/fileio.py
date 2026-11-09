@@ -46,6 +46,7 @@ MAX_NAME_LENGTH: Final[int] = 200
 READ_CHUNK_BYTES: Final[int] = 65536
 DEFAULT_LOCK_TIMEOUT_SECONDS: Final[float] = 30.0
 LOCK_POLL_SECONDS: Final[float] = 0.02
+MEGABYTE: Final[int] = 1024 * 1024
 TEMPORARY_SUFFIX: Final[str] = ".tmp"
 TEMPORARY_HEX_PATTERN: Final[str] = "[0-9a-f]{16}"
 SYMLINK_ERRORS: Final[frozenset[int]] = frozenset({errno.ELOOP, errno.EMLINK})
@@ -74,6 +75,20 @@ class SafeFileError(Exception):
         """Store the reason and message."""
         super().__init__(message)
         self.reason = reason
+
+
+def filesystem_megabytes(path: str) -> int | None:
+    """Return the size of the file system that holds ``path`` in MiB, or ``None`` if unreadable.
+
+    The auditd settings ``space_left`` and ``admin_space_left`` may be percentages of the file
+    system of the audit log; auditd compares them in megabytes, so the remediate role needs this
+    size to check them before it writes either (FREES-110). Nothing is opened or written.
+    """
+    try:
+        info = os.statvfs(path)
+    except OSError:
+        return None
+    return info.f_frsize * info.f_blocks // MEGABYTE
 
 
 def _fail(reason: str, message: str) -> NoReturn:

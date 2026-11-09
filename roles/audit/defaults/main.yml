@@ -23,6 +23,8 @@ linux_compliance_aide_enabled: true
 linux_compliance_software_integrity_enabled: true
 linux_compliance_endpoint_security_enabled: true
 linux_compliance_kernel_build_config_enabled: true
+linux_compliance_auditd_rules_time_enabled: true
+linux_compliance_auditd_conf_enabled: true
 linux_compliance_auditd_enabled: true
 linux_compliance_services_enabled: true
 linux_compliance_sssd_enabled: true

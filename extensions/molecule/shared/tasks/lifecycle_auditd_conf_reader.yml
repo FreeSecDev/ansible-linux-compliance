@@ -1,0 +1,106 @@
+---
+- name: Auditd settings as auditd reads them | Refuse to run outside the auditd settings regressions
+  ansible.builtin.assert:
+    that:
+      - lifecycle_topic.family == 'auditd_conf'
+      - regression_label == 'auditd settings regressions'
+      - regression_reader_case is mapping
+      - regression_reader_case.content != regression_built_text
+      - >-
+        regression_reader_case.refused
+        or regression_reader_case.content is search('(?m)^space_left_action = [A-Za-z]+[^A-Za-z\n]')
+    fail_msg: >-
+      lifecycle_auditd_conf_reader.yml runs only from the auditd settings regressions; the topic was
+      {{ lifecycle_topic.family | default('none') }}.
+    quiet: true
+
+- name: Auditd settings as auditd reads them | Write the configuration file of the case
+  ansible.builtin.copy:
+    content: "{{ regression_reader_case.content }}"
+    dest: "{{ regression_conf }}"
+    mode: "0640"
+    owner: root
+    group: root
+
+- name: Auditd settings as auditd reads them | Switch every rule of the topic on
+  ansible.builtin.set_fact:
+    "{{ item }}": true
+  loop: "{{ regression_toggles }}"
+
+- name: Auditd settings as auditd reads them | Apply with the file of the case
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+    lifecycle_family: auditd_conf
+
+- name: Auditd settings as auditd reads them | Read the ledger after the apply
+  freesecdev.linux_compliance.control_state:
+    action: list
+  register: regression_reader_ledger
+
+- name: Auditd settings as auditd reads them | Read the file after the apply
+  ansible.builtin.slurp:
+    src: "{{ regression_conf }}"
+  register: regression_reader_applied
+
+- name: Auditd settings as auditd reads them | Check that nothing was written to a file auditd would not read as meant
+  ansible.builtin.assert:
+    that:
+      - lifecycle_results | selectattr('status', 'equalto', 'applied') | list == []
+      - lifecycle_results | selectattr('status', 'equalto', 'invalid_config') | list | length > 0
+      - >-
+        lifecycle_results | selectattr('status', 'equalto', 'invalid_config') | map(attribute='reason')
+        | reject('search', regression_reader_case.reason) | list == []
+      - lifecycle_results | selectattr('changed') | list == []
+      - regression_reader_applied.content | b64decode == regression_reader_case.content
+    fail_msg: "{{ regression_label }}, {{ regression_reader_case.name }}: {{ lifecycle_results }}"
+    quiet: true
+  when: regression_reader_case.refused
+
+- name: Auditd settings as auditd reads them | Check that a line auditd skips or refuses is rewritten
+  ansible.builtin.assert:
+    that:
+      - >-
+        lifecycle_results | selectattr('rule_id', 'equalto', regression_space) | map(attribute='status') | list
+        == ['applied']
+      - regression_reader_applied.content | b64decode is search('(?m)^space_left_action = [a-z]+$')
+      - >-
+        ((regression_reader_ledger.entries | selectattr('rule_id', 'equalto', regression_space) | first).prior_values
+         | items2dict(key_name='name', value_name='value')).prior_line
+        in regression_reader_case.content.split(regression_newline)
+    fail_msg: >-
+      {{ regression_label }}, {{ regression_reader_case.name }}: {{ lifecycle_results }}; ledger
+      {{ regression_reader_ledger.entries | selectattr('rule_id', 'equalto', regression_space) | list | to_json }}
+    quiet: true
+  when: not regression_reader_case.refused
+
+- name: Auditd settings as auditd reads them | Switch every rule of the topic off
+  ansible.builtin.set_fact:
+    "{{ item }}": false
+  loop: "{{ regression_toggles }}"
+
+- name: Auditd settings as auditd reads them | Clean up after the case
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+    lifecycle_family: auditd_conf
+
+- name: Auditd settings as auditd reads them | Read the file after the cleanup
+  ansible.builtin.slurp:
+    src: "{{ regression_conf }}"
+  register: regression_reader_cleaned
+
+- name: Auditd settings as auditd reads them | Check that the cleanup left the file of the case byte for byte
+  ansible.builtin.assert:
+    that:
+      - lifecycle_results | map(attribute='status') | difference(['restored']) | list == []
+      - regression_reader_cleaned.content | b64decode == regression_reader_case.content
+    fail_msg: >-
+      {{ regression_label }}, {{ regression_reader_case.name }}, cleanup: {{ lifecycle_results }}; lines of the case
+      not in the file {{ regression_reader_case.content.split(regression_newline)
+      | difference((regression_reader_cleaned.content | b64decode).split(regression_newline)) | to_json }}, lines
+      of the file not in the case {{ (regression_reader_cleaned.content | b64decode).split(regression_newline)
+      | difference(regression_reader_case.content.split(regression_newline)) | to_json }}
+    quiet: true

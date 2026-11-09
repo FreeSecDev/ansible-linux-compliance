@@ -44,6 +44,15 @@
     file: lifecycle_ssh_vendor_regressions.yml
   when: "'lifecycle_ssh_vendor_regressions.yml' in lifecycle_regression.files"
 
+- name: Lifecycle regressions | Run the audit rule regressions for a change of method, changes by hand and other files
+  ansible.builtin.include_tasks:
+    file: lifecycle_auditd_rules_regressions.yml
+  when: "'lifecycle_auditd_rules_regressions.yml' in lifecycle_regression.files"
+
+- name: Lifecycle regressions | Run the auditd settings regressions for changes by hand, refusals and other profiles
+  ansible.builtin.include_tasks:
+    file: lifecycle_auditd_conf_regressions.yml
+  when: "'lifecycle_auditd_conf_regressions.yml' in lifecycle_regression.files"
 - name: Lifecycle regressions | Run the kernel module regressions for a change of method, changes by hand and site files
   ansible.builtin.include_tasks:
     file: lifecycle_kernel_modules_regressions.yml
