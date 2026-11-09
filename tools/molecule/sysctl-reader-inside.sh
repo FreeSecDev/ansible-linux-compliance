@@ -1,14 +1,19 @@
 #!/usr/bin/env bash
 # The part of sysctl-reader-verdicts.sh that runs in each throwaway container (FREES-107). Docker
 # starts it as root with CAP_SYS_ADMIN and CAP_SETFCAP only (CAP_SETFCAP lets root map itself in a
-# new user namespace). It checks that /proc/sys is Docker's read-only proc mount and then runs
+# new user namespace). It checks that /proc/sys is Docker's one read-only proc mount and then runs
 # itself again in a new user and mount namespace, where Docker's read-only flags are locked and no
 # remount can reach a kernel parameter of the host. There it mounts a private tmpfs over /proc/sys,
 # checks it, and lets the real readers write every case into it.
 set -eu
 
 if [ "${1:-}" != inner ]; then
-  options="$(grep " /proc/sys " /proc/self/mountinfo | head -n 1 | cut -d" " -f6)"
+  mounts="$(cut -d" " -f5 /proc/self/mountinfo | grep -c -x /proc/sys || true)"
+  if [ "${mounts}" != 1 ]; then
+    echo "error: ${mounts} mounts at /proc/sys instead of Docker's one; nothing ran" >&2
+    exit 3
+  fi
+  options="$(cut -d" " -f5,6 /proc/self/mountinfo | grep "^/proc/sys " | cut -d" " -f2)"
   case ",${options}," in
     *,ro,*) ;;
     *) echo "error: /proc/sys is not read-only before the tmpfs is mounted; nothing ran" >&2; exit 3 ;;

@@ -187,6 +187,46 @@ def test_expand_names_every_existing_entry_of_the_wildcard(proc: Path) -> None:
     assert sysctl.expand("net.ipv6.conf.*.forwarding", proc_root=proc) == []
 
 
+def test_expand_entries_names_the_entries_that_it_cannot_read(proc: Path) -> None:
+    conf = proc / "net" / "ipv4" / "conf"
+    (conf / "bad name").mkdir()
+    (conf / "bad name" / "forwarding").write_text("1\n")
+    (conf / "wg%0").mkdir()
+    found, skipped = sysctl.expand_entries("net.ipv4.conf.*.forwarding", proc_root=proc)
+    assert found == sysctl.expand("net.ipv4.conf.*.forwarding", proc_root=proc)
+    assert "net.ipv4.conf.all.forwarding" in found
+    assert skipped == ["bad name", "wg%0"]
+    assert sysctl.expand_entries("kernel.dmesg_restrict", proc_root=proc) == (
+        ["kernel.dmesg_restrict"],
+        [],
+    )
+
+
+def test_expand_entries_escapes_a_name_that_is_not_utf_8(
+    proc: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def listing(_self: Path) -> list[Path]:
+        return [proc / "net" / "ipv4" / "conf" / "wg\udcff"]
+
+    monkeypatch.setattr(Path, "iterdir", listing)
+    assert sysctl.expand_entries("net.ipv4.conf.*.forwarding", proc_root=proc) == (
+        [],
+        ["wg\\xff"],
+    )
+
+
+def test_expand_counts_the_entries_it_cannot_name_towards_the_bound(
+    proc: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    conf = proc / "net" / "ipv4" / "conf"
+    for name in ("a%", "b%", "c%"):
+        (conf / name).mkdir()
+    monkeypatch.setattr(sysctl, "MAX_EXPANDED", 2)
+    with pytest.raises(sysctl.SysctlError) as raised:
+        sysctl.expand_entries("net.ipv4.conf.*.forwarding", proc_root=proc)
+    assert raised.value.reason == "too_large"
+
+
 def test_expand_refuses_a_linked_parent_and_too_many_entries(
     proc: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

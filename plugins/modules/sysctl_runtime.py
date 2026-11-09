@@ -25,7 +25,8 @@ options:
     description:
       - Parameters whose running value to return, for example C(kernel.dmesg_restrict).
       - One component may be C(*), which stands for every entry that exists there, for example
-        C(net.ipv4.conf.*.forwarding) for every interface.
+        C(net.ipv4.conf.*.forwarding) for every interface. More than 512 entries fail the module
+        before it sets anything.
       - As for C(sysctl), a C(/) inside a component stands for a C(.) of the file name.
     type: list
     elements: str
@@ -99,6 +100,16 @@ writable:
   returned: success
   type: dict
   sample: {"kernel.dmesg_restrict": true}
+unnamed:
+  description:
+    - For every name of O(read) with C(*) whose directory holds entries that the module does not
+      accept as a component of a parameter name, such as an interface named with a character
+      other than letters, digits, C(_), C(-), C(+), C(@) and C(.), the names of those entries.
+      Their values are not read, so a caller that needs every interface must treat them as
+      unknown.
+  returned: success
+  type: dict
+  sample: {"net.ipv4.conf.*.rp_filter": ["wg%0"]}
 set:
   description: One entry per entry of O(set), in order.
   returned: success
@@ -222,10 +233,13 @@ def run(params: Mapping[str, object], *, check_mode: bool) -> dict[str, object]:
     probe = _names(params["probe"], "probe", wildcard=False)
     pairs = settings(params["set"])
     values: dict[str, str | None] = {}
+    unnamed_entries: dict[str, list[str]] = {}
     for pattern in read:
-        expanded = sysctl.expand(pattern)
+        expanded, unnamed = sysctl.expand_entries(pattern)
         if sysctl.WILDCARD not in pattern.split(".") and not expanded:
             values[pattern] = None
+        if unnamed:
+            unnamed_entries[pattern] = unnamed
         for name in expanded:
             values[name] = sysctl.read(name)
     for name in [*probe, *(pair[0] for pair in pairs)]:
@@ -237,6 +251,7 @@ def run(params: Mapping[str, object], *, check_mode: bool) -> dict[str, object]:
         "changed": any(bool(entry["changed"]) for entry in entries),
         "running": values,
         "writable": writable,
+        "unnamed": unnamed_entries,
         "set": entries,
     }
 
@@ -274,6 +289,7 @@ def main() -> None:
         changed=outcome["changed"],
         running=outcome["running"],
         writable=outcome["writable"],
+        unnamed=outcome["unnamed"],
         set=outcome["set"],
     )
 

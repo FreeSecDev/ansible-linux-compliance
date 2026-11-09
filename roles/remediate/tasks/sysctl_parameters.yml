@@ -326,6 +326,10 @@
       {%- set _ = names.append(__linux_compliance_remediate_sysctl_propagating[rule.parameters.key]) -%}
       {%- endif -%}
       {%- set _ = names.extend(__linux_compliance_remediate_sysctl_side_effects[rule.parameters.key] | default([])) -%}
+      {%- if rule.parameters.key in __linux_compliance_remediate_sysctl_interface_combination -%}
+      {%- set parts = rule.parameters.key.split('.') -%}
+      {%- set _ = names.append((parts[:3] + ['*', parts[4]]) | join('.')) -%}
+      {%- endif -%}
       {%- endfor -%}
       {%- endif -%}
       {{ names | unique | list }}
@@ -985,6 +989,11 @@
       {%- set _ = loose.append(name.split('.')[3] ~ ' (' ~ name ~ ' = ' ~ (own | trim) ~ ', so the kernel uses '
             ~ (combined if combined is not none else 'an unknown value') ~ ')') -%}
       {%- endif -%}
+      {%- endfor -%}
+      {%- for device in (__linux_compliance_remediate_sc_interfaces_now.unnamed | default({}, true))
+            [(parts[:3] + ['*', parts[4]]) | join('.')] | default([]) -%}
+      {%- set _ = loose.append(device ~ ' (a name that the collection does not read, so the kernel uses an'
+            ~ ' unknown value)') -%}
       {%- endfor -%}
       {%- if loose | length > 0 -%}
       {%- set _ = findings.update({rule.rule_id: loose}) -%}

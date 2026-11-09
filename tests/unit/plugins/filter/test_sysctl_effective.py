@@ -43,7 +43,7 @@ def test_a_name_that_procps_expands_is_reported() -> None:
     found = sysctl_effective.sysctl_effective(entries, RP_FILTER)
     assert found["unsupported"] == [
         (
-            "/etc/sysctl.d/z*.conf: sysctl --system expands the name of this file as a pattern,"
+            "/etc/sysctl.d/z*.conf: sysctl --system expands the name of this entry as a pattern,"
             " which may read other files a second time"
         )
     ]

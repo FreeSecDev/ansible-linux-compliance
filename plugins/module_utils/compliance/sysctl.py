@@ -13,11 +13,13 @@ lower-case letters, digits and ``_``; the others may also hold upper-case letter
 and ``@``, as interface names do, and a component that would become ``.`` or ``..`` is refused,
 so a name cannot reach outside ``/proc/sys``. One component of a name to *read* may be ``*``,
 which :func:`expand` turns into the names that exist, such as every interface below
-``net.ipv4.conf``. Before it opens a file, the helper resolves the path
-and requires that it is the path itself (no component is a symbolic link), that it is a regular
-file and that it is on the same file system as ``/proc/sys``, so a file mounted over a parameter
-is refused. A procfs file cannot be replaced atomically; the value is written with one
-``write`` to the open file, which is how the kernel takes a parameter, and is read back.
+``net.ipv4.conf``; :func:`expand_entries` also returns the entries whose names the helper does not
+accept, such as an interface named with a character outside the pattern. Before it opens a file,
+the helper resolves the path and requires that it is the path itself (no component is a symbolic
+link), that it is a regular file and that it is on the same file system as ``/proc/sys``, so a
+file mounted over a parameter is refused. A procfs file cannot be replaced atomically; the value
+is written with one ``write`` to the open file, which is how the kernel takes a parameter, and is
+read back.
 
 Values are printable ASCII and tabs without line breaks, at most 255 characters: the values of the
 native rules of the catalogue (``1``, ``32768 65535``, ``|/bin/false``, the empty string) and the
@@ -129,35 +131,55 @@ def _parameter(name: str, *, proc_root: Path) -> Path | None:
     return path
 
 
-def expand(name: str, *, proc_root: Path = PROC_SYS) -> list[str]:
-    """Return the existing parameters that ``name`` names, its ``*`` component expanded.
+def expand_entries(name: str, *, proc_root: Path = PROC_SYS) -> tuple[list[str], list[str]]:
+    """Return the existing parameters that ``name`` names, and the entries it cannot name.
 
-    A name without ``*`` gives itself when it exists. The result is sorted and bounded.
+    The ``*`` component is expanded to every entry of its directory; an entry whose name the
+    helper does not accept as a component (see :data:`NAME_PATTERN`) is returned in the second
+    list instead of being skipped, so that a caller can report it, with every byte that is not
+    UTF-8 written as a backslash escape. A name without ``*`` gives
+    itself when it exists. Both lists are sorted and bounded together.
 
     Raises:
-        SysctlError: When the name is invalid or a directory cannot be listed.
+        SysctlError: When the name is invalid, a directory cannot be listed or the wildcard
+            names more than :data:`MAX_EXPANDED` entries (``too_large``).
     """
     parts = components(name, wildcard=True)
     if WILDCARD not in parts:
-        return [name] if _parameter(name, proc_root=proc_root) is not None else []
+        return ([name] if _parameter(name, proc_root=proc_root) is not None else []), []
     index = parts.index(WILDCARD)
     parent = proc_root.joinpath(*parts[:index])
     try:
         if parent.resolve() != proc_root.resolve().joinpath(*parts[:index]) or not parent.is_dir():
-            return []
+            return [], []
         children = sorted(entry.name for entry in parent.iterdir())
     except OSError as error:
         _fail("io_error", f"cannot list {name}: {error.strerror or 'operating system error'}")
     found: list[str] = []
+    skipped: list[str] = []
     for child in children:
         candidate = _name((*parts[:index], child, *parts[index + 1 :]))
         if re.fullmatch(NAME_PATTERN, candidate) is None or child.strip(".") == "":
-            continue
-        if _parameter(candidate, proc_root=proc_root) is not None:
+            skipped.append(
+                child.encode("utf-8", "surrogateescape").decode("utf-8", "backslashreplace")
+            )
+        elif _parameter(candidate, proc_root=proc_root) is not None:
             found.append(candidate)
-        if len(found) > MAX_EXPANDED:
+        if len(found) + len(skipped) > MAX_EXPANDED:
             _fail("too_large", f"{name} names more than {MAX_EXPANDED} parameters")
-    return found
+    return found, skipped
+
+
+def expand(name: str, *, proc_root: Path = PROC_SYS) -> list[str]:
+    """Return the existing parameters that ``name`` names, its ``*`` component expanded.
+
+    A name without ``*`` gives itself when it exists. The result is sorted and bounded; see
+    :func:`expand_entries` for the entries that it cannot name.
+
+    Raises:
+        SysctlError: When the name is invalid or a directory cannot be listed.
+    """
+    return expand_entries(name, proc_root=proc_root)[0]
 
 
 def read(name: str, *, proc_root: Path = PROC_SYS) -> str | None:

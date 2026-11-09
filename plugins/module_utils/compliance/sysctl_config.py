@@ -1,4 +1,4 @@
-"""Model of how systemd-sysctl and procps decide a persistent kernel parameter (FREES-107).
+r"""Model of how systemd-sysctl and procps decide a persistent kernel parameter (FREES-107).
 
 The kernel parameter topics must never report ``compliant`` or ``applied`` while a real reader of
 the configuration would set a looser value ("the reader is the oracle"). This module decides, from
@@ -22,16 +22,25 @@ the configuration entries of an instance, what each reader writes for a key:
   text at a NUL. The key, with dots and slashes interchanged when its first separator is a dot, is
   opened below ``/proc/sys`` as written, so repeated slashes, ``.`` and ``..`` components and a
   leading slash resolve as the kernel resolves them, and a trailing slash opens nothing. A
-  ``-key`` line without ``=`` only excludes the key from globs. A key that any file assigns is never
-  set by a glob. procps expands a configuration file name with glob(3), braces and ``~``
-  included, so a name with one of ``*?[]{}~`` may read other files a second time; the model does
-  not follow that and reports it in ``unsupported``.
+  ``-key`` line without ``=`` only excludes the key from globs. A glob never sets a path that any
+  line names exactly as written, so ``net/ipv4//conf/all/rp_filter`` excludes nothing. procps
+  expands a configuration file name with glob(3), braces and ``~`` included, so a name with one of
+  ``*?[]{}~\`` may read other files a second time; the model does not follow that and reports it in
+  ``unsupported``, for every ``*.conf`` entry whatever its kind.
 
 Both skip empty lines and ``#`` and ``;`` comments and drop a leading ``-`` of an assignment.
 systemd strips spaces, tabs and line ends from the key and the value, also after the ``-``; procps
-strips every white-space character from the line, the value and the end of the key, but not from
-the key after a ``-``. An entry that is a directory or a link claims its file name as well: a link
-to ``/dev/null`` masks a file of the same name in a later directory, and so does a directory.
+strips the characters of C ``isspace`` (space, tab, line feed, vertical tab, form feed, carriage
+return) from the line, the value and the end of the key, but not from the key after a ``-``. An
+entry that is a directory or a link claims its file name as well: a link to ``/dev/null`` masks a
+file of the same name in a later directory, and so does a directory.
+
+What the model cannot prove to match both readers is reported in ``unsupported`` instead of being
+guessed: a procps key that still starts with ``-`` after the first one is dropped (procps drops a
+second one from the path it opens), a procps glob that is not in canonical form (a repeated slash,
+a ``.`` component, a leading or trailing slash: glob(3) keeps them in the paths it returns, and
+procps compares those with the keys as written), a glob with a component that starts with ``.``
+(it can match ``.`` and ``..``), and a glob that :func:`glob_pattern` cannot translate exactly.
 
 Files named in ``after`` (ufw's ``/etc/ufw/sysctl.conf``, which ufw applies with ``sysctl -p`` when
 it starts) are read last with the rules of procps, after either reader.
@@ -62,13 +71,17 @@ SYSTEMD: Final[str] = "systemd"
 PROCPS: Final[str] = "procps"
 READERS: Final[tuple[str, ...]] = (SYSTEMD, PROCPS)
 SYSTEMD_SPACE: Final[str] = " \t\n\r"
+PROCPS_SPACE: Final[str] = " \t\n\v\f\r"
 SYSTEMD_LINE_END: Final[str] = r"\r\n|[\r\n\0]"
 GLOB_CHARACTERS: Final[frozenset[str]] = frozenset("*?[")
+GLOB_REFUSED: Final[frozenset[str]] = frozenset("\\{}")
+GLOB_RANGES: Final[tuple[tuple[str, str], ...]] = (("0", "9"), ("a", "z"), ("A", "Z"))
 PROCPS_NAME_EXPANSION: Final[frozenset[str]] = frozenset("*?[]{}~\\")
 SYSTEMD_LINE_LIMIT: Final[int] = 1_000_000
 UFW_CONF: Final[str] = "/etc/ufw/ufw.conf"
 UFW_DEFAULT: Final[str] = "/etc/default/ufw"
 UFW_SYSCTL: Final[str] = "/etc/ufw/sysctl.conf"
+UFW_ENABLED: Final[frozenset[str]] = frozenset({"yes", "YES"})
 SHELL_ASSIGNMENT: Final[str] = r"^(?:export\s+)?{name}=([\"']?)([^\"'\s]*)\1$"
 KINDS: Final[frozenset[str]] = frozenset({"file", "link", "directory", "other"})
 READABLE_KINDS: Final[frozenset[str]] = frozenset({"file", "link"})
@@ -91,13 +104,18 @@ class Entry:
 class Assignment:
     """A value for a key below ``/proc/sys``; for a ``-key`` line without ``=``, ``value`` is None.
 
-    ``path`` is the path that the reader opens below ``/proc/sys``, or None when it opens none.
+    ``path`` is the path that the reader opens below ``/proc/sys``, or None when it opens none;
+    ``raw`` is the key as the reader keeps it, with dots and slashes interchanged, which procps
+    compares with the paths that a glob returns; ``problems`` says why the model cannot follow the
+    line.
     """
 
     path: str | None
     value: str | None
     source: str
     escapes: bool = False
+    raw: str = ""
+    problems: tuple[str, ...] = ()
 
 
 def load_entries(raw: Iterable[Mapping[str, object]]) -> list[Entry]:
@@ -121,16 +139,25 @@ def _bytes(text: str) -> bytes:
     return text.encode("utf-8", "surrogateescape")
 
 
+def _listed(entries: Sequence[Entry]) -> list[Entry]:
+    """Return every ``*.conf`` entry of the configuration directories, whatever its kind."""
+    return [
+        entry
+        for entry in entries
+        if entry.path.rsplit("/", 1)[0] in DIRECTORIES
+        and entry.path.rsplit("/", 1)[1].endswith(".conf")
+    ]
+
+
 def ordered_files(entries: Sequence[Entry], reader: str) -> list[Entry]:
     """Return the files that ``reader`` reads, in the order it reads them."""
     by_path = {entry.path: entry for entry in entries}
+    listed = _listed(entries)
     chosen: dict[str, Entry] = {}
     for directory in DIRECTORIES:
-        for entry in entries:
+        for entry in listed:
             parent, name = entry.path.rsplit("/", 1)
-            if parent != directory or not name.endswith(".conf"):
-                continue
-            if reader == SYSTEMD and name.startswith("."):
+            if parent != directory or (reader == SYSTEMD and name.startswith(".")):
                 continue
             chosen.setdefault(name, entry)
     files = [chosen[name] for name in sorted(chosen, key=_bytes)]
@@ -139,34 +166,45 @@ def ordered_files(entries: Sequence[Entry], reader: str) -> list[Entry]:
     return [entry for entry in files if entry.kind in READABLE_KINDS]
 
 
+def problems(lines: Iterable[Assignment]) -> list[str]:
+    """Return, once each and in order, why the model cannot follow some of ``lines``."""
+    return list(
+        dict.fromkeys(f"{item.source}: {problem}" for item in lines for problem in item.problems)
+    )
+
+
 def unsupported(entries: Sequence[Entry]) -> list[str]:
     """Return why the model cannot decide what a reader writes, or an empty list.
 
-    procps expands every configuration file name with glob(3), so a name with a glob, brace,
-    tilde or backslash character may read other files a second time, at its own place in the
-    order; procps opens a key with a ``..`` component as the kernel resolves it, which may leave
-    ``/proc/sys`` and come back; systemd stops reading a file at a line of 1 MiB or more.
+    procps lists every ``*.conf`` name of its directories, whatever the kind of the entry, and
+    expands it with glob(3), so a name with a glob, brace, tilde or backslash character may read
+    other files a second time, at its own place in the order; procps opens a key with a ``..``
+    component as the kernel resolves it, which may leave ``/proc/sys`` and come back; systemd stops
+    reading a file at a line of 1 MiB or more; and some keys are refused line by line (see
+    :func:`assignments`).
     """
-    reasons: list[str] = []
+    reasons = [
+        f"{entry.path}: sysctl --system expands the name of this entry as a pattern, which may"
+        " read other files a second time"
+        for entry in _listed(entries)
+        if PROCPS_NAME_EXPANSION & set(entry.path.rsplit("/", 1)[1])
+    ]
     for entry in ordered_files(entries, PROCPS):
-        name = entry.path.rsplit("/", 1)[1]
-        if PROCPS_NAME_EXPANSION & set(name):
-            reasons.append(
-                f"{entry.path}: sysctl --system expands the name of this file as a pattern, which"
-                " may read other files a second time"
-            )
-        if any(item.escapes for item in assignments(entry, PROCPS)):
+        lines = list(assignments(entry, PROCPS))
+        if any(item.escapes for item in lines):
             reasons.append(
                 f"{entry.path}: a key with a .. component, which sysctl --system resolves"
             )
-    reasons.extend(
-        f"{entry.path}: a line of 1 MiB or more, at which systemd-sysctl stops reading"
-        for entry in ordered_files(entries, SYSTEMD)
+        reasons.extend(problems(lines))
+    for entry in ordered_files(entries, SYSTEMD):
         if any(
             len(_bytes(line)) >= SYSTEMD_LINE_LIMIT for line in _lines(entry.text or "", SYSTEMD)
-        )
-    )
-    return reasons
+        ):
+            reasons.append(
+                f"{entry.path}: a line of 1 MiB or more, at which systemd-sysctl stops reading"
+            )
+        reasons.extend(problems(assignments(entry, SYSTEMD)))
+    return list(dict.fromkeys(reasons))
 
 
 def _shell_value(text: str | None, name: str) -> tuple[str | None, bool]:
@@ -187,25 +225,37 @@ def _shell_value(text: str | None, name: str) -> tuple[str | None, bool]:
     return value, True
 
 
+def _ufw_enabled(text: str) -> tuple[bool, list[str]]:
+    """Return whether ufw's sourced files enable it, and what is unclear."""
+    enabled, plain = _shell_value(text, "ENABLED")
+    if not plain:
+        return False, [f"{UFW_CONF}: ENABLED is set in a form the model does not read"]
+    if enabled not in UFW_ENABLED and (enabled or "").lower() == "yes":
+        return False, [f"{UFW_CONF}: ENABLED is a spelling of yes that ufw may not read as yes"]
+    return enabled in UFW_ENABLED, []
+
+
 def ufw_files(entries: Sequence[Entry]) -> tuple[list[str], list[str]]:
     """Return the file that ufw applies with ``sysctl -p`` when it starts, and what is unclear.
 
-    ufw applies ``IPT_SYSCTL`` of ``/etc/default/ufw`` only when ``/etc/ufw/ufw.conf`` sets
-    ``ENABLED=yes``; without ``ufw.conf`` ufw is not installed.
+    ufw sources ``/etc/default/ufw`` and then ``/etc/ufw/ufw.conf``, so a variable of either counts
+    and the later assignment wins. It applies ``IPT_SYSCTL`` only when ``ENABLED`` is ``yes`` or
+    ``YES``; another spelling of yes is refused as unclear. Without ``ufw.conf`` ufw is not
+    installed; without ``/etc/default/ufw`` its start script may stop before it applies anything,
+    which is refused as unclear when ``ufw.conf`` alone would apply the file.
     """
     by_path = {entry.path: entry for entry in entries}
-    enabled, plain = _shell_value(
-        by_path[UFW_CONF].text if UFW_CONF in by_path else None, "ENABLED"
+    text = "\n".join(
+        by_path[path].text or "" for path in (UFW_DEFAULT, UFW_CONF) if path in by_path
     )
-    if not plain:
-        return [], [f"{UFW_CONF}: ENABLED is set in a form the model does not read"]
-    target, plain = _shell_value(
-        by_path[UFW_DEFAULT].text if UFW_DEFAULT in by_path else None, "IPT_SYSCTL"
-    )
-    if enabled != "yes" or (plain and not target):
-        return [], []
+    enabled, unclear = _ufw_enabled(text) if UFW_CONF in by_path else (False, [])
+    target, plain = _shell_value(text, "IPT_SYSCTL")
+    if not enabled or (plain and not target):
+        return [], unclear
     if not plain or target != UFW_SYSCTL:
         return [], [f"{UFW_DEFAULT}: ufw applies IPT_SYSCTL, which the collection cannot follow"]
+    if UFW_DEFAULT not in by_path:
+        return [], [f"{UFW_DEFAULT}: missing, so ufw may not start; the collection cannot follow"]
     return [UFW_SYSCTL], []
 
 
@@ -242,30 +292,57 @@ def _lines(text: str, reader: str) -> list[str]:
     return [raw.split("\0", 1)[0] for raw in text.split("\n")]
 
 
+def _canonical(path: str) -> bool:
+    return all(part not in {"", ".", ".."} for part in path.split("/"))
+
+
+def _line_problems(name: str, path: str | None, reader: str) -> tuple[str, ...]:
+    """Return why the model cannot follow a key that ``reader`` keeps as ``name``.
+
+    procps builds the path from the key without a second leading ``-``; a procps glob is
+    expanded as written, so it must be canonical; a glob component that starts with ``.`` can
+    match ``.`` and ``..``; and a glob must translate exactly.
+    """
+    found: list[str] = []
+    raw = _swap(name)
+    if reader == PROCPS and name.startswith("-"):
+        found.append("a key that starts with a second -, which procps drops from the path it opens")
+    pattern = raw if reader == PROCPS else path
+    if pattern is None or not _is_glob(pattern):
+        return tuple(found)
+    if reader == PROCPS and not _canonical(pattern):
+        found.append(
+            "a glob with a repeated slash, a . component or a leading or trailing slash, whose"
+            " matches procps compares with the keys as written"
+        )
+    if any(part.startswith(".") for part in pattern.split("/")):
+        found.append("a glob with a component that starts with ., which can match . and ..")
+    if glob_pattern(pattern) is None:
+        found.append("a glob that the collection cannot translate exactly")
+    return tuple(found)
+
+
 def assignments(entry: Entry, reader: str) -> Iterator[Assignment]:
     """Yield the assignments of one file, in order, including ``-key`` lines without ``=``."""
+    space = SYSTEMD_SPACE if reader == SYSTEMD else PROCPS_SPACE
     for raw in _lines(entry.text or "", reader):
-        line = raw.strip(SYSTEMD_SPACE) if reader == SYSTEMD else raw.strip()
+        line = raw.strip(space)
         if not line or line[0] in "#;":
             continue
         name, separator, value = line.partition("=")
         dash = name.startswith("-")
         name = name.removeprefix("-")
-        name = name.strip(SYSTEMD_SPACE) if reader == SYSTEMD else name.rstrip()
-        if not dash and reader == PROCPS:
-            name = name.strip()
+        name = name.strip(space) if reader == SYSTEMD or not dash else name.rstrip(space)
         if not name or (not separator and not dash):
             continue
-        written = (
-            (value.strip(SYSTEMD_SPACE) if reader == SYSTEMD else value.strip())
-            if separator
-            else None
-        )
+        path = normalise(name, reader)
         yield Assignment(
-            path=normalise(name, reader),
-            value=written,
+            path=path,
+            value=value.strip(space) if separator else None,
             source=entry.path,
             escapes=".." in _swap(name).split("/"),
+            raw=_swap(name),
+            problems=_line_problems(name, path, reader),
         )
 
 
@@ -273,31 +350,81 @@ def _is_glob(path: str) -> bool:
     return any(character in GLOB_CHARACTERS for character in path)
 
 
-def glob_pattern(path: str) -> str:
+def _members(body: str) -> str | None:
+    """Return the regular expression members of a bracket expression, or None.
+
+    Only single characters and ranges within the digits, the lower-case or the upper-case ASCII
+    letters translate exactly; a ``-`` is literal only first or last.
+    """
+    members: list[str] = []
+    index = 0
+    while index < len(body):
+        low = body[index]
+        if index + 2 < len(body) and body[index + 1] == "-":
+            high = body[index + 2]
+            if not any(first <= low <= high <= last for first, last in GLOB_RANGES):
+                return None
+            members.append(f"{re.escape(low)}-{re.escape(high)}")
+            index += 3
+            continue
+        if low == "-" and 0 < index < len(body) - 1:
+            return None
+        members.append(re.escape(low))
+        index += 1
+    return "".join(members)
+
+
+def _bracket(path: str, start: int) -> tuple[str, int] | None:
+    """Return the expression of the bracket at ``start`` and the index of its ``]``, or None.
+
+    glob(3) splits a pattern at ``/`` first, so a ``[`` without a ``]`` in its component is
+    literal; a ``]`` right after ``[``, ``[!`` or ``[^`` is a member. None means that the bracket
+    holds a class, an equivalence class, a collating symbol or a range that does not translate.
+    """
+    component_end = path.find("/", start)
+    if component_end == -1:
+        component_end = len(path)
+    first = start + 1
+    negate = path[first : first + 1] in {"!", "^"}
+    if negate:
+        first += 1
+    end = path.find("]", first + 1, component_end) if first < component_end else -1
+    if end == -1:
+        return re.escape("["), start
+    body = path[first:end]
+    members = None if "[" in body else _members(body)
+    if members is None:
+        return None
+    return f"[{'^/' if negate else ''}{members}]", end
+
+
+def glob_pattern(path: str) -> str | None:
     """Return the regular expression, for ``re.fullmatch``, of a glob(7) pattern over a path.
 
     Both readers expand a glob with glob(3) below ``/proc/sys``: ``*`` and ``?`` never match a
-    ``/``, a bracket expression matches one character other than ``/``, and an unclosed ``[`` is
-    literal.
+    ``/``, a bracket expression matches one character other than ``/``, an unclosed ``[`` is
+    literal, and none of them matches a ``.`` at the start of a component. A pattern that does not
+    translate exactly (a backslash escape, a brace, a character class, a range other than of
+    digits or ASCII letters, a character outside ASCII) gives None, which the model refuses.
     """
+    if not path.isascii() or GLOB_REFUSED & set(path):
+        return None
     parts: list[str] = []
     index = 0
     while index < len(path):
         character = path[index]
+        guard = "(?!\\.)" if index == 0 or path[index - 1] == "/" else ""
         if character == "*":
-            parts.append("[^/]*")
+            parts.append(f"{guard}[^/]*")
         elif character == "?":
-            parts.append("[^/]")
+            parts.append(f"{guard}[^/]")
         elif character == "[":
-            end = path.find("]", index + 2)
-            if end == -1:
-                parts.append(re.escape(character))
-            else:
-                body = path[index + 1 : end]
-                negate = body[:1] in {"!", "^"}
-                members = re.escape(body[1:] if negate else body).replace("\\-", "-")
-                parts.append(f"(?!/)[{'^' if negate else ''}{members}]")
-                index = end
+            found = _bracket(path, index)
+            if found is None:
+                return None
+            expression, end = found
+            parts.append(expression if end == index else f"{guard}{expression}")
+            index = end
         else:
             parts.append(re.escape(character))
         index += 1
@@ -305,7 +432,8 @@ def glob_pattern(path: str) -> str:
 
 
 def _matches(pattern: str, path: str) -> bool:
-    return re.fullmatch(glob_pattern(pattern), path) is not None
+    expression = glob_pattern(pattern)
+    return expression is not None and re.fullmatch(expression, path) is not None
 
 
 def _systemd(lines: Sequence[Assignment], path: str) -> tuple[str, str] | None:
@@ -329,7 +457,7 @@ def _systemd(lines: Sequence[Assignment], path: str) -> tuple[str, str] | None:
 
 
 def _procps(lines: Sequence[Assignment], path: str) -> tuple[str, str] | None:
-    named = {item.path for item in lines if item.path is not None and not _is_glob(item.path)}
+    named = {item.raw for item in lines if not _is_glob(item.raw)}
     found = None
     for item in lines:
         if item.path is None or item.value is None:
@@ -361,6 +489,7 @@ def effective(raw_entries: Iterable[Mapping[str, object]], key: str) -> dict[str
         for item in late
         if item.escapes
     )
+    unclear.extend(problems(late))
     result: dict[str, object] = {}
     for reader in READERS:
         lines = [

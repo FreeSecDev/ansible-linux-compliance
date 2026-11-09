@@ -47,6 +47,7 @@ PROCPS_UNSUPPORTED = frozenset(
 )
 SYSTEMD_UNSUPPORTED = frozenset({"review2_line_over_1_mib"})
 UFW = "/etc/ufw/sysctl.conf"
+READERS = sysctl_config.READERS
 
 
 def case_text(file: dict[str, object]) -> str | None:
@@ -162,6 +163,9 @@ def readers(found: dict[str, object]) -> dict[str, object]:
     [
         ("ENABLED=yes", "IPV6=yes\nIPT_SYSCTL=/etc/ufw/sysctl.conf\n"),
         ("export ENABLED='yes'", 'IPT_SYSCTL="/etc/ufw/sysctl.conf"\n'),
+        ("ENABLED=YES", "IPT_SYSCTL=/etc/ufw/sysctl.conf\n"),
+        ("# ENABLED in /etc/default/ufw", "ENABLED=yes\nIPT_SYSCTL=/etc/ufw/sysctl.conf\n"),
+        ("IPT_SYSCTL=/etc/ufw/sysctl.conf\nENABLED=yes", "IPT_SYSCTL=\n"),
     ],
 )
 def test_ufw_s_file_wins_for_both_readers_when_ufw_is_enabled(enabled: str, default: str) -> None:
@@ -180,6 +184,8 @@ def test_ufw_s_file_wins_for_both_readers_when_ufw_is_enabled(enabled: str, defa
         ("ENABLED=yes", "IPT_SYSCTL=\n"),
         ("ENABLED=yes", "IPV6=yes\n"),
         ("ENABLED=yes", None),
+        ("ENABLED=no", "ENABLED=yes\nIPT_SYSCTL=/etc/ufw/sysctl.conf\n"),
+        ("IPT_SYSCTL=", "ENABLED=yes\nIPT_SYSCTL=/etc/ufw/sysctl.conf\n"),
     ],
 )
 def test_ufw_s_file_is_ignored_unless_ufw_applies_it(enabled: str, default: str | None) -> None:
@@ -213,6 +219,10 @@ def test_ufw_s_file_is_ignored_without_ufw_conf() -> None:
         ("ENABLED=$(echo yes)", None, "ENABLED is set in a form"),
         ("ENABLED=yes", "IPT_SYSCTL=${X}\n", "cannot follow"),
         ("ENABLED=yes", "IPT_SYSCTL=/etc/other.conf\n", "cannot follow"),
+        ("ENABLED=Yes", "IPT_SYSCTL=/etc/ufw/sysctl.conf\n", "a spelling of yes"),
+        ("# ufw", "ENABLED=$(echo yes)\n", "ENABLED is set in a form"),
+        ("IPT_SYSCTL=${X}", "ENABLED=yes\n", "cannot follow"),
+        ("ENABLED=yes\nIPT_SYSCTL=/etc/ufw/sysctl.conf", None, "may not start"),
     ],
 )
 def test_a_ufw_setting_that_the_model_does_not_follow_is_unsupported(
@@ -283,4 +293,228 @@ def test_each_reader_opens_its_own_path_for_a_key(key: str, reader: str, path: s
     ],
 )
 def test_a_glob_matches_as_glob_3_does(pattern: str, path: str, *, matches: bool) -> None:
-    assert bool(re.fullmatch(sysctl_config.glob_pattern(pattern), path)) is matches
+    expression = sysctl_config.glob_pattern(pattern)
+    assert expression is not None
+    assert bool(re.fullmatch(expression, path)) is matches
+
+
+@pytest.mark.parametrize(
+    ("pattern", "path", "matches"),
+    [
+        ("conf/[!]x]ll/rp_filter", "conf/all/rp_filter", True),
+        ("conf/[!]x]ll/rp_filter", "conf/]ll/rp_filter", False),
+        ("conf/[^]x]ll/rp_filter", "conf/xll/rp_filter", False),
+        ("conf/[]x]ll/rp_filter", "conf/]ll/rp_filter", True),
+        ("conf/[-a]ll/rp_filter", "conf/-ll/rp_filter", True),
+        ("conf/[a-]ll/rp_filter", "conf/-ll/rp_filter", True),
+        ("conf/[]/rp_filter", "conf/[]/rp_filter", True),
+        ("conf/[!/rp_filter", "conf/[!/rp_filter", True),
+        ("conf/a[b/c]d/rp_filter", "conf/a[b/c]d/rp_filter", True),
+        ("conf/a[b/c]d/rp_filter", "conf/ab/rp_filter", False),
+        ("conf/*/rp_filter", "conf/.hidden/rp_filter", False),
+        ("conf/?all/rp_filter", "conf/.all/rp_filter", False),
+        ("conf/[!x]all/rp_filter", "conf/.all/rp_filter", False),
+        ("conf/a*/rp_filter", "conf/a.b/rp_filter", True),
+        ("conf/all/rp_filte[r]", "conf/all/rp_filter", True),
+        ("conf/all/rp_filte[r", "conf/all/rp_filte[r", True),
+    ],
+)
+def test_a_bracket_and_a_leading_period_match_as_glob_3_does(
+    pattern: str, path: str, *, matches: bool
+) -> None:
+    expression = sysctl_config.glob_pattern(pattern)
+    assert expression is not None
+    assert bool(re.fullmatch(expression, path)) is matches
+
+
+@pytest.mark.parametrize(
+    "pattern",
+    [
+        "conf/[[:alpha:]]ll/rp_filter",
+        "conf/[[.a.]]ll/rp_filter",
+        "conf/[[=a=]]ll/rp_filter",
+        "conf/\\*/rp_filter",
+        "conf/[\\]]ll/rp_filter",
+        "conf/{all,default}*/rp_filter",
+        "conf/[a-Z]ll/rp_filter",
+        "conf/[z-a]ll/rp_filter",
+        "conf/[a-c-e]ll/rp_filter",
+        "conf/[a--]ll/rp_filter",
+        "conf/\u00e9*/rp_filter",
+    ],
+)
+def test_a_glob_that_does_not_translate_exactly_gives_none(pattern: str) -> None:
+    assert sysctl_config.glob_pattern(pattern) is None
+
+
+DROP_IN: dict[str, object] = {
+    "path": "/etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-rp-filter.conf",
+    "kind": "file",
+    "text": f"# Managed by freesecdev.linux_compliance for x.\n{RP_FILTER} = 1\n",
+}
+LATE = "/usr/lib/sysctl.d/zz-pkg.conf"
+
+
+def after_drop_in(text: str) -> dict[str, object]:
+    """Return what the model decides when a file read after the drop-in holds ``text``."""
+    entries: list[dict[str, object]] = [DROP_IN, {"path": LATE, "kind": "file", "text": text}]
+    return sysctl_config.effective(entries, RP_FILTER)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "--net.ipv4.conf.all.rp_filter = 0\n",
+        "--net.ipv4.conf.all.rp_filter=0\n",
+        "--net.ipv4.conf.all.rp_filter\n",
+        "--net/ipv4/conf/all/rp_filter = 0\n",
+    ],
+)
+def test_a_procps_key_with_a_second_leading_dash_is_unsupported(text: str) -> None:
+    assert after_drop_in(text)["unsupported"] == [
+        f"{LATE}: a key that starts with a second -, which procps drops from the path it opens"
+    ]
+
+
+def test_a_dash_and_a_space_before_another_dash_is_not_a_second_dash() -> None:
+    found = after_drop_in("- -net.ipv4.conf.all.rp_filter = 0\n")
+    assert found["unsupported"] == []
+    assert readers(found) == {
+        "systemd": {"value": "1", "source": DROP_IN["path"]},
+        "procps": {"value": "1", "source": DROP_IN["path"]},
+    }
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "net/ipv4//conf/*/rp_filter = 0\n",
+        "net.ipv4..conf.*.rp_filter = 0\n",
+        "/net/ipv4/conf/*/rp_filter = 0\n",
+        "net/ipv4/./conf/*/rp_filter = 0\n",
+        "net/ipv4/conf/*/rp_filter/ = 0\n",
+        "-net/ipv4//conf/*/rp_filter\n",
+    ],
+)
+def test_a_procps_glob_that_is_not_canonical_is_unsupported(text: str) -> None:
+    found = cast("list[str]", after_drop_in(text)["unsupported"])
+    assert (
+        f"{LATE}: a glob with a repeated slash, a . component or a leading or trailing slash, whose"
+        " matches procps compares with the keys as written"
+    ) in found
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["net/ipv4/.*/conf/all/rp_filter = 0\n", "net/ipv4/conf/.?ll/rp_filter = 0\n"],
+)
+def test_a_glob_component_that_starts_with_a_period_is_unsupported(text: str) -> None:
+    found = cast("list[str]", after_drop_in(text)["unsupported"])
+    assert f"{LATE}: a glob with a component that starts with ., which can match . and .." in found
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "net.ipv4.conf.[[:alpha:]]ll.rp_filter = 0\n",
+        "net.ipv4.conf.\\a*.rp_filter = 0\n",
+        "net.ipv4.conf.{all,x}*.rp_filter = 0\n",
+    ],
+)
+def test_a_glob_that_does_not_translate_exactly_is_unsupported(text: str) -> None:
+    assert after_drop_in(text)["unsupported"] == [
+        f"{LATE}: a glob that the collection cannot translate exactly"
+    ]
+
+
+def test_a_bracket_with_a_leading_close_bracket_is_followed() -> None:
+    found = after_drop_in("net.ipv4.conf.[!]x]ll.rp_filter = 0\n")
+    assert found["unsupported"] == []
+    assert readers(found) == {
+        "systemd": {"value": "1", "source": DROP_IN["path"]},
+        "procps": {"value": "1", "source": DROP_IN["path"]},
+    }
+
+
+@pytest.mark.parametrize(
+    ("text", "procps"),
+    [
+        ("net/ipv4//conf/all/rp_filter = 1\nnet.ipv4.conf.*.rp_filter = 0\n", "0"),
+        ("-net/ipv4//conf/all/rp_filter\nnet.ipv4.conf.*.rp_filter = 0\n", "0"),
+        ("-/net/ipv4/conf/all/rp_filter\nnet.ipv4.conf.*.rp_filter = 0\n", "0"),
+        ("-net.ipv4.conf.all.rp_filter\nnet.ipv4.conf.*.rp_filter = 0\n", None),
+        ("net/ipv4/conf/all/rp_filter = 1\nnet.ipv4.conf.*.rp_filter = 0\n", "1"),
+    ],
+)
+def test_procps_excludes_from_a_glob_only_a_key_written_as_its_matches(
+    text: str, procps: str | None
+) -> None:
+    entries: list[dict[str, object]] = [
+        {"path": "/etc/sysctl.d/10-a.conf", "kind": "file", "text": text}
+    ]
+    found = sysctl_config.effective(entries, RP_FILTER)
+    assert found["unsupported"] == []
+    assert cast("dict[str, object]", found["procps"])["value"] == procps
+
+
+@pytest.mark.parametrize("kind", ["file", "link", "directory", "other"])
+@pytest.mark.parametrize("directory", sysctl_config.DIRECTORIES)
+def test_a_pattern_name_is_unsupported_whatever_the_kind_of_the_entry(
+    kind: str, directory: str
+) -> None:
+    entries: list[dict[str, object]] = [
+        DROP_IN,
+        {"path": f"{directory}/[1]0-loose.conf", "kind": kind, "text": None},
+        {"path": "/usr/lib/sysctl.d/10-loose.conf", "kind": "file", "text": f"{RP_FILTER}=0\n"},
+    ]
+    assert sysctl_config.effective(entries, RP_FILTER)["unsupported"] == [
+        (
+            f"{directory}/[1]0-loose.conf: sysctl --system expands the name of this entry as a"
+            " pattern, which may read other files a second time"
+        )
+    ]
+
+
+def test_a_pattern_name_outside_the_conf_files_is_not_read() -> None:
+    entries: list[dict[str, object]] = [
+        DROP_IN,
+        {"path": "/etc/sysctl.d/[1]0-loose.conf.bak", "kind": "directory", "text": None},
+        {"path": "/srv/[1]0-loose.conf", "kind": "file", "text": f"{RP_FILTER}=0\n"},
+    ]
+    assert sysctl_config.effective(entries, RP_FILTER)["unsupported"] == []
+
+
+@pytest.mark.parametrize(
+    ("value", "systemd", "procps"),
+    [
+        ("1\r\x1f", "1", "1\r\x1f"),
+        ("1\x1c", "1\x1c", "1\x1c"),
+        ("1\x1d\x1e", "1\x1d\x1e", "1\x1d\x1e"),
+        ("1\x85", "1\x85", "1\x85"),
+        ("1\u00a0", "1\u00a0", "1\u00a0"),
+        ("1\v\f", "1\v\f", "1"),
+        ("\v\f1\r", "\v\f1", "1"),
+    ],
+)
+def test_procps_strips_only_the_white_space_of_c(value: str, systemd: str, procps: str) -> None:
+    found = after_drop_in(f"{RP_FILTER} = {value}\n")
+    assert {reader: cast("dict[str, object]", found[reader])["value"] for reader in READERS} == {
+        "systemd": systemd,
+        "procps": procps,
+    }
+
+
+def test_procps_keeps_a_key_that_ends_in_a_character_that_is_not_c_white_space() -> None:
+    found = after_drop_in(f"{RP_FILTER}\x1f = 0\n\x1c{RP_FILTER} = 0\n")
+    assert readers(found) == {
+        "systemd": {"value": "1", "source": DROP_IN["path"]},
+        "procps": {"value": "1", "source": DROP_IN["path"]},
+    }
+
+
+def test_a_problem_of_ufw_s_file_is_unsupported() -> None:
+    entries = ufw_entries("ENABLED=yes", "IPT_SYSCTL=/etc/ufw/sysctl.conf\n")
+    entries[-3] = {"path": UFW, "kind": "file", "text": "--net/ipv4/conf/all/rp_filter=0\n"}
+    assert sysctl_config.effective(entries, RP_FILTER)["unsupported"] == [
+        f"{UFW}: a key that starts with a second -, which procps drops from the path it opens"
+    ]

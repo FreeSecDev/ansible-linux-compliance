@@ -115,8 +115,10 @@ accepted value, and `compliant` without a write only when both already do. The m
   procps reads `/etc/sysctl.conf` last, systemd only through a link such as `99-sysctl.conf`.
 - Lines: systemd ends a line at a line feed, a lone carriage return or a NUL (CR LF counts once); procps at a line
   feed only, and ignores the rest of a line after a NUL. Both skip `#` and `;` comments; nothing continues a line.
-  systemd strips spaces, tabs and line ends, also after a leading `-`; procps every white-space character, but not the
-  spaces after a `-`.
+  systemd strips spaces, tabs and line ends, also after a leading `-`; procps the characters of C `isspace` (space,
+  tab, line feed, vertical tab, form feed, carriage return), not every character that Python counts as white space
+  (`\x1c` to `\x1f`, `\x85`, U+00A0 stay), and not the spaces after a `-`. A value such as `1\r\x1f` is therefore
+  `1\r\x1f` for procps, which the kernel refuses, and not `1`.
 - Keys: when the first separator is a dot, dots and slashes are interchanged. systemd then drops repeated slashes,
   `.` components and a leading and a trailing slash, and never writes a key with a `..` component; procps opens the
   path as written, so the kernel resolves repeated slashes, `.` and a leading slash, and a trailing slash opens
@@ -126,8 +128,12 @@ accepted value, and `compliant` without a write only when both already do. The m
   first: an assignment with another value moves the key to the end, one with the same value keeps its place, and a
   `-key` line without `=` assigns no value, so a later `-net.ipv4.conf.all.rp_filter` leaves the kernel default at
   boot. For procps such a line only excludes the key from globs.
-- Globs: `*`, `?` and `[...]`, never across `/`; a key that any file assigns is never set by a glob; of the globs
-  that match a key, systemd applies the last in its table order.
+- Globs: `*`, `?` and `[...]`, never across `/` and never matching a `.` at the start of a component; a `[` without
+  a `]` in its component is literal, and a `]` right after `[`, `[!` or `[^` is a member. systemd never sets a key
+  that its table holds by a glob; of the globs that match a key, it applies the last in its table order. procps skips
+  a path that a glob returns only when some line names exactly that path as written (`strcmp`), so
+  `net/ipv4//conf/all/rp_filter` or `-/net/ipv4/conf/all/rp_filter` excludes nothing from `net.ipv4.conf.*.rp_filter`;
+  the model compares the glob's matches with the keys as written as well.
 - What the model does not follow is refused, and makes every rule of the family `unparsed_configuration` with the
   file named:
   - procps expands every configuration file name with glob(3), braces, `~` and backslash escapes included, so a file
@@ -138,13 +144,31 @@ accepted value, and `compliant` without a write only when both already do. The m
     names nothing: any key with a `..` component in a file that procps reads;
   - systemd stops reading a file at a line of 1 MiB or more (`LONG_LINE_MAX`; `read_stripped_line` fails and
     `parse_file` returns), so the lines after it never apply at boot: any line of 1,000,000 bytes or more in a file
-    that systemd reads.
-- Files read after boot: ufw applies the file named by `IPT_SYSCTL` in `/etc/default/ufw` with `sysctl -p` when it
-  starts, and only when `/etc/ufw/ufw.conf` sets `ENABLED=yes`; ufw ships disabled. Only then is
+    that systemd reads;
+  - procps drops one leading `-` in `parse_setting_line` and, when the key still starts with `-`, `setting_new`
+    builds the path from the key without a second one, so `--net.ipv4.conf.all.rp_filter = 0` sets the rule's key:
+    any procps key that still starts with `-` after the first, with or without `=`;
+  - glob(3) keeps a repeated slash, a `.` component and a leading slash of the pattern in every path it returns,
+    and procps compares those paths with the keys as written, so `net/ipv4//conf/*/rp_filter = 0` sets a key that an
+    explicit line names: any procps glob with a repeated slash, a `.` component or a leading or trailing slash;
+  - a glob component that starts with `.` can match the entries `.` and `..`, which name the directory itself or its
+    parent: any glob of either reader with such a component;
+  - a glob that the model cannot translate exactly into a regular expression: a backslash escape, a brace, a
+    character class, equivalence class or collating symbol, a range other than within the digits or the lower-case or
+    upper-case ASCII letters, a `-` between members other than in such a range, or a character outside ASCII.
+
+  procps lists every `*.conf` name of its directories in `PreloadSystem`, whatever the kind of the entry (a
+  directory, a FIFO, a socket, a broken link), and only then globs it, so the name check covers every entry of the
+  five directories, not only the files that a reader opens.
+- Files read after boot: ufw sources `/etc/default/ufw` and then `/etc/ufw/ufw.conf`, so either may set
+  `ENABLED` and `IPT_SYSCTL` and the later assignment wins; it applies the file named by `IPT_SYSCTL` with
+  `sysctl -p` when it starts, and only when `ENABLED` is `yes` or `YES`; ufw ships disabled. Only then is
   `/etc/ufw/sysctl.conf` read last, with the rules of procps, for both readers; with ufw disabled, without
   `ufw.conf` or with an empty `IPT_SYSCTL` it counts for neither. An `ENABLED` or `IPT_SYSCTL` line other than a
-  plain `NAME=value` (quoted or exported), or an `IPT_SYSCTL` that names another file, is refused as
-  `unparsed_configuration`: the model does not follow what ufw would apply then.
+  plain `NAME=value` (quoted or exported), another spelling of yes such as `Yes`, or an `IPT_SYSCTL` that names
+  another file, is refused as `unparsed_configuration`: the model does not follow what ufw would apply then; so is
+  `ufw.conf` alone enabling the file while `/etc/default/ufw` is missing, where ufw's start script may stop first.
+  The refusals of the line list above apply to ufw's file too.
 
 The model is not trusted on its own. `make sysctl-reader-verdicts` (`tools/molecule/sysctl-reader-verdicts.sh`) runs
 the real readers of the Molecule images on the cases of `tests/fixtures/sysctl_reader/cases.json` (72, among them
@@ -181,6 +205,18 @@ none: a slash-first key with a dot, a form feed after the value, a file masked b
 `/./`, a leading slash or a trailing dot, a file name that procps expands, and a glob reassigned with the same value;
 the second review added a key above `/proc/sys` with `..`, a backslash in a file name, a line over 1 MiB and ufw's
 file while ufw is disabled.
+
+**Amendment (third review).** The third review read the readers' sources and found four more ways in which procps
+writes a looser value while the model reported `applied` or `compliant`: a second leading `-` on a key, a glob that
+is not in canonical form, a pattern name on an entry that is not a regular file or a link (a directory or a FIFO
+named `[1]0-loose.conf`), and the white space that procps strips (C `isspace`, not Python's). The model now refuses
+the first two and the third as `unparsed_configuration` with the file named, strips only C white space for procps,
+compares procps's glob matches with the keys as written, and refuses a glob that it cannot translate exactly (before,
+`[!]x]` raised an error) or whose component starts with `.`. ufw's `ENABLED` and `IPT_SYSCTL` are read from both of
+its files in its own order, and `YES` counts as yes. These rules are proven by unit tests of the model; their cases
+are not yet in `cases.json`, because the verdict table can only be regenerated with Docker
+(`make sysctl-reader-verdicts`), and the verdict test requires a recorded verdict for every case. Until then they are
+refusals or follow the readers' source code: the model refuses rather than guesses wherever it cannot be proven.
 
 ### 2a. A conflicting line in a vendor file is set to the compliant value
 
@@ -233,13 +269,17 @@ Writing the stricter `all` value never loosens anything under any of these combi
 an interface. The family always writes the drop-in and, with the running values on, the running value; then, after
 every running value of the family is set, every rule of `net.ipv4.conf.all.*` or `net.ipv6.conf.all.*` in
 `__linux_compliance_remediate_sysctl_interface_combination` that is `applied` or `compliant` reads the value of every
-interface again (`all`, `default` and the loopback interface excluded, which neither sends nor accepts redirects or
+interface again (they are read once before anything is written as well, so a host with more than 512 entries below
+`net.ipv4.conf` or `net.ipv6.conf`, which the module refuses as `too_large`, fails the family before any change) (`all`, `default` and the loopback interface excluded, which neither sends nor accepts redirects or
 router advertisements and whose packets are not reverse-path filtered) and combines it with the running `all` value
 as the kernel does (`accept_redirects` as if the interface did not forward, the stricter assumption;
 `accept_source_route` of IPv6, whose minimum makes `-1`, no routing header at all, stricter than `0`, counts any value
 below the accepted ones as compliant). When an interface still has a value that the check does not accept, the rule
 keeps its status `applied` or `compliant`, but with the reason `interface_override` instead of none, and its message
-names each such interface, its own value and the value the kernel then uses. So a rule is reported without a reason
+names each such interface, its own value and the value the kernel then uses. An interface whose name the module does
+not accept as a component of a parameter name (a character other than letters, digits, `_`, `-`, `+`, `@` and `.`)
+is not read; the module returns it in `unnamed`, and the rule names it with an unknown value and the reason
+`interface_override` too, instead of passing over it. So a rule is reported without a reason
 only when every interface is compliant too; `interface_override` is the operator's signal that the network
 configuration still has to change an interface. In check mode nothing is written, so the interfaces are combined
 with the value the rule would write and read as they are, without the propagation of `default`; the report can then

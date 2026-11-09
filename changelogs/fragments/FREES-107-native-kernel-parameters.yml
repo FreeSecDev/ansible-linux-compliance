@@ -19,13 +19,19 @@ minor_changes:
     readers of the Molecule images set (``make sysctl-reader-verdicts``); a rule is ``overridden`` unless both
     readers would apply its drop-in, and ``compliant`` only when both already set an accepted value; what the model
     does not follow (a file name that procps expands as a pattern, a procps key with ``..``, a line of 1 MiB at which
-    systemd stops reading, a ufw setting other than a plain one) refuses the family (``unparsed_configuration``);
-    ufw's ``/etc/ufw/sysctl.conf`` counts only when ufw is enabled.
+    systemd stops reading, a ufw setting other than a plain one, a procps key with a second leading ``-``, a procps
+    glob with a repeated slash, a ``.`` component or a leading or trailing slash, a glob component that starts with
+    ``.``, a glob the model cannot translate exactly, a pattern name on any ``*.conf`` entry including directories
+    and FIFOs) refuses the family (``unparsed_configuration``); procps strips only C white space and excludes from a
+    glob only a key written exactly as its match; ufw's ``/etc/ufw/sysctl.conf`` counts only when ufw is enabled
+    (``ENABLED`` ``yes`` or ``YES``, read from ``/etc/default/ufw`` and then ``/etc/ufw/ufw.conf``).
   - >-
     remediate - with the running values on, a rule of ``net.ipv4.conf.all`` or ``net.ipv6.conf.all`` whose value the
     kernel combines with each interface's is always applied and then, after the running values are set, reported
     with the reason ``interface_override`` and the interfaces named when an interface still keeps a looser effective
-    value; the collection never writes per-interface values; with them off, results carry the reason
+    value, or an interface whose name the module does not read, with an unknown value; the interfaces are read before
+    any change as well, so more than 512 fail the family before it writes; the collection never writes per-interface
+    values; with them off, results carry the reason
     ``running_value_not_read``; a running value that cleanup could not write back is refused as
     ``prior_unrestorable``.
   - >-
@@ -34,4 +40,5 @@ minor_changes:
   - >-
     sysctl_runtime - new module that reads and sets running kernel parameters through their files below
     ``/proc/sys``, without running a program; it refuses links and other file systems, reads every value back and
-    writes the value before back when the kernel keeps another one.
+    writes the value before back when the kernel keeps another one; ``unnamed`` returns the entries of a wildcard
+    read whose names it does not accept.

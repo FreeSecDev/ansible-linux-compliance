@@ -20,6 +20,7 @@ real_read = sysctl.read
 real_write = sysctl.write
 real_writable = sysctl.writable
 real_expand = sysctl.expand
+real_expand_entries = sysctl.expand_entries
 IO_ERROR = "io_error"
 
 
@@ -42,6 +43,9 @@ def proc(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setattr(sysctl, "write", functools.partial(real_write, proc_root=root))
     monkeypatch.setattr(sysctl, "writable", functools.partial(real_writable, proc_root=root))
     monkeypatch.setattr(sysctl, "expand", functools.partial(real_expand, proc_root=root))
+    monkeypatch.setattr(
+        sysctl, "expand_entries", functools.partial(real_expand_entries, proc_root=root)
+    )
     return root
 
 
@@ -77,7 +81,36 @@ def test_read_expands_wildcards_and_reports_absent_parameters(
         "kernel.gone": None,
     }
     assert outcome["writable"] == {"kernel.dmesg_restrict": True, "kernel.gone": False}
+    assert outcome["unnamed"] == {}
     assert outcome["set"] == []
+
+
+def test_read_names_the_interfaces_whose_names_it_cannot_read(
+    proc: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (proc / "net" / "ipv4" / "conf" / "wg%0").mkdir()
+    (proc / "net" / "ipv4" / "conf" / "wg%0" / "forwarding").write_text("1\n", encoding="ascii")
+    code, outcome = run(capsys, {"read": ["net.ipv4.conf.*.forwarding", "kernel.dmesg_restrict"]})
+    assert code == 0
+    assert outcome["unnamed"] == {"net.ipv4.conf.*.forwarding": ["wg%0"]}
+    assert "net.ipv4.conf.lo.forwarding" in cast("dict[str, object]", outcome["running"])
+
+
+def test_too_many_interfaces_fail_before_anything_is_set(
+    proc: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(sysctl, "MAX_EXPANDED", 1)
+    code, outcome = run(
+        capsys,
+        {
+            "read": ["net.ipv4.conf.*.forwarding"],
+            "set": [{"name": "kernel.dmesg_restrict", "value": "1"}],
+        },
+    )
+    assert code == 1
+    assert outcome["reason"] == "too_large"
+    assert outcome["changed"] is False
+    assert (proc / "kernel" / "dmesg_restrict").read_text(encoding="ascii") == "0\n"
 
 
 def test_set_writes_changed_values_in_order(proc: Path, capsys: pytest.CaptureFixture[str]) -> None:
