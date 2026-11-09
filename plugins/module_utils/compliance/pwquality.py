@@ -316,14 +316,14 @@ def option_override(argument: bytes, setting: str, required: int) -> bool:
     return found is None or found[1] != required
 
 
-def pam_overrides(files: Sequence[tuple[str, str]], setting: str, required: int) -> list[str]:
-    """Return ``<file>: <argument>`` for each ``pam_pwquality`` argument overriding ``setting``.
+def pam_arguments(files: Sequence[tuple[str, str]]) -> list[tuple[str, str]]:
+    """Return the file and the word of every word on a PAM line that names ``pam_pwquality``.
 
     Every line of every PAM file that names ``pam_pwquality`` and is not a comment line is read,
     with lines continued by a trailing backslash joined, and its words are split at white space
     and brackets, so that more is found than PAM passes to the module and never less.
     """
-    found: list[str] = []
+    found: list[tuple[str, str]] = []
     for path, text in files:
         logical: list[bytes] = []
         pending = b""
@@ -339,12 +339,33 @@ def pam_overrides(files: Sequence[tuple[str, str]], setting: str, required: int)
             if PAM_MODULE not in line or _strip(line).startswith(b"#"):
                 continue
             words = re.split(PAM_SEPARATORS, line.decode("utf-8", "replace"))
-            found.extend(
-                f"{path}: {word}"
-                for word in words
-                if word and option_override(text_bytes(word), setting, required)
-            )
+            found.extend((path, word) for word in words if word)
     return found
+
+
+def pam_overrides(files: Sequence[tuple[str, str]], setting: str, required: int) -> list[str]:
+    """Return ``<file>: <argument>`` for each ``pam_pwquality`` argument overriding ``setting``.
+
+    The arguments are those of :func:`pam_arguments`.
+    """
+    return [
+        f"{path}: {word}"
+        for path, word in pam_arguments(files)
+        if option_override(text_bytes(word), setting, required)
+    ]
+
+
+def pam_enforcing_off(files: Sequence[tuple[str, str]]) -> list[str]:
+    """Return ``<file>: <argument>`` for each ``pam_pwquality`` argument that sets enforcing to 0.
+
+    The value is read as ``pwquality_set_option`` reads it, with ``strtol``, so ``enforcing=00``,
+    ``ENFORCING=+00``, ``enforcing=-0`` and ``enforcing=000`` are all 0.
+    """
+    return [
+        f"{path}: {word}"
+        for path, word in pam_arguments(files)
+        if option_value(text_bytes(word)) == ("enforcing", 0)
+    ]
 
 
 @dataclass(frozen=True)
@@ -432,10 +453,11 @@ def why_not_effective(reading: Reading, rule: Rule, path: str, line: int | None)
 
 
 def pam_unread_includes(files: Sequence[tuple[str, str]]) -> list[str]:
-    """Return ``<file> includes <path>`` for every PAM line that includes a file by absolute path.
+    """Return ``<file> includes <path>`` for every PAM line that includes a path with a ``/``.
 
-    Linux-PAM opens such a file wherever it is, so a ``pam_pwquality`` line in it is not among the
-    files that the collection reads.
+    Linux-PAM opens an absolute path wherever it is, and a relative one below ``/etc/pam.d``, so
+    ``../security/x`` opens a file outside it too. A ``pam_pwquality`` line in such a file is not
+    among the files that the collection reads; only a bare name in the PAM directory is.
     """
     found: list[str] = []
     for path, text in files:
@@ -443,12 +465,12 @@ def pam_unread_includes(files: Sequence[tuple[str, str]]) -> list[str]:
             words = line.split()
             if not words or words[0].startswith(COMMENT_TEXT):
                 continue
-            if words[0] == "@include" and len(words) > 1 and words[1].startswith("/"):
+            if words[0] == "@include" and len(words) > 1 and "/" in words[1]:
                 found.append(f"{path} includes {words[1]}")
             elif (
                 len(words) > INCLUDE_TARGET
                 and words[1].lower() in ("include", "substack")
-                and words[2].startswith("/")
+                and "/" in words[2]
             ):
                 found.append(f"{path} includes {words[2]}")
     return found
@@ -465,11 +487,7 @@ def loosening(
     refusal = None
     if rule.setting != "enforcing":
         sources = [] if reading.value("enforcing") != 0 else ["the files"]
-        sources += [
-            entry
-            for entry in pam_overrides(pam, "enforcing", 1)
-            if entry.endswith(("=0", "=+0", "=-0"))
-        ]
+        sources += pam_enforcing_off(pam)
         if sources:
             refusal = (
                 "enforcing is 0 in "

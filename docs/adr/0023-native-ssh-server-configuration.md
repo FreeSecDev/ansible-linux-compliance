@@ -317,14 +317,17 @@ lines and splits at a lone CR, so a vendor file with a CR was not written back b
   rule whose value sshd does not print is rolled back: its vendor lines are written back, the drop-in that this run
   created is removed and the ledger entry that this run created is forgotten, `sshd -t` checks the configuration once
   more, and the rule is reported `overridden` with the reason `with <drop-in> written, sshd -T still reads ...` and
-  `changed: false`. Check mode cannot write, so it reports what the files predict; `sshd_validate` returns
+  `changed: false`. A drop-in that existed before this run and that this run rewrote for a changed value is not
+  written back by this rollback: it keeps the new value and the ledger entry recorded for it (sshd uses neither the
+  old nor the new value), the rule is reported `changed: true`, and the reason says so (review of PR #89, round 2,
+  N5). The rollback after a refused configuration (F6 below) does write such a drop-in back. Check mode cannot write, so it reports what the files predict; `sshd_validate` returns
   `check_mode`, because `ansible_check_mode` does not show the `check_mode` of an `apply`, and nothing is compared or
   reloaded after a write that check mode did not make.
 - *The lexer of the family reads each line as sshd does.* The filter `sshd_config_lines`
   (`plugins/module_utils/compliance/sshd_config.py`) reproduces `load_server_config` and `strdelim` of OpenSSH: the
   blanks, tabs and CRs at the start of a line are dropped, a `"` anywhere in the keyword is removed up to the next
-  `"`, one `=` after white space and an `=` at the start of the line are skipped, keywords are compared without case
-  and `DSAAuthentication` is `PubkeyAuthentication`. Settings, `Match` lines and `Include` lines are all found with
+  `"`, one `=` after white space and an `=` at the start of the line are skipped, keywords are compared without
+  ASCII case, as `strcasecmp` in the C locale does, and `DSAAuthentication` is `PubkeyAuthentication`. Settings, `Match` lines and `Include` lines are all found with
   it (amended after the review of PR #89, finding F1, which found `Permit"RootLogin" yes`, `=PermitRootLogin yes`
   and `Ma"tch" User x` missed by the regular expression of the first version). A file with a NUL byte, which makes
   sshd join two lines, or with bytes that are not UTF-8 is not read as lines at all: every rule is `overridden` with
@@ -376,3 +379,22 @@ Each apply runs `sshd -T` up to four times instead of `sshd -t` twice, in millis
   gets its prior text back, and its ledger entry is recorded again with the prior values.
 - `-C` is used only by the Molecule regressions to read what sshd applies in a `Match` block; the role never passes
   it (amendment of FREES-200 of ADR 0004).
+
+**Review of PR #89, round 2.**
+
+- *Every argument of the drop-in `Include` line is read (N1).* sshd's `Include` reads its arguments in order, so a
+  glob on the same line as `/etc/ssh/sshd_config.d/*.conf` is read too. A glob before the drop-in glob counts as an
+  `Include` before the drop-ins and a glob after it as an `Include` after them: either makes every rule `overridden`,
+  as on lines of their own, because the family does not read the files they name. The `readers` regression group
+  adds `Include /etc/ssh/sshd_config.d/*.conf /etc/ssh/freesecdev-readers.d/*.conf` with a `Match User` block that
+  permits root logins in the second directory, and checks with `sshd -T -C` that sshd reads it and that every rule is
+  refused.
+- *The lexer follows sshd on two more forms (N7).* Keywords are lowered in ASCII only (U+212A, the Kelvin sign, is not
+  a `k`), and the trailing white space and FFs are dropped from every character but the first, as
+  `process_server_config_line_depth` does, so a line that is only an FF is an error, not a comment. The file name
+  filters of the drop-ins end with `\Z`, so a name that ends in a line break is not taken for a `.conf` file.
+- *The messages after a cleanup say what was written (N6).* A cleanup that ends in `write_mismatch` says that the
+  drop-in was removed and the vendor file written back; in check mode, where a cleanup writes nothing, a vendor file
+  that the same run both restores and sets is compared with its text on disk, not with the restored text, so it is no
+  longer reported `modified_since_read`.
+- *The rollback of a rule that sshd does not use keeps a rewritten drop-in (N5)*, as the decision above says.

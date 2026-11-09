@@ -173,7 +173,7 @@
               | zip(__linux_compliance_remediate_ssh_found.files | default([]))) }}
     __linux_compliance_remediate_ssh_dropins: >-
       {{ __linux_compliance_remediate_ssh_found.files | default([]) | map(attribute='path')
-         | select('match', '^' ~ (__linux_compliance_remediate_sshd_directory | regex_escape) ~ '/[^./][^/]*\.conf$')
+         | select('match', '^' ~ (__linux_compliance_remediate_sshd_directory | regex_escape) ~ '/[^./][^/]*\.conf\Z')
          | sort | list }}
   tags:
     - always
@@ -443,7 +443,7 @@
       {%- if planned.reason is none
             and planned.restores | map(attribute='path')
                 | select('in', __linux_compliance_remediate_ssh_unverified) | list | length > 0 -%}
-      {%- set _ = plan.update({rule_id: {'reason': 'write_mismatch', 'restores': []}}) -%}
+      {%- set _ = plan.update({rule_id: {'reason': 'write_mismatch', 'restores': planned.restores}}) -%}
       {%- else -%}
       {%- set _ = plan.update({rule_id: planned}) -%}
       {%- endif -%}
@@ -487,6 +487,14 @@
       {{ __linux_compliance_remediate_family.cleanup
          | selectattr('rule_id', 'in', __linux_compliance_remediate_ssh_reverted_ids)
          | map(attribute='parameters.path') | list }}
+    __linux_compliance_remediate_ssh_unwritten: >-
+      {%- set unwritten = {} -%}
+      {%- for result in __linux_compliance_remediate_ssh_restored.results | default([]) | selectattr('changed')
+            | rejectattr('dest', 'defined') -%}
+      {%- set path = result.__linux_compliance_remediate_ssh_restore_file.path -%}
+      {%- set _ = unwritten.update({path: __linux_compliance_remediate_ssh_texts[path] | hash('sha256')}) -%}
+      {%- endfor -%}
+      {{ unwritten }}
     __linux_compliance_remediate_ssh_texts: >-
       {{ __linux_compliance_remediate_ssh_texts | combine(__linux_compliance_remediate_ssh_restored_texts) }}
     __linux_compliance_remediate_ssh_files: >-
@@ -519,6 +527,12 @@
                               ~ planned.restores | map(attribute='path') | join(', '))
                              if planned.restores | length > 0 else '')
                           ~ ')' if planned.reason is none
+                          else ('cleanup_incomplete (write_mismatch; '
+                                ~ ('the drop-in was removed and ' if present else '')
+                                ~ planned.restores | map(attribute='path') | join(', ')
+                                ~ ' was written back with the original line but does not hold what was written,'
+                                ~ ' so the ledger entry is kept and the cleanup is retried on the next run)')
+                               if planned.reason == 'write_mismatch'
                           else 'cleanup_incomplete (' ~ planned.reason
                                ~ '; nothing was changed, the ledger entry is kept and the cleanup is retried on the'
                                ~ ' next run)')}) -%}
@@ -537,12 +551,14 @@
       - sshd_config.d/*.conf
   ansible.builtin.set_fact:
     __linux_compliance_remediate_ssh_layout: >-
-      {%- set ns = namespace(include=-1) -%}
+      {%- set ns = namespace(include=-1, position=-1) -%}
       {%- for item in __linux_compliance_remediate_ssh_main_read -%}
       {%- if ns.include < 0 and item.keyword == 'include'
             and item.arguments | default([], true) | select('in', __linux_compliance_remediate_ssh_globs)
                 | list | length > 0 -%}
       {%- set ns.include = loop.index0 -%}
+      {%- set ns.position = item.arguments.index(item.arguments
+            | select('in', __linux_compliance_remediate_ssh_globs) | first) -%}
       {%- endif -%}
       {%- endfor -%}
       {%- set matches = {} -%}
@@ -556,6 +572,7 @@
       {%- set _ = matches.update({path: found.index}) -%}
       {%- endfor -%}
       {{ {'include': ns.include,
+          'position': ns.position,
           'included': ns.include >= 0 and ns.include
                       < matches[__linux_compliance_remediate_sshd_main] | default(ns.include + 1),
           'matches': matches} }}
@@ -592,6 +609,14 @@
       {%- for line, item in files[main] | default([]) | zip((parsed[main] | default({'lines': []})).lines) -%}
       {%- if loop.index0 < layout.include and item.keyword in [lowered, 'include'] and main not in ns.earlier -%}
       {%- set ns.earlier = ns.earlier + [main] -%}
+      {%- elif loop.index0 == layout.include -%}
+      {%- if layout.position > 0 and main not in ns.earlier -%}
+      {%- set ns.earlier = ns.earlier + [main] -%}
+      {%- endif -%}
+      {%- if item.arguments | length > layout.position + 1 -%}
+      {%- set ns.includes = ns.includes + [main ~ ' includes ' ~ (item.arguments[layout.position + 1:] | join(' '))
+            ~ ' after the drop-ins, on the line that includes them'] -%}
+      {%- endif -%}
       {%- elif loop.index0 > layout.include and layout.include >= 0 and item.keyword == lowered -%}
       {%- set ns.conflicts = ns.conflicts + [{'path': main, 'index': loop.index0, 'line': line,
                                               'value': item.value}] -%}
@@ -900,7 +925,8 @@
       {%- set out = [] -%}
       {%- for result in __linux_compliance_remediate_ssh_edit_stats.results | default([]) -%}
       {%- if result.stat.checksum | default('')
-            != (result.__linux_compliance_remediate_ssh_edit_file.before | hash('sha256')) -%}
+            != __linux_compliance_remediate_ssh_unwritten[result.__linux_compliance_remediate_ssh_edit_file.path]
+               | default(result.__linux_compliance_remediate_ssh_edit_file.before | hash('sha256')) -%}
       {%- set _ = out.append(result.__linux_compliance_remediate_ssh_edit_file.path) -%}
       {%- endif -%}
       {%- endfor -%}
@@ -1222,7 +1248,11 @@
       {%- set _ = found.update({rule.rule_id:
             'with ' ~ rule.parameters.path ~ ' written, sshd -T still reads ' ~ keyword ~ ' '
             ~ (now | default('nothing', true)) ~ ', not ' ~ (expected | default('its value', true))
-            ~ ', so a setting that sshd reads first wins; what this run wrote for the rule was rolled back'}) -%}
+            ~ ', so a setting that sshd reads first wins; '
+            ~ ('the vendor lines that this run set for the rule were written back, and the drop-in, which existed'
+               ~ ' before this run, keeps the new value and its ledger entry'
+               if rule.parameters.path in __linux_compliance_remediate_ssh_entries
+               else 'what this run wrote for the rule was rolled back')}) -%}
       {%- endif -%}
       {%- endfor -%}
       {{ found }}

@@ -66,7 +66,7 @@
   ansible.builtin.set_fact:
     __linux_compliance_remediate_pwq_entries: >-
       {{ __linux_compliance_remediate_pwq_dropins.files | default([])
-         | selectattr('path', 'match', '^.*/(?:(?!\.conf)[^/])*\.conf$') | list }}
+         | selectattr('path', 'match', '^.*/(?:(?!\.conf)[^/])*\.conf\Z') | list }}
   tags:
     - always
 

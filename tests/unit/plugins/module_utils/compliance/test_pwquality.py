@@ -177,3 +177,59 @@ def test_the_restore_filter_refuses_input_of_the_wrong_shape(
 ) -> None:
     with pytest.raises(pwquality_restore.RestoreInputError):
         pwquality_restore.pwquality_restore(*arguments)
+
+
+@pytest.mark.parametrize(
+    "argument",
+    [
+        "enforcing=0",
+        "enforcing=00",
+        "enforcing=+00",
+        "enforcing=-00",
+        "enforcing=000",
+        "enforcing=-0",
+        "ENFORCING=0",
+        "[enforcing=00]",
+    ],
+)
+def test_every_form_of_enforcing_0_in_pam_refuses_the_other_rules(argument: str) -> None:
+    pam = [("/etc/pam.d/common-password", f"password requisite pam_pwquality.so {argument}\n")]
+    decision = pwquality.decide(rule(), [], "minlen = 14\n", pam)
+    assert decision["status"] == "overridden"
+    assert str(decision["reason"]).startswith(
+        "enforcing is 0 in /etc/pam.d/common-password: " + argument.strip("[]")
+    )
+
+
+@pytest.mark.parametrize("argument", ["enforcing=1", "enforcing=01", "enforcing=10", "enforcing="])
+def test_an_enforcing_argument_that_is_not_0_leaves_the_other_rules(argument: str) -> None:
+    pam = [("/etc/pam.d/common-password", f"password requisite pam_pwquality.so {argument}\n")]
+    assert pwquality.pam_enforcing_off(pam) == []
+    assert pwquality.decide(rule(), [], "minlen = 14\n", pam)["status"] == "compliant"
+
+
+@pytest.mark.parametrize(
+    ("line", "target"),
+    [
+        ("@include /etc/site/password", "/etc/site/password"),
+        ("@include ../security/password", "../security/password"),
+        ("@include site/password", "site/password"),
+        ("password include ../security/password", "../security/password"),
+        ("password substack ./site/password", "./site/password"),
+        ("auth INCLUDE /etc/site/auth", "/etc/site/auth"),
+    ],
+)
+def test_a_pam_include_of_a_path_with_a_slash_is_refused(line: str, target: str) -> None:
+    pam = [("/etc/pam.d/common-password", line + "\n")]
+    assert pwquality.pam_unread_includes(pam) == [f"/etc/pam.d/common-password includes {target}"]
+    decision = pwquality.decide(rule(), [], "minlen = 14\n", pam)
+    assert decision["status"] == "overridden"
+    assert str(decision["reason"]).startswith(f"/etc/pam.d/common-password includes {target}")
+
+
+@pytest.mark.parametrize(
+    "line",
+    ["@include common-password", "password include system-auth", "# @include ../x", "@include"],
+)
+def test_a_pam_include_of_a_name_in_the_pam_directory_is_read(line: str) -> None:
+    assert pwquality.pam_unread_includes([("/etc/pam.d/sshd", line + "\n")]) == []

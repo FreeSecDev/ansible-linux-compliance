@@ -789,8 +789,11 @@ an earlier drop-in `DSAAuthentication no`, the alias of `PubkeyAuthentication`, 
 drop-in and no ledger entry left. With a later
 drop-in `="Match" User freesecdev-probe` holding `Permit"RootLogin" yes`, `=X11Forwarding yes` and
 `PubkeyAuthentication<CR>no`, `sshd -T -C user=freesecdev-probe,...` shows that sshd reads the three looser values for
-that user, and the three rules are `overridden` with `inside a Match block`. It ends with the
-whole-instance comparison.
+that user, and the three rules are `overridden` with `inside a Match block`. With the drop-in `Include` line of
+`/etc/ssh/sshd_config` naming a second glob, `/etc/ssh/freesecdev-readers.d/*.conf`, whose file holds `Match User
+freesecdev-probe` and `PermitRootLogin yes`, `sshd -T -C` shows `yes` for that user and the three rules are
+`overridden` with `includes /etc/ssh/freesecdev-readers.d/*.conf after the drop-ins` (review of PR #89, round 2,
+N1); the main file and the directory are put back. It ends with the whole-instance comparison.
 
 `pwquality` has a second group, `readers` (FREES-200, `shared/tasks/lifecycle_pwquality_readers_regressions.yml`, both
 platforms): with `minlen` and `enforce_for_root`, a main file with CRLF line ends, a lone CR in a comment and

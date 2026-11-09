@@ -21,7 +21,9 @@ description:
     of OpenSSH 9.6 and 9.9 read it, with C(strdelim) for the keyword. Leading blanks, tabs and CRs
     are dropped, a C(") anywhere in the keyword is removed up to the next C("), one C(=) after
     white space and a C(=) at the start of the line are skipped, the keyword is compared without
-    case, and C(DSAAuthentication) is read as C(PubkeyAuthentication) (FREES-200).
+    ASCII case only, and C(DSAAuthentication) is read as C(PubkeyAuthentication) (FREES-200).
+  - The trailing blanks, tabs, CRs and FFs are dropped as sshd drops them, never the first
+    character, so a line that is only an FF is an error, as sshd refuses it.
   - Returns C(exact=false) when the text holds a NUL byte, which makes sshd join two lines, or a
     byte that is not UTF-8, so that the caller refuses to rewrite it.
 author:

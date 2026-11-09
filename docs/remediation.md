@@ -377,7 +377,9 @@ statuses that refuse to act, with nothing changed and the entry kept:
 | `not_directory` | `pwquality.conf.d` exists but is not a directory, for example a symbolic link; nothing is written through it |
 | `not_regular_file` | The main file or a drop-in is a symbolic link or another non-regular file |
 | `not_owned` | A file at the drop-in's path does not carry the collection's header, with or without a ledger entry |
-| `overridden` (apply) | A file that libpwquality reads later sets another value, or a `pam_pwquality` argument in a PAM file sets the setting to another value (FREES-200); the reason names the file and the line or the argument |
+| `overridden` (apply) | A file that libpwquality reads later sets another value, or a `pam_pwquality` argument in a PAM file sets the setting to another value (FREES-200); the reason names the file and the line or the argument. Also every rule other than `_enforcing` when `enforcing` is 0 in the files or in a `pam_pwquality` argument, in any form that the library reads as 0 (`enforcing=0`, `enforcing=00`, `enforcing=+00`, `enforcing=-0`), because libpwquality then only warns; and every rule when a PAM line includes a path with a `/` (`@include /etc/site/password`, `password include ../security/x`), which Linux-PAM opens outside the PAM files that the collection reads |
+| `modified_since_read` | The main file changed between the read and the write, of an apply or of a cleanup (its SHA-256 is read again right before the write); nothing is written, and the next run reads it again |
+| `write_mismatch` (cleanup) | After the main file was written back, its SHA-256 is not that of the text written; unlike the other reasons, the file was written, and the entry is kept so that the next run checks it again |
 | `unreadable_file` (apply) | libpwquality stops reading at a line before the rule's value (an unknown setting, a value that is not an integer, a NUL, a line of 1023 bytes or more, also in a drop-in read before the main file), a drop-in that it reads is a symbolic link or not a regular file, or the main file is not UTF-8 text or holds a NUL |
 | `unreadable_value` (apply) | The setting's line holds a control character other than a tab or a CR, which the ledger cannot record |
 
@@ -423,7 +425,9 @@ refuses it, every rule to write is `invalid_config` with sshd's message and noth
 a drop-in takes effect (FREES-200, ADR 0023): a drop-in in place is `compliant` only when `sshd -T` prints its value,
 and after writing `sshd -T` runs again; a rule whose value sshd still does not print, because a setting that sshd
 reads first wins (for example the alias `DSAAuthentication` of `PubkeyAuthentication`), is rolled back and reported
-`overridden` with the value that sshd reads. After a change, a
+`overridden` with the value that sshd reads. That rollback writes back the vendor lines of the rule and removes a
+drop-in that the run created; a drop-in that existed before the run and that it rewrote for a changed profile value
+keeps the new value and its ledger entry, which sshd does not use either way, and the reason says so. After a change, a
 second `sshd -T` checks the whole configuration; when it refuses, the run rolls back the drop-ins, vendor lines and
 ledger entries that it created and fails (what a cleanup removed or wrote back stays, because that is the prior state).
 When sshd is not installed, the second check and the reload are skipped, so a cleanup on such a host succeeds.
@@ -448,7 +452,7 @@ The statuses that refuse to act, with nothing changed and the ledger entry kept,
 
 | Status (apply) or reason (cleanup) | When |
 |---|---|
-| `overridden` (apply) | `sshd_config` sets the keyword or includes another file before its drop-in `Include`, or a drop-in that sorts earlier sets it, includes other files or cannot be read, or a later line that the collection does not change sets another value |
+| `overridden` (apply) | `sshd_config` sets the keyword or includes another file before its drop-in `Include`, or a drop-in that sorts earlier sets it, includes other files or cannot be read, or a later line that the collection does not change sets another value. The drop-in `Include` line is read argument by argument, as sshd's `Include` reads them in order: a glob before the drop-in glob counts as an earlier `Include`, and a glob after it as an `Include` after the drop-ins, which the collection does not read |
 | `duplicate_setting` (apply) | A vendor file sets the keyword more than once |
 | `prior_too_large` (apply) | The conflicting vendor line is longer than 1024 characters |
 | `not_included` (apply) | `sshd_config` does not include `/etc/ssh/sshd_config.d/*.conf` before its first `Match` block |
@@ -461,6 +465,8 @@ The statuses that refuse to act, with nothing changed and the ledger entry kept,
 | `invalid_record` (cleanup) | The recorded SHA-256 is missing or malformed, or a recorded vendor line is not a line of the keyword |
 | `target_absent` (cleanup) | A vendor file whose line the collection changed no longer exists |
 | `modified_since_apply` (cleanup) | The drop-in's content is no longer what the collection wrote, or a vendor file no longer sets the keyword on exactly the line written; an administrator's change is never overwritten |
+| `modified_since_read` | A vendor file changed between the read and the write, of an apply or of a cleanup (its SHA-256 is read again right before the write); nothing is written to it, and the next run reads it again |
+| `write_mismatch` (cleanup) | After a vendor file was written back, its SHA-256 is not that of the text written; unlike the other reasons, the drop-in was removed and the vendor file written, and the entry is kept so that the next run checks it again |
 
 A drop-in that no longer exists at cleanup is the recorded prior state: the rule is `restored`, its entry dropped and
 nothing written (FREES-173); so is a vendor line that already equals its recorded original, compared without case

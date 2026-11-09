@@ -6,13 +6,15 @@ OpenSSH 9.6p1 (Ubuntu 24.04) and 9.9p1 (Rocky Linux 9) read a configuration file
 1. ``getline`` reads each line. The blanks, tabs and CRs at its start are dropped, and the line
    ends at its first NUL byte. A NUL also drops the line break, so the rest of the next line is
    joined to it.
-2. The blanks, tabs, CRs, LFs and FFs at the end of the line are dropped.
+2. The blanks, tabs, CRs, LFs and FFs at the end of the line are dropped, but never its first
+   character: a line that is only an FF keeps it, and sshd refuses it as an unknown keyword.
 3. ``strdelim`` of ``misc.c`` takes the keyword. A token ends at white space, a ``"`` or an
    ``=``. A ``"`` anywhere in it is removed and the token runs to the next ``"``; without one the
    line is ignored. After the token, white space and at most one ``=`` are skipped. If the line
    starts with ``=``, the first token is empty and ``strdelim`` runs a second time.
 4. An empty keyword, or one that starts with ``#``, is a comment. A keyword without an argument
-   is an error. Keywords are compared without case, and ``DSAAuthentication`` is another name of
+   is an error. Keywords are compared without ASCII case (``strcasecmp`` in the C locale, so the
+   Kelvin sign U+212A is not a ``k``), and ``DSAAuthentication`` is another name of
    ``PubkeyAuthentication``.
 
 :func:`read_lines` reproduces this for each line of a text, so the ``ssh`` family of the remediate
@@ -38,6 +40,7 @@ NEWLINE: Final[str] = "\n"
 ALIASES: Final[dict[str, str]] = {"dsaauthentication": "pubkeyauthentication"}
 PLAIN_ARGUMENTS: Final[str] = r"([^\s\"'\\#]+(?:[ \t]+[^\s\"'\\#]+)*)(?:[ \t]+#.*)?"
 SURROGATE: Final[str] = r"[\ud800-\udfff]"
+ASCII_LOWER: Final[dict[int, int]] = {code: code + 32 for code in range(ord("A"), ord("Z") + 1)}
 
 
 def _span(text: str, start: int, characters: str) -> int:
@@ -80,7 +83,8 @@ def read_line(line: str) -> dict[str, object]:
     after the keyword, or ``None`` when they hold quotes, backslashes or anything else that the
     collection does not read; ``value`` is the one argument, or ``None``.
     """
-    text = line[_span(line, 0, LEADING) :].rstrip(TRAILING)
+    stripped = line[_span(line, 0, LEADING) :]
+    text = stripped[:1] + stripped[1:].rstrip(TRAILING)
     keyword, position = strdelim(text, 0)
     if keyword == "":
         keyword, position = strdelim(text, position)
@@ -90,7 +94,7 @@ def read_line(line: str) -> dict[str, object]:
     rest = "" if position is None else text[position:]
     if not rest:
         return result | {"error": True}
-    name = keyword.lower()
+    name = keyword.translate(ASCII_LOWER)
     found = re.fullmatch(PLAIN_ARGUMENTS, rest)
     arguments = found.group(1).split() if found is not None else None
     return result | {

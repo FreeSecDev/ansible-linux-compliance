@@ -325,3 +325,16 @@ rewrote a CRLF file or one with a lone CR other than byte for byte.
   that of the text written, or the entry is kept with `write_mismatch`. The recorded `sha256` of the file before the
   rule changed it is compared with the restored text: the message says when the file is byte for byte as recorded,
   and that only the line is back when other lines changed since, for example by rules that are still applied.
+
+**Review of PR #89, round 2.**
+
+- *Every form of `enforcing = 0` in PAM refuses the other rules (N2).* A `pam_pwquality` argument is read as
+  `pwquality_set_option` reads it, with `strtol`, so `enforcing=00`, `enforcing=+00`, `enforcing=-00` and
+  `enforcing=000` are 0 as `enforcing=0` is, and every other rule is `overridden`.
+- *A PAM include of any path with a `/` refuses the rule (N4).* Linux-PAM opens a relative path below `/etc/pam.d`, so
+  `include ../security/x` opens a file outside the PAM files that the collection reads, as an absolute path does;
+  only a bare name in the PAM directory is accepted.
+- *The file name filter of the drop-ins ends with `\Z` (N7)*, so a name that ends in a line break, which libpwquality
+  does not read, is not taken for a `.conf` file.
+- *A cleanup that ends in `write_mismatch` says that the main file was written back (N6)*, instead of saying that
+  nothing was changed.

@@ -196,7 +196,11 @@
            'changed': (__linux_compliance_remediate_pwq_restored is changed)
                       or (__linux_compliance_remediate_pwq_forget is changed),
            'message': __linux_compliance_remediate_rule.rule_id ~ ': ' ~ __linux_compliance_remediate_pwq_cleanup_status
-                      ~ ((' (' ~ __linux_compliance_remediate_pwq_reason ~ ': '
+                      ~ ((' (write_mismatch: ' ~ __linux_compliance_remediate_pwquality_main
+                          ~ ' was written back with the prior line but does not hold what was written, so the'
+                          ~ ' ledger entry is kept and the cleanup is retried on the next run)')
+                         if __linux_compliance_remediate_pwq_reason == 'write_mismatch'
+                         else (' (' ~ __linux_compliance_remediate_pwq_reason ~ ': '
                           ~ __linux_compliance_remediate_pwquality_main
                           ~ '; nothing was changed, the ledger entry is kept and the cleanup is retried on the'
                           ~ ' next run)')

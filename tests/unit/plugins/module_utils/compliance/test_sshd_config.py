@@ -65,6 +65,31 @@ def test_a_keyword_without_argument_is_an_error(line: str) -> None:
     assert sshd_config.read_line(line)["error"] is True
 
 
+@pytest.mark.parametrize("line", ["\f", " \f", "\r\f", "\t\f\f", "\f \t"])
+def test_a_line_of_only_a_form_feed_is_an_error_as_in_sshd(line: str) -> None:
+    read = sshd_config.read_line(line)
+    assert read["keyword"] is None
+    assert read["error"] is True
+
+
+@pytest.mark.parametrize("line", ["#\f", "PermitRootLogin yes\f\f", "Match User x\f"])
+def test_a_form_feed_after_the_first_character_is_dropped(line: str) -> None:
+    assert sshd_config.read_line(line)["error"] is False
+
+
+@pytest.mark.parametrize(
+    ("line", "keyword"),
+    [
+        ("Pub\u212aeyAuthentication no", "pub\u212aeyauthentication"),
+        ("\u212abdInteractiveAuthentication no", "\u212abdinteractiveauthentication"),
+        ("PERMITROOTLOGIN no", "permitrootlogin"),
+        ("Permit\u0130RootLogin no", "permit\u0130rootlogin"),
+    ],
+)
+def test_keywords_are_lowered_in_ascii_only(line: str, keyword: str) -> None:
+    assert sshd_config.read_line(line)["keyword"] == keyword
+
+
 def test_strdelim_without_text_left() -> None:
     assert sshd_config.strdelim("x", None) == (None, None)
     assert sshd_config.strdelim("abc", 0) == ("abc", None)

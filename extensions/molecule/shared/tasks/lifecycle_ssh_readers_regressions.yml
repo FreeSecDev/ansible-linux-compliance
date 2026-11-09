@@ -21,6 +21,10 @@
     readers_vendor_mode: "{{ '0644' if lifecycle_platform == 'ubuntu' else '0600' }}"
     readers_early: /etc/ssh/sshd_config.d/00-aaa-freesecdev-readers.conf
     readers_late: /etc/ssh/sshd_config.d/60-freesecdev-readers.conf
+    readers_main: /etc/ssh/sshd_config
+    readers_dropin_glob: /etc/ssh/sshd_config.d/*.conf
+    readers_site: /etc/ssh/freesecdev-readers.d
+    readers_site_glob: /etc/ssh/freesecdev-readers.d/*.conf
     readers_cr: "\r"
     readers_newline: "\n"
     readers_probe:
@@ -333,6 +337,110 @@
     mode: "{{ readers_vendor_mode }}"
     owner: root
     group: root
+
+- name: SSH reader regressions | Inspect the main file before the Include line names a second glob
+  ansible.builtin.stat:
+    path: "{{ readers_main }}"
+    follow: false
+  register: readers_main_stat
+
+- name: SSH reader regressions | Read the main file before the Include line names a second glob
+  ansible.builtin.slurp:
+    src: "{{ readers_main }}"
+  register: readers_main_built
+
+- name: SSH reader regressions | Compose the main file whose drop-in Include line also names a second glob
+  ansible.builtin.set_fact:
+    readers_main_text: >-
+      {{ (readers_main_built.content | b64decode)
+         | replace(readers_newline ~ 'Include ' ~ readers_dropin_glob ~ readers_newline,
+                   readers_newline ~ 'Include ' ~ readers_dropin_glob ~ ' ' ~ readers_site_glob ~ readers_newline) }}
+
+- name: SSH reader regressions | Refuse to run unless the main file includes the drop-ins on a line of its own
+  ansible.builtin.assert:
+    that:
+      - readers_main_text != (readers_main_built.content | b64decode)
+    fail_msg: "{{ readers_label }}: {{ readers_main }} has no line Include {{ readers_dropin_glob }}."
+    quiet: true
+
+- name: SSH reader regressions | Create the directory that the second glob names
+  ansible.builtin.file:
+    path: "{{ readers_site }}"
+    state: directory
+    mode: "0700"
+    owner: root
+    group: root
+
+- name: SSH reader regressions | Add a file there whose Match block permits root logins
+  ansible.builtin.copy:
+    content: >-
+      {{ 'Match User ' ~ readers_probe.user ~ readers_newline ~ 'PermitRootLogin yes' ~ readers_newline }}
+    dest: "{{ readers_site }}/10-freesecdev-readers.conf"
+    mode: "0600"
+    owner: root
+    group: root
+
+- name: SSH reader regressions | Name the second glob on the Include line of the drop-ins
+  ansible.builtin.copy:
+    content: "{{ readers_main_text }}"
+    dest: "{{ readers_main }}"
+    mode: "{{ readers_main_stat.stat.mode }}"
+    owner: root
+    group: root
+
+- name: SSH reader regressions | Read the values that sshd uses for the user of the Match block of the second glob
+  freesecdev.linux_compliance.sshd_validate:
+    effective: true
+    client: "{{ readers_probe }}"
+  register: readers_include_effective
+
+- name: SSH reader regressions | Switch the rules on with the second glob in place
+  ansible.builtin.set_fact:
+    "{{ item }}": true
+  loop: "{{ readers_toggles }}"
+
+- name: SSH reader regressions | Apply the rules with the second glob in place
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+
+- name: SSH reader regressions | Check that sshd reads the second glob and that every rule was refused
+  ansible.builtin.assert:
+    that:
+      - readers_include_effective.effective.permitrootlogin == 'yes'
+      - lifecycle_results | map(attribute='status') | unique | list == ['overridden']
+      - >-
+        lifecycle_results | map(attribute='reason')
+        | select('search', 'includes ' ~ (readers_site_glob | regex_escape) ~ ' after the drop-ins')
+        | list | length == readers_ids | length
+      - lifecycle_results | selectattr('changed') | list == []
+    fail_msg: "{{ readers_label }}, second glob: {{ readers_include_effective }}; {{ lifecycle_results }}"
+    quiet: true
+
+- name: SSH reader regressions | Switch the rules off after the second glob test
+  ansible.builtin.set_fact:
+    "{{ item }}": false
+  loop: "{{ readers_toggles }}"
+
+- name: SSH reader regressions | Clean up after the second glob test
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+
+- name: SSH reader regressions | Give the main file back its content as built
+  ansible.builtin.copy:
+    content: "{{ readers_main_built.content | b64decode }}"
+    dest: "{{ readers_main }}"
+    mode: "{{ readers_main_stat.stat.mode }}"
+    owner: root
+    group: root
+
+- name: SSH reader regressions | Remove the directory that the second glob names
+  ansible.builtin.file:
+    path: "{{ readers_site }}"
+    state: absent
 
 - name: SSH reader regressions | Give the profile of this platform back
   ansible.builtin.set_fact:

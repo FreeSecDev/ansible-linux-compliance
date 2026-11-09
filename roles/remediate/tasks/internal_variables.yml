@@ -1140,6 +1140,9 @@
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_ssh_unverified$') == [] or
         '__linux_compliance_remediate_ssh_unverified' in (hostvars[inventory_hostname] | list)
       - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_ssh_unwritten$') == [] or
+        '__linux_compliance_remediate_ssh_unwritten' in (hostvars[inventory_hostname] | list)
+      - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_ssh_validation$') == [] or
         '__linux_compliance_remediate_ssh_validation' in (hostvars[inventory_hostname] | list)
       - >-
@@ -1471,6 +1474,7 @@
     __linux_compliance_remediate_ssh_to_write: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_undo_ok: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_undo_stats: __linux_compliance_unset__
+    __linux_compliance_remediate_ssh_unwritten: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_validation: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_values: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_write: __linux_compliance_unset__
@@ -1757,6 +1761,7 @@
       - __linux_compliance_remediate_ssh_to_write == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ssh_undo_ok == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ssh_undo_stats == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_ssh_unwritten == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ssh_validation == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ssh_values == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ssh_write == '__linux_compliance_unset__'
@@ -2475,6 +2480,7 @@
     __linux_compliance_remediate_ssh_to_write: __linux_compliance_unset_again__
     __linux_compliance_remediate_ssh_undo_ok: __linux_compliance_unset_again__
     __linux_compliance_remediate_ssh_undo_stats: __linux_compliance_unset_again__
+    __linux_compliance_remediate_ssh_unwritten: __linux_compliance_unset_again__
     __linux_compliance_remediate_ssh_validation: __linux_compliance_unset_again__
     __linux_compliance_remediate_ssh_values: __linux_compliance_unset_again__
     __linux_compliance_remediate_ssh_write: __linux_compliance_unset_again__
@@ -2761,6 +2767,7 @@
       - __linux_compliance_remediate_ssh_to_write == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ssh_undo_ok == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ssh_undo_stats == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_ssh_unwritten == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ssh_validation == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ssh_values == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ssh_write == '__linux_compliance_unset_again__'
@@ -3255,6 +3262,7 @@
     __linux_compliance_remediate_ssh_to_write: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_undo_ok: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_undo_stats: __linux_compliance_unset__
+    __linux_compliance_remediate_ssh_unwritten: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_validation: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_values: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_write: __linux_compliance_unset__
