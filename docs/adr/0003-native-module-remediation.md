@@ -1,6 +1,6 @@
 # 0003. Native-module remediation keyed by ComplianceAsCode rule identifiers
 
-- **Status:** proposed
+- **Status:** accepted (amended by [ADR 0032](0032-operator-control-community-modules-and-value-overrides.md))
 - **Date:** 2026-10-25
 - **Deciders:** lead architect
 - **Jira:** pending (remediation epic)
@@ -50,3 +50,10 @@ disruptive families require explicit opt-in.
 ## Operational consequences
 
 Remediation coverage is tracked per profile and published in the support matrix and report.
+
+## Amendment 2026-11-09: community modules (ADR 0032, FREES-203)
+
+The module rule is widened by [ADR 0032](0032-operator-control-community-modules-and-value-overrides.md) §1:
+remediation may also use modules of community collections that are pinned to an exact version in `galaxy.yml` and
+the requirements files and are on the reviewed allow list of the `ansible_tasks` repository rule group. The ban on
+`shell`, `command`, `raw` and `script` and on every form of scanner remediation is unchanged.
