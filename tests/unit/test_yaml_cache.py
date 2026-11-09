@@ -25,6 +25,16 @@ def test_every_call_returns_its_own_copy() -> None:
     assert second is not first
 
 
+def test_a_change_to_a_nested_value_does_not_reach_the_next_call(tmp_path: Path) -> None:
+    path = tmp_path / "nested.yml"
+    path.write_text("---\nouter:\n  inner:\n    - 1\n    - 2\n  label: kept\n", encoding="utf-8")
+    first = cast("dict[str, dict[str, object]]", yaml_cache.load(path))
+    cast("list[int]", first["outer"]["inner"]).append(3)
+    first["outer"]["label"] = "changed"
+    second = cast("dict[str, dict[str, object]]", yaml_cache.load(path))
+    assert second == {"outer": {"inner": [1, 2], "label": "kept"}}
+
+
 def test_a_changed_file_is_parsed_again(tmp_path: Path) -> None:
     path = tmp_path / "data.yml"
     path.write_text("---\nvalue: 1\n", encoding="utf-8")
