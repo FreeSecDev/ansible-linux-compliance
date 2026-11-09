@@ -765,3 +765,10 @@ def test_a_missing_fcntl_module_fails_closed_with_a_structured_error(
     with pytest.raises(error) as excinfo:
         namespace["_try_lock"](0)
     assert excinfo.value.reason == "unsupported_platform"
+
+
+def test_filesystem_megabytes_reads_the_size_and_tolerates_a_missing_path(tmp_path: Path) -> None:
+    size = fileio.filesystem_megabytes(str(tmp_path))
+    assert isinstance(size, int)
+    assert size > 0
+    assert fileio.filesystem_megabytes(str(tmp_path / "missing")) is None

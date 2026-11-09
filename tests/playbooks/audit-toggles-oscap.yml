@@ -12,6 +12,10 @@
     audit_toggles_catalogue: >-
       {{ lookup('ansible.builtin.file', playbook_dir ~ '/../../roles/remediate/vars/rules.yml')
          | ansible.builtin.from_yaml }}
+    audit_toggles_auditd_families: >-
+      {{ ['auditd'] + (audit_toggles_catalogue.__linux_compliance_remediate_families
+                       | selectattr('umbrella', 'defined') | selectattr('umbrella', 'equalto', 'auditd')
+                       | map(attribute='name') | list) }}
     audit_toggles_require: "{{ lookup('ansible.builtin.env', 'FREESECDEV_REQUIRE_OSCAP') == '1' }}"
     audit_toggles_manifest: >-
       {{ lookup('ansible.builtin.file', playbook_dir ~ '/../../content/manifest.yml') | ansible.builtin.from_yaml }}
@@ -105,7 +109,12 @@
         - name: Check that every auditd rule of the profile and the crontab rule came back disabled
           vars:
             audit_toggles_auditd: >-
-              {{ audit_toggles_catalogue.__linux_compliance_remediate_audit_only.auditd
+              {{ ((audit_toggles_auditd_families
+                   | map('extract', audit_toggles_catalogue.__linux_compliance_remediate_audit_only)
+                   | map('default', []) | ansible.builtin.flatten)
+                  + (audit_toggles_catalogue.__linux_compliance_remediate_rules
+                     | selectattr('family', 'in', audit_toggles_auditd_families)
+                     | map(attribute='rule_id') | list))
                  | select('in', linux_compliance_discovered.rule_ids) | sort }}
             audit_toggles_auditd_findings: >-
               {{ linux_compliance_audited.scan_run.findings

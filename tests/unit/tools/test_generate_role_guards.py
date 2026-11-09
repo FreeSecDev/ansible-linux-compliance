@@ -20,6 +20,8 @@ NATIVE_FAMILIES = (
     "file_permissions",
     "sysctl",
     "banners",
+    "auditd_rules_time",
+    "auditd_conf",
     "ipv4_parameters",
     "ipv6_parameters",
     "filesystem_modules",

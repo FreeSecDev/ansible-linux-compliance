@@ -52,6 +52,12 @@ FAMILY_PARAMETERS: dict[str, list[set[str]]] = {
         {"method", "path", "type", "attribute", "max_mode"},
         {"method", "path", "type", "attribute", "id"},
     ],
+    "auditd_rules_time": [{"method", "path", "lines"}],
+    "auditd_conf": [
+        {"method", "setting", "compare", "value"},
+        {"method", "setting", "compare", "value", "absent_compliant"},
+        {"method", "setting", "compare"} | PROFILE_VALUE_PARAMETERS,
+    ],
     "filesystem_modules": [KERNEL_MODULE_PARAMETERS],
     "protocol_modules": [KERNEL_MODULE_PARAMETERS],
     "wireless_modules": [KERNEL_MODULE_PARAMETERS],
@@ -70,6 +76,8 @@ NATIVE_FAMILIES = [
     "file_permissions",
     "sysctl",
     "banners",
+    "auditd_rules_time",
+    "auditd_conf",
     "ipv4_parameters",
     "ipv6_parameters",
     *KERNEL_MODULE_FAMILIES,
@@ -79,6 +87,8 @@ NATIVE_FAMILIES = [
     "sudo",
 ]
 DISRUPTIVE_NATIVE_FAMILIES = [
+    "auditd_rules_time",
+    "auditd_conf",
     "ipv4_parameters",
     "ipv6_parameters",
     *KERNEL_MODULE_FAMILIES,
@@ -482,7 +492,11 @@ def test_every_rule_toggle_is_unique_and_a_valid_variable_name() -> None:
 
 def test_a_disabled_topic_excludes_every_catalogued_rule_of_its_family() -> None:
     result = plan(toggles={"linux_compliance_auditd_enabled": False})
-    auditd = {str(rule["rule_id"]) for rule in rules() if rule["family"] == "auditd"}
+    families = {"auditd"} | {
+        str(family["name"]) for family in registry() if family.get("umbrella") == "auditd"
+    }
+    assert {"auditd_conf", "auditd_rules_time"} <= families
+    auditd = {str(rule["rule_id"]) for rule in rules() if rule["family"] in families}
     disabled = cast("list[dict[str, object]]", result["disabled_rules"])
     assert len(auditd) > 100
     assert {str(item["rule_id"]) for item in disabled} == auditd

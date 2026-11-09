@@ -216,11 +216,12 @@ def umbrellas() -> dict[str, str | None]:
 
 
 def test_every_role_task_file_belongs_to_the_native_topic_of_its_name(trees: Trees) -> None:
-    """A task file belongs to the topic of its name and to those of the family files including it.
-
-    ``sysctl_parameters.yml`` is the engine of ``sysctl``, ``ipv4_parameters`` and
-    ``ipv6_parameters`` (FREES-107), whose family files include it.
-    """
+    """A task file belongs to the native family that names it, with the families whose names
+    its name starts with (``auditd_conf.yml`` also to the ``auditd`` umbrella family), and to those
+    of the family files including it; ``sysctl_parameters.yml`` is the engine of ``sysctl``,
+    ``ipv4_parameters`` and ``ipv6_parameters`` (FREES-107), whose family files include it. A
+    helper that no native family names, such as the kernel module or audit rule helpers that
+    several topics share, belongs to the topics of the task files that include it."""
     files = role_task_files()
     assert files
     families = native()
@@ -231,23 +232,19 @@ def test_every_role_task_file_belongs_to_the_native_topic_of_its_name(trees: Tre
         named = {
             family for family in umbrella_of if stem == family or stem.startswith(family + "_")
         }
-        expected = named
-        if not named & set(families):
-            shared += 1
-            including = [
-                family
-                for family in families
-                if umbrella_of[family] is not None and stem.startswith(f"{umbrella_of[family]}_")
-            ]
-            assert len(including) > 1, relative
-            expected = {
-                name
-                for family in including
-                for name in umbrella_of
-                if family == name or family.startswith(name + "_")
-            }
-        else:
+        if named & set(families):
             assert len(named & set(families)) == 1, relative
+            expected = named
+        else:
+            shared += 1
+            includers = [
+                other
+                for other in files
+                if other != relative
+                and Path(relative).name in (REPOSITORY_ROOT / other).read_text(encoding="utf-8")
+            ]
+            assert includers, relative
+            expected = {topic for other in includers for topic in trees.context.classify(other)[0]}
         expected |= {
             Path(other).stem
             for other in files
@@ -255,7 +252,7 @@ def test_every_role_task_file_belongs_to_the_native_topic_of_its_name(trees: Tre
             and f"/tasks/{stem}.yml" in (REPOSITORY_ROOT / other).read_text(encoding="utf-8")
         }
         assert set(trees.context.classify(relative)[0]) == expected, relative
-    assert shared == 3
+    assert shared == 5
 
 
 def test_the_kernel_parameter_engine_belongs_to_the_three_kernel_parameter_topics(

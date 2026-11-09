@@ -1,0 +1,44 @@
+---
+- name: Audit rules | Refuse to put back the previous generated rule file outside a planned topic of audit rules
+  ansible.builtin.assert:
+    that:
+      - linux_compliance_remediate_enabled is boolean
+      - linux_compliance_remediate_enabled
+      - __linux_compliance_remediate_plan is defined
+      - __linux_compliance_remediate_plan is mapping
+      - __linux_compliance_remediate_plan.enabled is true
+      - __linux_compliance_remediate_family is mapping
+      - __linux_compliance_remediate_family.name in __linux_compliance_remediate_audit_rules_families
+      - >-
+        __linux_compliance_remediate_family ==
+        (__linux_compliance_remediate_plan.families
+         | selectattr('name', 'equalto', __linux_compliance_remediate_family.name) | list | first | default({}))
+      - __linux_compliance_remediate_ar_previous is mapping
+      - __linux_compliance_remediate_ar_previous is not skipped
+    fail_msg: >-
+      auditd_rules_previous.yml runs only after a load of a topic of audit rules that the remediate dispatcher
+      planned, with linux_compliance_remediate_enabled true. No change was made to the host.
+    quiet: true
+  tags:
+    - always
+
+- name: Audit rules | Write back the copy of the previous generated rule file with its mode and owner
+  ansible.builtin.copy:
+    content: "{{ __linux_compliance_remediate_ar_previous_text.content | b64decode }}"
+    dest: "{{ __linux_compliance_remediate_audit_rules_previous }}"
+    follow: false
+    force: true
+    mode: "{{ __linux_compliance_remediate_ar_previous.stat.mode }}"
+    owner: "{{ __linux_compliance_remediate_ar_previous.stat.pw_name }}"
+    group: "{{ __linux_compliance_remediate_ar_previous.stat.gr_name }}"
+  when: __linux_compliance_remediate_ar_previous.stat.isreg | default(false)
+  tags:
+    - always
+
+- name: Audit rules | Remove the copy that augenrules made when there was none before the load
+  ansible.builtin.file:
+    path: "{{ __linux_compliance_remediate_audit_rules_previous }}"
+    state: absent
+  when: not (__linux_compliance_remediate_ar_previous.stat.exists | default(false))
+  tags:
+    - always

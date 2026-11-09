@@ -123,7 +123,9 @@ and `prepare` checks every package on the controller before copying it into the 
 
 The packages are those that `openscap-scanner` needs and the image lacks, determined against the image's own package
 list: on Ubuntu seven packages of the `noble` release pocket (`openscap-scanner` 1.3.9+dfsg-1.1ubuntu2, the version
-that `oscap-integration` pins, with its libraries), whose digests come from the signed archive index; on Rocky five
+that `oscap-integration` pins, with its libraries), whose digests come from the signed archive index, and `auditd` with
+`libauparse0t64` 1:3.1.2-2.1ubuntu0.1 of `noble-updates`, the version of the image's own `libaudit1`, for the auditd
+topics (FREES-110; the image ships no audit daemon, and installing it starts `auditd.service`); on Rocky five
 packages of Rocky 9.8 AppStream (`openscap-scanner` and `openscap` 1.3.14-1.el9_8.rocky.0.1, `xmlsec1`,
 `xmlsec1-openssl`, `libxslt`). On Rocky, `prepare` also imports the image's own vendor key
 `/etc/pki/rpm-gpg/RPM-GPG-KEY-Rocky-9` with `ansible.builtin.rpm_key` and the pinned fingerprint, so that `dnf` checks
@@ -446,6 +448,12 @@ running value changed by hand after apply is set again by the next apply while t
 running value changed by hand to a third value makes cleanup `cleanup_incomplete` (`modified_since_apply`), with the
 drop-in and the entry kept, until the value is the one written again. It ends by setting every value it changed back
 to the value as built and with the whole-instance comparison.
+
+`auditd_rules_time` (FREES-110) has a pre-state that requires libvirt as well: there auditd runs, the cycles load the
+rules with `augenrules --load` and the declaration's `audit_rules` items, which name `drivers: [libvirt]`, check with
+`auditctl -l` that every line is loaded after apply and gone after cleanup. `/etc/audit/audit.rules`, which `augenrules`
+rewrites, and `/etc/audit/audit.rules.prev`, which the role puts back after each load, are declared `rewritten` and
+must hold their content as before.
 
 Running every cycle on the virtual machines as well would repeat what the Docker scenarios prove: the mode change, its
 cleanup and the whole-instance comparison do not depend on the kernel, so the extra hour per platform would add no
