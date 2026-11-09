@@ -2643,6 +2643,10 @@
         (lookup('ansible.builtin.file', role_path ~ '/vars/main.yml') |
         ansible.builtin.from_yaml)['__linux_compliance_remediate_sysctl_readers']
       - >-
+        __linux_compliance_remediate_sysctl_refusing_companions is not defined or
+        __linux_compliance_remediate_sysctl_refusing_companions == (lookup('ansible.builtin.file', role_path ~
+        '/vars/main.yml') | ansible.builtin.from_yaml)['__linux_compliance_remediate_sysctl_refusing_companions']
+      - >-
         __linux_compliance_remediate_sysctl_side_effects is not defined or
         __linux_compliance_remediate_sysctl_side_effects == (lookup('ansible.builtin.file', role_path ~
         '/vars/main.yml') | ansible.builtin.from_yaml)['__linux_compliance_remediate_sysctl_side_effects']

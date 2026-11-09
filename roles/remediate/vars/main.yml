@@ -127,6 +127,12 @@ __linux_compliance_remediate_sysctl_propagating:
   net.ipv4.ip_forward: net.ipv4.conf.*.forwarding
   net.ipv4.conf.all.forwarding: net.ipv4.conf.*.forwarding
   net.ipv6.conf.all.forwarding: net.ipv6.conf.*.forwarding
+__linux_compliance_remediate_sysctl_refusing_companions:
+  kernel.perf_event_max_sample_rate:
+    key: kernel.perf_cpu_time_max_percent
+    refused:
+      - 0
+      - 100
 __linux_compliance_remediate_sysctl_side_effects:
   net.ipv4.ip_forward:
     - net.ipv4.conf.all.accept_redirects

@@ -12,6 +12,7 @@ from ansible_collections.freesecdev.linux_compliance.plugins.filter import (
 )
 from ansible_collections.freesecdev.linux_compliance.plugins.filter import restricted_mode
 from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance import (
+    sysctl_config,
     toggles,
 )
 from tools.roles import generate_toggles
@@ -67,6 +68,7 @@ SYSCTL_PARAMETERS: list[set[str]] = [
     {"key", "path", "datatype", "value", "accepted", "empty_value"},
     {"key", "path", "datatype", "value", "accepted", "absent_accepted"},
     {"key", "path", "datatype", "value", "accepted_pattern"},
+    {"key", "path", "datatype", "value", "accepted_vector"},
     {"key", "path", "datatype"} | PROFILE_VALUE_PARAMETERS,
 ]
 for _family in ("sysctl", "ipv4_parameters", "ipv6_parameters"):
@@ -356,7 +358,7 @@ def test_native_kernel_parameter_rules_write_one_drop_in_each_with_a_value_the_c
         assert rule["revert_strategy"] == "recorded_value"
         assert dropin.fullmatch(str(parameters["path"])), rule["rule_id"]
         assert key.fullmatch(str(parameters["key"])), rule["rule_id"]
-        assert parameters["datatype"] in {"int", "string"}
+        assert parameters["datatype"] in {"int", "string", "int_vector"}
         written = (
             [
                 "".join(cast("list[str]", entry["value"]))
@@ -376,6 +378,11 @@ def test_native_kernel_parameter_rules_write_one_drop_in_each_with_a_value_the_c
             assert all(parameters["value"] in values for values in accepted.values())
         if "accepted_pattern" in parameters:
             assert re.search(str(parameters["accepted_pattern"]), str(parameters["value"]))
+        assert ("accepted_vector" in parameters) is (parameters["datatype"] == "int_vector")
+        if "accepted_vector" in parameters:
+            vector = cast("list[int]", parameters["accepted_vector"])
+            assert vector, rule["rule_id"]
+            assert sysctl_config.kernel_vector(str(parameters["value"]), len(vector)) == vector
     paths = [str(cast("dict[str, object]", rule["parameters"])["path"]) for rule in kernel]
     assert len(paths) == len(set(paths))
 

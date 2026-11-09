@@ -83,16 +83,31 @@ UFW_DEFAULT: Final[str] = "/etc/default/ufw"
 UFW_SYSCTL: Final[str] = "/etc/ufw/sysctl.conf"
 UFW_ENABLED: Final[frozenset[str]] = frozenset({"yes", "YES"})
 SHELL_PLAIN: Final[str] = (
-    r"(?:export[ \t]+)?([A-Za-z_][A-Za-z0-9_]*)="
+    r"([A-Za-z_][A-Za-z0-9_]*)="
     r"(?:([A-Za-z0-9_./,:+@%-]*)|'([^']*)'|\"([^\"$`\\]*)\")"
 )
 SHELL_BLANK: Final[str] = " \t"
 UFW_VALUE: Final[str] = r"[A-Za-z0-9_./-]*"
 UFW_VARIABLES: Final[tuple[str, ...]] = ("ENABLED", "IPT_SYSCTL")
+UFW_NAMES: Final[frozenset[str]] = frozenset(
+    {
+        "ENABLED",
+        "LOGLEVEL",
+        "IPV6",
+        "DEFAULT_INPUT_POLICY",
+        "DEFAULT_OUTPUT_POLICY",
+        "DEFAULT_FORWARD_POLICY",
+        "DEFAULT_APPLICATION_POLICY",
+        "MANAGE_BUILTINS",
+        "IPT_SYSCTL",
+        "IPT_MODULES",
+    }
+)
 KINDS: Final[frozenset[str]] = frozenset({"file", "link", "directory", "other"})
 READABLE_KINDS: Final[frozenset[str]] = frozenset({"file", "link"})
 LINK_TARGETS: Final[frozenset[str]] = frozenset({"file", "null"})
-KERNEL_INTEGER: Final[str] = r"-?(?:0|[1-9][0-9]{0,18})"
+KERNEL_INTEGER: Final[str] = r"0|-?[1-9][0-9]{0,18}"
+KERNEL_VECTOR_SEPARATOR: Final[str] = r"[ \t]+"
 
 
 class ConfigError(ValueError):
@@ -159,13 +174,35 @@ def kernel_integer(value: object) -> int | None:
     """Return the integer that the kernel takes from ``value`` for an integer parameter, or None.
 
     The kernel reads an integer with ``proc_get_long``, in base 0: a leading ``0`` is octal and
-    ``0x`` hexadecimal, a leading ``+`` and a value of 21 characters or more are refused. Only
-    the plain decimal form (``^-?(0|[1-9][0-9]{0,18})$``) reads the same in base 10 and base 0, so
-    any other form gives None, which the caller treats as a value that is not accepted.
+    ``0x`` hexadecimal, a leading ``+`` and a value of 21 characters or more are refused, and the
+    unsigned handlers (``proc_douintvec``, ``proc_dou8vec_minmax``) refuse any ``-``. Only the
+    plain decimal form (``^(0|-?[1-9][0-9]{0,18})$``, so not ``-0``) reads the same in base 10
+    and base 0 for every handler, so any other form gives None, which the caller treats as a value
+    that is not accepted.
     """
     if not isinstance(value, str) or re.fullmatch(KERNEL_INTEGER, value) is None:
         return None
     return int(value)
+
+
+def kernel_vector(value: object, count: int) -> list[int] | None:
+    """Return the ``count`` integers that the kernel takes from ``value`` for a vector, or None.
+
+    The kernel reads a vector such as ``net.ipv4.ip_local_port_range`` with ``proc_dointvec``:
+    each field with ``proc_get_long`` in base 0, followed only by a space, a tab or a line feed
+    (``proc_wspace_sep``), so a vertical tab between the fields and ``32768 65535x`` are refused.
+    The model accepts only fields separated by spaces and tabs, exactly ``count`` of them, each in
+    the form of :func:`kernel_integer`; any other value gives None, which the caller treats as a
+    value that is not accepted. The handler's own bounds (1 to 65535 for the port range, the low
+    end not above the high end) hold for every value that equals an accepted vector.
+    """
+    if not isinstance(value, str):
+        return None
+    fields = [kernel_integer(field) for field in re.split(KERNEL_VECTOR_SEPARATOR, value)]
+    if len(fields) != count:
+        return None
+    found = [field for field in fields if field is not None]
+    return found if len(found) == count else None
 
 
 def _bytes(text: str) -> bytes:
@@ -251,10 +288,12 @@ def unsupported(entries: Sequence[Entry]) -> list[str]:
 def _shell_assignments(text: str) -> dict[str, str] | None:
     """Return the variables that a sourced shell file assigns, or None when it does more.
 
-    Only comments, blank lines and plain ``NAME=value`` assignments, optionally exported, whose
-    value is a word without expansions or a quoted string without ``$``, backticks or
-    backslashes, are read; any other line (``;``, ``&&``, a command, ``.`` or ``source``, an
-    expansion, a line continuation) makes the file one that the model does not follow.
+    Only comments, blank lines and plain ``NAME=value`` assignments of a variable that ufw
+    defines (``UFW_NAMES``), whose value is a word without expansions or a quoted string without
+    ``$``, backticks or backslashes, are read; any other line (``;``, ``&&``, a command, ``.`` or
+    ``source``, ``export``, an expansion, a line continuation, a variable such as ``IFS``,
+    ``PATH``, ``ENV``, ``BASH_ENV`` or ``LD_PRELOAD`` that changes how the script runs) makes the
+    file one that the model does not follow.
     """
     values: dict[str, str] = {}
     for raw in text.split("\n"):
@@ -262,27 +301,36 @@ def _shell_assignments(text: str) -> dict[str, str] | None:
         if not line or line.startswith("#"):
             continue
         found = re.fullmatch(SHELL_PLAIN, line)
-        if found is None:
+        if found is None or found.group(1) not in UFW_NAMES:
             return None
         name, word, single, double = found.groups()
         values[name] = word if word is not None else single if single is not None else double
     return values
 
 
+def _ufw_sourced(entry: Entry | None) -> bool:
+    """Return whether ufw's start script sources ``entry``, a non-empty regular file or link."""
+    if entry is None or not entry.text:
+        return False
+    return entry.kind == "file" or (entry.kind == "link" and entry.target == "file")
+
+
 def _ufw_values(by_path: Mapping[str, Entry]) -> tuple[dict[str, str] | None, list[str]]:
-    """Return the variables of ufw's sourced files, in ufw's order, and what is unclear."""
+    """Return the variables of ufw's sourced files, in ufw's order, and what is unclear.
+
+    The caller has made sure that both files exist when ``ufw.conf`` does.
+    """
     if UFW_CONF not in by_path:
         return {}, []
     values: dict[str, str] = {}
     for path in (UFW_DEFAULT, UFW_CONF):
-        if path not in by_path:
-            continue
         found = _shell_assignments(by_path[path].text or "")
         if found is None:
             return None, [
                 (
-                    f"{path}: a line other than a comment or a plain NAME=value assignment, which"
-                    " ufw's start script runs and the collection cannot follow"
+                    f"{path}: a line other than a comment or a plain NAME=value assignment of a"
+                    " variable that ufw defines, which ufw's start script runs and the collection"
+                    " cannot follow"
                 )
             ]
         values.update(found)
@@ -300,14 +348,18 @@ def ufw_files(entries: Sequence[Entry]) -> tuple[list[str], list[str]]:
     """Return the file that ufw applies with ``sysctl -p`` when it starts, and what is unclear.
 
     ufw sources ``/etc/default/ufw`` and then ``/etc/ufw/ufw.conf``, so a variable of either counts
-    and the later assignment wins. Both files must hold only comments, blank lines and plain
-    assignments, and ``ENABLED`` and ``IPT_SYSCTL`` only letters, digits and ``_./-``; anything
-    else is refused as unclear. ufw applies ``IPT_SYSCTL`` only when ``ENABLED`` is ``yes`` or
-    ``YES``; another spelling of yes is refused as unclear. Without ``ufw.conf`` ufw is not
-    installed; without ``/etc/default/ufw`` its start script may stop before it applies anything,
-    which is refused as unclear when ``ufw.conf`` alone would apply the file.
+    and the later assignment wins. Its start script stops before it applies anything unless both
+    are non-empty regular files (``[ -s ... ] || exit 1``), so then the file counts for no reader.
+    Both files must hold only comments, blank lines and plain assignments of ufw's own variables,
+    and ``ENABLED`` and ``IPT_SYSCTL`` only letters, digits and ``_./-``; anything else is refused
+    as unclear. ufw applies ``IPT_SYSCTL`` only when ``ENABLED`` is ``yes`` or ``YES``; another
+    spelling of yes is refused as unclear. Without ``ufw.conf`` ufw is not installed.
     """
     by_path = {entry.path: entry for entry in entries}
+    if UFW_CONF in by_path and not all(
+        _ufw_sourced(by_path.get(path)) for path in (UFW_DEFAULT, UFW_CONF)
+    ):
+        return [], []
     values, unclear = _ufw_values(by_path)
     if values is None:
         return [], unclear
@@ -322,8 +374,6 @@ def ufw_files(entries: Sequence[Entry]) -> tuple[list[str], list[str]]:
         )
     if target != UFW_SYSCTL:
         return [], [f"{UFW_DEFAULT}: ufw applies IPT_SYSCTL, which the collection cannot follow"]
-    if UFW_DEFAULT not in by_path:
-        return [], [f"{UFW_DEFAULT}: missing, so ufw may not start; the collection cannot follow"]
     return [UFW_SYSCTL], []
 
 

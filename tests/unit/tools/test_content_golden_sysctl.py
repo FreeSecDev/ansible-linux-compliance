@@ -327,9 +327,18 @@ def check_package(
 
 
 def check_accepted(states: States, parameters: dict[str, object], benchmark: str) -> None:
-    assert {datatype for datatype, _, _, _ in states} == {parameters["datatype"]}
+    datatype_of_content = parameters["datatype"]
+    if datatype_of_content == "int_vector":
+        datatype_of_content = "string"
+    assert {datatype for datatype, _, _, _ in states} == {datatype_of_content}
     variables = {variable for _, _, variable, _ in states}
-    if "value_id" in parameters:
+    if "accepted_vector" in parameters:
+        assert [o for _, o, _, _ in states] == ["pattern match"]
+        vector = cast("list[int]", parameters["accepted_vector"])
+        for separator in (" ", "\t", "  "):
+            written = separator.join(str(field) for field in vector)
+            assert accepts(states, written, written), (parameters["key"], written)
+    elif "value_id" in parameters:
         assert variables == {f"oval:ssg-{parameters['value_id']}:var:1"}, variables
     elif "accepted_pattern" in parameters:
         assert [(o, t) for _, o, _, t in states] == [

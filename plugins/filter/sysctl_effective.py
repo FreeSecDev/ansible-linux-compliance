@@ -38,8 +38,9 @@ options:
         C(file) for a regular file, C(null) for C(/dev/null), anything else otherwise.
       - ufw's C(/etc/ufw/sysctl.conf) counts, after every other file, only when C(ENABLED) is
         C(yes) or C(YES) and C(IPT_SYSCTL) names that file, each read from C(/etc/default/ufw)
-        and then C(ufw.conf), as ufw sources them; a line of either file other than a comment or
-        a plain assignment is refused.
+        and then C(ufw.conf), as ufw sources them; ufw applies nothing unless both are non-empty
+        regular files, and a line of either other than a comment or a plain assignment of one of
+        ufw's own variables is refused.
     type: list
     elements: dict
     required: true

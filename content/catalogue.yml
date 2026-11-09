@@ -1681,9 +1681,11 @@ native_rules:
     parameters:
       key: net.ipv4.ip_local_port_range
       path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-ip-local-port-range.conf
-      datatype: string
+      datatype: int_vector
       value: "32768 65535"
-      accepted_pattern: '32768\s*65535'
+      accepted_vector:
+        - 32768
+        - 65535
   - rule_id: xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_tcp_rfc1337
     revert_strategy: recorded_value
     runbook: null

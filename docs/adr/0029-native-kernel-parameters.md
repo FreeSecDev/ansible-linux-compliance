@@ -71,7 +71,11 @@ names. A content update that moves a check fails CI until the catalogue follows.
 
 Values come from the profile (`profile_value`, ADR 0021) for the 38 rules whose checks export a value, and from the
 check itself for the others, as fixed parameters (`value`, `accepted` per benchmark, `accepted_pattern`,
-`empty_value`, `absent_accepted`) that the golden test compares with the OVAL states. Where a check accepts several
+`accepted_vector`, `empty_value`, `absent_accepted`) that the golden test compares with the OVAL states.
+`net.ipv4.ip_local_port_range` has the datatype `int_vector` and `accepted_vector: [32768, 65535]` instead of the
+check's pattern `32768\s*65535`: the golden test requires that pattern to accept the vector written with a space, a
+tab or two spaces, and the role accepts a value only when the filter `freesecdev.linux_compliance.sysctl_vector`
+reads exactly those two integers from it (section 2b). Where a check accepts several
 values, the catalogue writes the one that changes least and stays reversible: `kernel.kptr_restrict` 1,
 `kernel.yama.ptrace_scope` 1, `kernel.unprivileged_bpf_disabled` 2 for the `accept_default` rule (1 could not be
 reverted, section 7). No value is taken from the content's fixes (`profile_value_source: fix` is not used). A rule
@@ -113,8 +117,15 @@ accepted only in the plain decimal form `^-?(0|[1-9][0-9]{0,18})$` and only when
 so `vm.mmap_min_addr = 065536` sets 0o65536 (27486) and `0x10` is 16, and it refuses a leading `+` and a value of 21
 characters or more, so `kernel.dmesg_restrict = +1` leaves the kernel default. Any other form of a value in a file,
 read by a reader or running, counts as not accepted, so the rule is `overridden` or written, never `compliant` or
-`applied` on its strength; the values that the collection writes must be in that form as well. The model follows
-what the readers do:
+`applied` on its strength; the values that the collection writes must be in that form as well. The plain form
+excludes `-0`, which the kernel's unsigned handlers refuse. An integer vector such as `net.ipv4.ip_local_port_range`,
+which the kernel reads with `proc_dointvec_minmax` field by field (each followed only by a space, a tab or a line
+feed, each 1 to 65535, the low end not above the high end), is accepted only as exactly its fields, separated by
+spaces and tabs, each in that plain form and together the accepted vector: `032768 65535`, `132768 65535`,
+`32768 655350`, `3276865535`, `-32768 65535`, `+32768 65535`, `32768<VT>65535`, `32768 65535x` and `65535 32768`
+are not accepted, which the check's unanchored pattern `32768\s*65535` would accept. The same holds for the values
+in the files that the check reads, for what each reader sets and for the running value. The model follows what the
+readers do:
 
 - Files: the directories `/etc/sysctl.d`, `/run/sysctl.d`, `/usr/local/lib/sysctl.d`, `/usr/lib/sysctl.d`,
   `/lib/sysctl.d`, the first winning for a file name, every `*.conf` name sorted bytewise; an entry that is a
@@ -176,15 +187,20 @@ what the readers do:
   `ENABLED` and `IPT_SYSCTL` and the later assignment wins; it applies the file named by `IPT_SYSCTL` with
   `sysctl -p` when it starts, and only when `ENABLED` is `yes` or `YES`; ufw ships disabled. Only then is
   `/etc/ufw/sysctl.conf` read last, with the rules of procps, for both readers; with ufw disabled, without
-  `ufw.conf` or with an empty `IPT_SYSCTL` it counts for neither. ufw's start script runs both files as shell, so the
-  model reads them only when every line is a comment, a blank line or a plain assignment `NAME=value`, optionally
-  exported, whose value is a word without expansions (letters, digits and `_./,:+@%-`) or a quoted string without
-  `$`, backticks or backslashes; any other line (`ENABLED=yes;`, `$VAR`, `${E:-yes}`, a command substitution, a
-  backslash, a line continuation, `.` or `source`, `eval`, `&&`, a trailing comment) is refused as
+  `ufw.conf` or with an empty `IPT_SYSCTL` it counts for neither. ufw's start script stops before it applies anything
+  unless both files are non-empty (`[ -s "$s" ] || exit 1`), so the file counts for neither reader unless both are
+  non-empty regular files or links to them; a missing `/etc/default/ufw`, an empty file, a directory, a FIFO or a
+  broken link all mean that ufw applies nothing. ufw's start script runs both files as shell, so the model reads them
+  only when every line is a comment, a blank line or a plain assignment `NAME=value` of a variable that ufw defines
+  (`ENABLED`, `LOGLEVEL`, `IPV6`, `DEFAULT_INPUT_POLICY`, `DEFAULT_OUTPUT_POLICY`, `DEFAULT_FORWARD_POLICY`,
+  `DEFAULT_APPLICATION_POLICY`, `MANAGE_BUILTINS`, `IPT_SYSCTL`, `IPT_MODULES`, the variables of the stock files of
+  Ubuntu and EPEL), whose value is a word without expansions (letters, digits and `_./,:+@%-`) or a quoted string
+  without `$`, backticks or backslashes; any other line (`ENABLED=yes;`, `$VAR`, `${E:-yes}`, a command
+  substitution, a backslash, a line continuation, `.` or `source`, `eval`, `export`, `&&`, a trailing comment, or a
+  variable such as `IFS`, `PATH`, `ENV`, `BASH_ENV` or `LD_PRELOAD` that changes how the script runs) is refused as
   `unparsed_configuration`, and so is an `ENABLED` or `IPT_SYSCTL` value with a character other than letters,
   digits and `_./-`, another spelling of yes such as `Yes`, and an `IPT_SYSCTL` that names another file: the model
-  does not follow what ufw would apply then; so is `ufw.conf` alone enabling the file while `/etc/default/ufw` is
-  missing, where ufw's start script may stop first. The refusals of the line list above apply to ufw's file too.
+  does not follow what ufw would apply then. The refusals of the line list above apply to ufw's file too.
 
 The model is not trusted on its own. `make sysctl-reader-verdicts` (`tools/molecule/sysctl-reader-verdicts.sh`) runs
 the real readers of the Molecule images on the cases of `tests/fixtures/sysctl_reader/cases.json` (72, among them
@@ -242,6 +258,21 @@ files that ufw reads as enabled while the model read them as disabled; both file
 assignments. An unclosed `[` in a glob, a FIFO, socket or device in the configuration directories, and a link to
 anything but a regular file or `/dev/null` are refused. These rules are proven by unit tests; like those of the
 third review, their cases wait for the verdict table to be regenerated with Docker.
+
+**Amendment (fifth review).** The fifth review found that `net.ipv4.ip_local_port_range`, an integer vector, was
+accepted by the check's unanchored pattern, so values that the kernel refuses (it keeps `32768 60999`) could make the
+rule `compliant`; the rule now has the datatype `int_vector`, and every comparison reads the vector as the kernel
+does (section 2b). No other kernel parameter rule has a string datatype with a numeric meaning (`kernel.core_pattern`
+is a string). The plain integer form no longer admits `-0`. ufw's files must be non-empty regular files, or ufw
+applies nothing, and only ufw's own variable names are read. Finally, the kernel refuses
+`kernel.perf_event_max_sample_rate` while `kernel.perf_cpu_time_max_percent` is 0 or 100
+(`perf_proc_update_handler` returns `EINVAL`), so at boot the drop-in of `sysctl_kernel_perf_event_max_sample_rate`
+would not take effect after a file that sets the companion to 0 or 100. When the companion's rule is not applied in
+the same run, the family reads what each reader sets for the companion: a value of 0 or 100, or one that the
+collection does not read as the kernel does, makes the rule `overridden` with that reader and file named, and such a
+value before the run keeps the rule from being `compliant` without a write
+(`__linux_compliance_remediate_sysctl_refusing_companions`). When the companion's rule is applied too, its drop-in sets
+1, which sorts before the sample rate's drop-in.
 
 ### 2a. A conflicting line in a vendor file is set to the compliant value
 

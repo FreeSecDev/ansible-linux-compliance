@@ -20,10 +20,11 @@ author:
   - FreeSecDev contributors (@FreeSecDev)
 description:
   - Returns the integer of a value only when it is in the plain decimal form
-    C(^-?(0|[1-9][0-9]{0,18})$), and null for every other value.
+    C(^(0|-?[1-9][0-9]{0,18})$), and null for every other value, C(-0) included.
   - The kernel reads an integer parameter in base 0 (C(proc_get_long)), so C(065536) is octal and
-    C(0x10) hexadecimal, and it refuses a leading C(+) and a value of 21 characters or more; only
-    the plain decimal form means the same to the kernel and to a reader in base 10. The remediate
+    C(0x10) hexadecimal, and it refuses a leading C(+) and a value of 21 characters or more, and
+    its unsigned handlers refuse any C(-); only the plain decimal form means the same to every
+    handler of the kernel and to a reader in base 10. The remediate
     role counts a value of an integer kernel parameter as accepted only when this filter returns
     an accepted integer for it (ADR 0029).
 options:

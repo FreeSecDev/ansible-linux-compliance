@@ -51,13 +51,14 @@
             | map(attribute='value') | map('join', '') | list -%}
       {%- set value = found | first | default(none) -%}
       {%- set _ = values.update({rule.rule_id: {'value': value, 'accepted': [value] if value is string else none,
-                                                'pattern': none}}) -%}
+                                                'pattern': none, 'vector': none}}) -%}
       {%- else -%}
       {%- set _ = values.update({rule.rule_id: {
             'value': rule.parameters.value | default(none),
             'accepted': (rule.parameters.accepted | default({}))[__linux_compliance_remediate_sc_benchmark]
                         | default(none) if rule.parameters.accepted_pattern is not defined else none,
-            'pattern': rule.parameters.accepted_pattern | default(none)}}) -%}
+            'pattern': rule.parameters.accepted_pattern | default(none),
+            'vector': rule.parameters.accepted_vector | default(none)}}) -%}
       {%- endif -%}
       {%- endfor -%}
       {{ values }}
@@ -68,7 +69,7 @@
   vars:
     __linux_compliance_remediate_sc_wanted: >-
       {{ __linux_compliance_remediate_sc_values[__linux_compliance_remediate_sc_rule.rule_id]
-         | default({'value': '', 'accepted': [''], 'pattern': none}) }}
+         | default({'value': '', 'accepted': [''], 'pattern': none, 'vector': none}) }}
     __linux_compliance_remediate_sc_applies: >-
       {{ __linux_compliance_remediate_sc_rule.rule_id in __linux_compliance_remediate_sc_values }}
   ansible.builtin.assert:
@@ -79,7 +80,7 @@
       - >-
         __linux_compliance_remediate_sc_rule.parameters.path | default('')
         is match(__linux_compliance_remediate_sysctl_dropin_pattern)
-      - __linux_compliance_remediate_sc_rule.parameters.datatype | default('') in ['int', 'string']
+      - __linux_compliance_remediate_sc_rule.parameters.datatype | default('') in ['int', 'string', 'int_vector']
       - >-
         __linux_compliance_remediate_sc_rules | map(attribute='parameters.path')
         | select('equalto', __linux_compliance_remediate_sc_rule.parameters.path) | list | length == 1
@@ -92,6 +93,12 @@
                  or __linux_compliance_remediate_sc_rule.parameters.empty_value | default(false)))
       - >-
         not __linux_compliance_remediate_sc_applies
+        or (__linux_compliance_remediate_sc_rule.parameters.datatype | default('') == 'int_vector'
+            and __linux_compliance_remediate_sc_wanted.vector is sequence
+            and __linux_compliance_remediate_sc_wanted.vector | length > 0
+            and (__linux_compliance_remediate_sc_wanted.value
+                 | freesecdev.linux_compliance.sysctl_vector(__linux_compliance_remediate_sc_wanted.vector | length))
+                == __linux_compliance_remediate_sc_wanted.vector)
         or (__linux_compliance_remediate_sc_wanted.pattern is string
             and __linux_compliance_remediate_sc_wanted.value is search(__linux_compliance_remediate_sc_wanted.pattern))
         or (__linux_compliance_remediate_sc_wanted.accepted is sequence
@@ -105,7 +112,8 @@
         or (__linux_compliance_remediate_sc_wanted.value | freesecdev.linux_compliance.sysctl_integer) is not none
     fail_msg: >-
       {{ __linux_compliance_remediate_sc_rule.rule_id }} needs a kernel parameter key, a drop-in named
-      /etc/sysctl.d/999-freesecdev-*.conf of its own, the datatype int or string and, to be applied, the value
+      /etc/sysctl.d/999-freesecdev-*.conf of its own, the datatype int, int_vector or string and, to be applied,
+      the value
       {{ __linux_compliance_remediate_sc_rule.parameters.value_id | default('of the catalogue') }} for the profile
       {{ linux_compliance_remediate_profile }} in the content
       {{ linux_compliance_discovered.content_sha256 | default('') }}
@@ -647,6 +655,7 @@
       {%- set wanted = __linux_compliance_remediate_sc_values[rule.rule_id] -%}
       {%- set value = wanted.value -%}
       {%- set integer = rule.parameters.datatype == 'int' -%}
+      {%- set vector = wanted.vector if rule.parameters.datatype == 'int_vector' else none -%}
       {%- set accepted_ints = (wanted.accepted | default([], true) | map('freesecdev.linux_compliance.sysctl_integer')
             | reject('none') | list) if integer else [] -%}
       {%- set pattern = (__linux_compliance_remediate_sysctl_empty_line_pattern if rule.parameters.empty_value
@@ -663,7 +672,9 @@
       {%- set found = texts[other] | regex_findall(pattern, multiline=true) -%}
       {%- set bad = [] -%}
       {%- for candidate in found -%}
-      {%- set good = ((candidate | freesecdev.linux_compliance.sysctl_integer) in accepted_ints) if integer
+      {%- set good = ((candidate | freesecdev.linux_compliance.sysctl_vector(vector | length)) == vector)
+            if vector is not none
+            else ((candidate | freesecdev.linux_compliance.sysctl_integer) in accepted_ints) if integer
             else (candidate is search(wanted.pattern)) if wanted.pattern is string
             else candidate in wanted.accepted -%}
       {%- set ns.user = ns.user + [good] -%}
@@ -688,7 +699,9 @@
       {%- endfor -%}
       {%- for other in package_files if other in texts -%}
       {%- for candidate in texts[other] | regex_findall(pattern, multiline=true) -%}
-      {%- set good = ((candidate | freesecdev.linux_compliance.sysctl_integer) in accepted_ints) if integer
+      {%- set good = ((candidate | freesecdev.linux_compliance.sysctl_vector(vector | length)) == vector)
+            if vector is not none
+            else ((candidate | freesecdev.linux_compliance.sysctl_integer) in accepted_ints) if integer
             else (candidate is search(wanted.pattern)) if wanted.pattern is string
             else candidate in wanted.accepted -%}
       {%- set ns.package = ns.package + [good] -%}
@@ -710,10 +723,32 @@
       {%- set _ = planned_entries.append({'path': path, 'kind': 'file', 'text': content}) -%}
       {%- set planned_readers = planned_entries | freesecdev.linux_compliance.sysctl_effective(key) -%}
       {%- set current_readers = boot_entries | freesecdev.linux_compliance.sysctl_effective(key) -%}
+      {%- set blocker = __linux_compliance_remediate_sysctl_refusing_companions[key] | default(none) -%}
+      {%- if blocker is not none and __linux_compliance_remediate_family.apply
+            | selectattr('parameters.key', 'equalto', blocker.key) | list | length == 0 -%}
+      {%- for entries_of, planned in [[planned_entries, true], [boot_entries, false]] -%}
+      {%- set companion = entries_of | freesecdev.linux_compliance.sysctl_effective(blocker.key) -%}
+      {%- for reader in ['systemd', 'procps'] -%}
+      {%- set setting = companion[reader] -%}
+      {%- if setting.value is not none
+            and (setting.value | freesecdev.linux_compliance.sysctl_integer) not in [none] + blocker.refused -%}
+      {%- elif setting.value is not none and planned -%}
+      {%- set ns.later = ns.later + [__linux_compliance_remediate_sysctl_readers[reader] ~ ' would set ' ~ blocker.key
+            ~ ' to ' ~ setting.value ~ ' from ' ~ setting.source ~ ', and the kernel refuses ' ~ key ~ ' while '
+            ~ blocker.key ~ ' is ' ~ blocker.refused | join(' or ')
+            ~ ' (a value that the collection does not read as the kernel does counts as one of them)'] -%}
+      {%- elif setting.value is not none -%}
+      {%- set ns.now_ok = false -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {%- endfor -%}
+      {%- endif -%}
       {%- for reader in ['systemd', 'procps'] -%}
       {%- for setting, planned in [[planned_readers[reader], true], [current_readers[reader], false]] -%}
       {%- set candidate = setting.value -%}
       {%- set good = (rule.parameters.absent_accepted | default(false)) if candidate is none
+            else ((candidate | freesecdev.linux_compliance.sysctl_vector(vector | length)) == vector)
+            if vector is not none
             else ((candidate | freesecdev.linux_compliance.sysctl_integer) in accepted_ints) if integer
             else (candidate is search(wanted.pattern)) if wanted.pattern is string
             else candidate in wanted.accepted -%}
@@ -733,7 +768,9 @@
       {%- set current_normal = (current.split() | join(' ')) if current is string else none -%}
       {%- set runtime_ok = not __linux_compliance_remediate_sc_runtime
             or (current_normal is string
-                and (((current_normal | freesecdev.linux_compliance.sysctl_integer) in accepted_ints)
+                and (((current | freesecdev.linux_compliance.sysctl_vector(vector | length)) == vector)
+                     if vector is not none
+                     else ((current_normal | freesecdev.linux_compliance.sysctl_integer) in accepted_ints)
                      if integer else (current_normal is search(wanted.pattern)) if wanted.pattern is string
                      else current_normal in (wanted.accepted | map('split') | map('join', ' ') | list))) -%}
       {%- set exact = entry is not none and entry.isreg and entry.checksum == sha -%}
