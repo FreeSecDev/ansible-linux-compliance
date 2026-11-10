@@ -909,8 +909,8 @@ class TestRunLimits:
     """Output caps and timeouts."""
 
     def test_caps_unbounded_output_and_times_out(self) -> None:
-        spec = process.CommandSpec("yes", (), 0.5, max_output_bytes=1000)
-        result = execute(spec)
+        script = "head -c 5000 /dev/zero; exec cat /dev/zero"
+        result = execute(shell(script, timeout=3.0, max_output_bytes=1000))
         assert result.timed_out
         assert result.returncode == -9
         assert len(result.stdout) == 1000
@@ -1307,6 +1307,45 @@ class TestImportTimePolicy:
         policies["sh"] = SHELL
         with pytest.raises(process.ProcessPolicyError, match="not allow-listed"):
             run(process.CommandSpec("sh", ("-c", "echo hi"), FAST))
+
+    def test_the_bound_policy_keeps_every_field(self) -> None:
+        full = process.ExecutablePolicy(
+            "tool",
+            allowed_options=frozenset({"-x"}),
+            command_prefixes=(("run",),),
+            standalone_commands=(("--version",),),
+            fixed_path="/opt/tool/bin/tool",
+            argument_forms=(("--check",),),
+            environment=(("TZ", "UTC"),),
+            option_values=(("-o", "[a-z]+"),),
+            option_prefixes=(("-o", ("run",)),),
+            term_grace_seconds=FAST,
+        )
+        bare = process.ExecutablePolicy("tool")
+        fields = [field.name for field in dataclasses.fields(process.ExecutablePolicy)]
+        assert [name for name in fields[1:] if getattr(full, name) == getattr(bare, name)] == []
+        none = frozenset[str]()
+        check = process.bind_policy(
+            {"tool": full}, ("/bin",), none, none, frozenset[tuple[str, ...]]()
+        )[0]
+        bound = check(process.CommandSpec("tool", ("--version",), FAST))
+        assert bound is not full
+        assert bound == full
+
+    def test_the_bound_augenrules_policy_keeps_its_grace(self) -> None:
+        bound = process.check_policy(process.CommandSpec("augenrules", ("--check",), FAST))
+        assert bound.term_grace_seconds == process.AUGENRULES_TERM_GRACE_SECONDS
+        assert bound.term_grace_seconds > 0
+
+    def test_a_bound_grace_lets_a_trap_clean_up_before_the_kill(self, tmp_path: Path) -> None:
+        marker = tmp_path / "cleaned"
+        graceful = {"sh": dataclasses.replace(SHELL, term_grace_seconds=FAST)}
+        none = frozenset[str]()
+        run = process.bind_policy(graceful, ("/bin",), none, none, frozenset[tuple[str, ...]]())[1]
+        script = "trap 'echo done > \"$1\"; exit 1' TERM; while :; do sleep 0.05; done"
+        result = run(shell(script, str(marker), timeout=0.5))
+        assert result.timed_out
+        assert marker.read_text(encoding="utf-8") == "done\n"
 
     def test_the_bound_policy_values_are_deep_copies(self) -> None:
         mutable = {"-x"}
