@@ -279,3 +279,33 @@ lookup as a service name. The families keep reading the three directories on bot
 file only adds a service file that the filter checks, so it can add a refusal (`overridden` or `unreadable_stack`)
 but never hide an argument. The `pwquality` family reads the same three directories since FREES-211
 ([ADR 0021](0021-native-banners-pwquality-and-profile-values.md), amendment of 2026-11-10).
+
+## Amendment of 2026-11-10: PAM service files that are symbolic links (FREES-213)
+
+**Context.** The decision says that the role reads every file of the three PAM directories. It listed them with
+`ansible.builtin.find` and `file_type: file`, which calls `os.lstat` on each entry and keeps only regular files,
+whatever `follow` says. A service file that is a symbolic link, such as `/etc/pam.d/system-auth` and
+`password-auth` that authselect links into `/etc/authselect` on RHEL 9, was not read, so a `pam_faillock` or
+`pam_pwhistory` line with `deny=`, `remember=` or `conf=` there was missed and the rule could be `compliant` or
+`applied` while the module took its argument. The directories were already inspected with `follow: true`, so a
+directory that is a link was read; only linked files were missed.
+
+**Decision.**
+
+- `pam_conf_prepare.yml` lists every entry with `file_type: any` and `follow: false`, inspects every link with
+  `ansible.builtin.stat` and `follow: true`, and sorts the entries with the filter `pam_service_files`, as the
+  `pwquality` family does ([ADR 0021](0021-native-banners-pwquality-and-profile-values.md), amendment of the same
+  day). A regular file, or a link that resolves to one, is read through the link (`no_log`, as before) under its
+  name in the PAM directory, so the order of the directories, the includes of a bare name and the reasons work on the
+  name that libpam opens. A directory, or a link to one, is left out: libpam opens it with `fopen`, `getline` fails
+  with `EISDIR`, and `_pam_assemble_line` takes that for the end of the file, so it reads no line from it.
+- A link to nothing, a link to anything else (a FIFO, a device, a socket), an entry that is none of a regular file, a
+  directory and a link, and an entry that `find` could not inspect are passed to `pam_conf_decision` as its fourth
+  argument and refuse every rule of the family as `unreadable_stack`, the status that a service file the collection
+  cannot read as libpam does already gives, with the entry and what it is in the reason. Nothing is read through
+  them, so a link to `/dev/zero` or to a FIFO is never opened; no size limit applied to service files before and
+  none applies now. A link loop makes the stat fail, which stops the run.
+- The faillock regression group `stack` adds two cases on both platforms: `deny=3` in a service file that is a link
+  to a file in `/etc/security` (`deny` `overridden`, the reason naming the link, `unlock_time` applied and restored),
+  and a service file that is a link to nothing (both rules `unreadable_stack`, the reason naming the link). The
+  pwhistory family shares the task file and the filter, and its decision is unit-tested with the same input.

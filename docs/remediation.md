@@ -384,7 +384,7 @@ statuses that refuse to act, with nothing changed and the entry kept:
 | `not_directory` | `pwquality.conf.d` exists but is not a directory, for example a symbolic link; nothing is written through it |
 | `not_regular_file` | The main file or a drop-in is a symbolic link or another non-regular file |
 | `not_owned` | A file at the drop-in's path does not carry the collection's header, with or without a ledger entry |
-| `overridden` (apply) | A file that libpwquality reads later sets another value, or a `pam_pwquality` argument in any file of `/etc/pam.d`, `/usr/lib/pam.d` or the vendor directory `/usr/share/pam.d` sets the setting to another value (FREES-200, FREES-211); the reason names the file and the line or the argument. Also every rule other than `_enforcing` when `enforcing` is 0 in the files or in a `pam_pwquality` argument, in any form that the library reads as 0 (`enforcing=0`, `enforcing=00`, `enforcing=+00`, `enforcing=-0`), because libpwquality then only warns; and every rule when a PAM line includes a path with a `/` (`@include /etc/site/password`, `password include ../security/x`), which Linux-PAM opens outside the PAM files that the collection reads (a relative target is looked up in each PAM directory in turn, as a service name is) |
+| `overridden` (apply) | A file that libpwquality reads later sets another value, or a `pam_pwquality` argument in any file of `/etc/pam.d`, `/usr/lib/pam.d` or the vendor directory `/usr/share/pam.d` sets the setting to another value (FREES-200, FREES-211); the reason names the file and the line or the argument. Also every rule other than `_enforcing` when `enforcing` is 0 in the files or in a `pam_pwquality` argument, in any form that the library reads as 0 (`enforcing=0`, `enforcing=00`, `enforcing=+00`, `enforcing=-0`), because libpwquality then only warns; every rule when a PAM line includes a path with a `/` (`@include /etc/site/password`, `password include ../security/x`), which Linux-PAM opens outside the PAM files that the collection reads (a relative target is looked up in each PAM directory in turn, as a service name is); and every rule when an entry of a PAM directory is a symbolic link to nothing, a link to something that is neither a regular file nor a directory (a FIFO, a device), or neither a regular file, a directory nor a link, which libpam may open but the collection does not read (FREES-213); the reason names the entry |
 | `modified_since_read` | The main file changed between the read and the write, of an apply or of a cleanup (its SHA-256 is read again right before the write); nothing is written, and the next run reads it again |
 | `write_mismatch` (cleanup) | After the main file was written back, its SHA-256 is not that of the text written; unlike the other reasons, the file was written, and the entry is kept so that the next run checks it again |
 | `unreadable_file` (apply) | libpwquality stops reading at a line before the rule's value (an unknown setting, a value that is not an integer, a NUL, a line of 1023 bytes or more, also in a drop-in read before the main file), a drop-in that it reads is a symbolic link or not a regular file, or the main file is not UTF-8 text or holds a NUL |
@@ -400,10 +400,13 @@ occurrence wins, and the first line it cannot read stops the whole configuration
 `pwquality_restore` reproduce that reader, which `tests/fixtures/pwquality_readers/verdicts.json` checks against the
 real library of both Molecule images (ADR 0021, amendment of FREES-200). A rule is `applied` or `compliant` only when
 the library would take the profile's value from what the rule writes. The `pam_pwquality` arguments are searched in
-every file of the three PAM directories that the `faillock` and `pwhistory` families also read, `/etc/pam.d`,
+every regular file of the three PAM directories that the `faillock` and `pwhistory` families also read, `/etc/pam.d`,
 `/usr/lib/pam.d` and `/usr/share/pam.d` (FREES-211), all together: a file is searched even when libpam does not open
 it, because a file of the same name comes first or, on Ubuntu, because libpam is built without the vendor directory,
-so the family may refuse more than libpam would read but never less. With the main file, a setting that is set on
+so the family may refuse more than libpam would read but never less. A symbolic link there that resolves to a regular
+file, such as the `system-auth` that authselect links into `/etc/authselect`, is read through the link under its name
+in the PAM directory, and a PAM directory that is a link to a directory is read through it (FREES-213). A directory
+entry, or a link to one, is left out, because libpam reads no line from it. With the main file, a setting that is set on
 more than one line, in any case or spacing, is `duplicate_setting` and not touched. With drop-ins, a rule is
 `overridden`, with nothing changed and the overriding file named, when the main file or a later drop-in sets another
 value; a file at the
@@ -698,7 +701,8 @@ no exact revert, and immediate expiry of existing passwords).
 and that the content's check reads on that platform; `tests/unit/tools/test_content_golden_pam_conf.py` checks this
 against the OVAL of both datastreams. The PAM stack is only read, never edited. The filter
 `freesecdev.linux_compliance.pam_conf_decision` decides each rule the way `pam_faillock`, `pam_pwhistory` and libpam
-read the file and the service files of `/etc/pam.d`, `/usr/lib/pam.d` and `/usr/share/pam.d`, and computes the exact
+read the file and the service files of `/etc/pam.d`, `/usr/lib/pam.d` and `/usr/share/pam.d` (a symbolic link that
+resolves to a regular file read through the link under its name there, FREES-213), and computes the exact
 new text, which the role writes with `ansible.builtin.copy` after a SHA-256 re-check, every other byte unchanged;
 `pam_conf_restore` computes the text of the cleanup the same way. `tests/unit/tools/test_pam_conf_oracle.py` checks
 the filter against what the real readers of both images read (`make pam-reader-verdicts`).
@@ -714,7 +718,8 @@ The statuses that refuse to act, with nothing changed and the entry kept, each w
 does not exist), `not_regular_file` (a symbolic link or not a regular file), `unsupported_value` (the profile requires a
 time above 604800 seconds, which `pam_faillock` ignores, or a `deny` above 65535), `unreadable_stack` (libpam reads a
 service file that the collection does not read as it does: an include of a file outside the PAM directories, a NUL
-byte or a line of 1023 bytes or more), `overridden` (a `pam_faillock` or `pam_pwhistory` line of a service file that
+byte or a line of 1023 bytes or more, or an entry of a PAM directory that is a symbolic link to nothing, a link to
+something that is neither a regular file nor a directory, or neither a regular file, a directory nor a link, FREES-213), `overridden` (a `pam_faillock` or `pam_pwhistory` line of a service file that
 libpam opens, in any case, across continued lines and split as `_pam_StrTok` splits it, carries `conf=` or sets the
 option, which pam takes over the file), `unreadable_file` (a NUL byte or a line of 1023 bytes or more, on which
 `pam_faillock` fails, or a file that is not UTF-8), `unreadable_value` (`deny` above 65535, which pam wraps at 16

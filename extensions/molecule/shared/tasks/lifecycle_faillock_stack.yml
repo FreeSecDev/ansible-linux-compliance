@@ -18,6 +18,7 @@
     stack_unlock: xccdf_org.ssgproject.content_rule_accounts_passwords_pam_faillock_unlock_time
     stack_conf: /etc/security/faillock.conf
     stack_service: /etc/pam.d/fsd-regression-faillock
+    stack_service_target: /etc/security/fsd-regression-faillock-authselect
     stack_files: >-
       {{ {'ubuntu': ['/etc/pam.d/common-auth', '/etc/pam.d/common-account'],
           'rhel_compatible': ['/etc/pam.d/system-auth', '/etc/pam.d/password-auth']}[lifecycle_platform] }}
@@ -114,6 +115,20 @@
     - name: an include of an absolute path that the collection does not read refuses both rules
       deny: ""
       service: "auth include /etc/security/fsd-site-auth\n"
+      statuses:
+        - unreadable_stack
+        - unreadable_stack
+    - name: deny in a service file that is a link to a file outside the PAM directories, as authselect links them
+      deny: ""
+      service: "auth required pam_faillock.so preauth deny=3\n"
+      target: /etc/security/fsd-regression-faillock-authselect
+      statuses:
+        - overridden
+        - applied
+    - name: a service file that is a link to nothing refuses both rules
+      deny: ""
+      dangling: /etc/security/fsd-regression-faillock-missing
+      reason: /etc/pam.d/fsd-regression-faillock is a symbolic link that resolves to nothing
       statuses:
         - unreadable_stack
         - unreadable_stack

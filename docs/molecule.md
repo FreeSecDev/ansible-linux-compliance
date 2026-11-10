@@ -831,9 +831,13 @@ drop-ins are read first) and cleaned up byte for byte; then a PAM file that pass
 `enforce_for_root` `unreadable_file`, with nothing written; then a service file that only the vendor directory
 `/usr/share/pam.d` holds (FREES-211; the directory is created for the test on Ubuntu, which does not ship it, and
 removed again), with `pam_pwquality.so minlen=8 enforcing=0`, makes `minlen` `overridden` by the argument and
-`enforce_for_root` by `enforcing=0`, with nothing written. The test declares `/usr/share/pam.d` as rewritten, so the
-whole-instance comparison leaves out the times of that directory and of `/usr/share`. It ends with the whole-instance
-comparison.
+`enforce_for_root` by `enforcing=0`, with nothing written. Then (FREES-213) the same arguments in
+`/etc/pam.d/freesecdev-readers-linked`, a relative symbolic link into `/etc/security` as authselect links
+`system-auth`, refuse both rules with the link named; the vendor directory made a link to a directory that holds such a
+file refuses both rules with the file below `/usr/share/pam.d` named (the empty directory of Rocky Linux is put back
+with its mode); and a link to nothing next to a link to `/dev/null` refuses both rules with both named; nothing is
+written in any of them. The test declares `/usr/share/pam.d` as rewritten, so the whole-instance comparison leaves out
+the times and the inode of that directory and the times of `/usr/share`. It ends with the whole-instance comparison.
 
 The auditd topics ([ADR 0030](adr/0030-native-auditd-settings-and-audit-rules.md), FREES-110) select their rules
 with `profiles`: `auditd_conf` runs with `cis_level2_server` on Ubuntu and `stig` on Rocky Linux, `auditd_rules_time`
@@ -937,7 +941,9 @@ on the `pam_faillock` preauth line `deny` is `overridden` with that file named a
 `conf=` on that line both rules are `overridden`; and a service file of its own, `/etc/pam.d/fsd-regression-faillock`,
 with an upper-case `AUTH` type and `deny=3` on a continued line, and one with `auth [default=die]pam_faillock.so
 deny=3`, make `deny` `overridden` with that file named; an include of `/etc/security/fsd-site-auth`, which the
-collection does not read, makes both rules `unreadable_stack` (the order of `/etc/pam.d`, `/usr/lib/pam.d` and
+collection does not read, makes both rules `unreadable_stack`; `deny=3` in a service file that is a symbolic link to
+a file in `/etc/security`, as authselect links them (FREES-213), makes `deny` `overridden` with the link named, and a
+service file that is a link to nothing makes both rules `unreadable_stack` with the link named (the order of `/etc/pam.d`, `/usr/lib/pam.d` and
 `/usr/share/pam.d` is unit-tested only, because the whole-instance record keeps the times of `/usr`, which a file
 written there changes for good); no
 scan runs, because both contents put the faillock rules below a group limited to `system_with_kernel`, so a container

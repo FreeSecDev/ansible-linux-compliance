@@ -7,6 +7,10 @@ import unicodedata
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Final, cast
 
+from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance import (
+    pam_files,
+)
+
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator, Mapping
 
@@ -33,7 +37,7 @@ description:
     images (C(make pam-reader-verdicts), C(tools/pam)).
 author:
   - FreeSecDev (@FreeSecDev)
-positional: _input, rule, stack
+positional: _input, rule, stack, unreadable
 options:
   _input:
     description: The text of the configuration file.
@@ -48,9 +52,22 @@ options:
     type: dict
     required: true
   stack:
-    description: The text of every file of the PAM service directories, by path.
+    description:
+      - The text of every regular file of the PAM service directories, by path, and of every
+        symbolic link there that resolves to a regular file, read through the link under its
+        name in the PAM directory, which is the name that libpam opens (FREES-213).
     type: dict
     required: true
+  unreadable:
+    description:
+      - The entries of the PAM service directories that the collection cannot read, with C(path)
+        and C(kind), as the C(pam_service_files) filter returns them: a symbolic link that
+        resolves to nothing or to something that is neither a regular file nor a directory, for
+        example. Any of them makes the rule C(unreadable_stack), because libpam may open it and
+        the collection cannot tell what it would read there (FREES-213).
+    type: list
+    elements: dict
+    default: []
 """
 
 EXAMPLES = r"""
@@ -631,12 +648,21 @@ def _rule(value: object) -> Rule:
     return Rule(str(reader), str(setting), str(comparison), str(required), checked is True)
 
 
-def pam_conf_decision(text: object, rule: object, stack: object) -> dict[str, object]:
+def _stack(stack: dict[object, object], unreadable: object) -> tuple[dict[str, str], list[str]]:
+    """Return the service files that libpam reads and every problem, unreadable entries included."""
+    effective, found = effective_stack({str(key): str(value) for key, value in stack.items()})
+    return effective, sorted(set(found) | set(pam_files.describe(unreadable)))
+
+
+def pam_conf_decision(
+    text: object, rule: object, stack: object, unreadable: object = ()
+) -> dict[str, object]:
     """Return the decision for one rule; see the documentation of the filter."""
     if not isinstance(text, str) or not isinstance(stack, dict):
         message = "pam_conf_decision needs the text of the file and the texts of the PAM files"
         raise TypeError(message)
     decided = _rule(rule)
+    effective, problems = _stack(cast("dict[object, object]", stack), unreadable)
     if decided.setting in TIME_SETTINGS and int(decided.required) > MAX_TIME:
         reason = (
             f"the profile requires {decided.setting} = {decided.required}, above the {MAX_TIME} "
@@ -650,8 +676,6 @@ def pam_conf_decision(text: object, rule: object, stack: object) -> dict[str, ob
             "pam_faillock stores in 16 bits, so it would read another value; nothing is written"
         )
         return _decision("unsupported_value", reason, decided.line, None)
-    files = {str(key): str(value) for key, value in cast("dict[object, object]", stack).items()}
-    effective, problems = effective_stack(files)
     if problems:
         unread = "; ".join(problems)
         reason = (

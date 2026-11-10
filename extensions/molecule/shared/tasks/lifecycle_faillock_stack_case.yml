@@ -11,15 +11,26 @@
   loop_control:
     label: "{{ item.0 }}"
 
-- name: Faillock stack case | Write the service file of the case, or make sure that there is none
+- name: Faillock stack case | Write the service file of the case, or the file that its link names
   ansible.builtin.copy:
     content: "{{ stack_case.service }}"
-    dest: "{{ stack_service }}"
+    dest: "{{ stack_case.target | default(stack_service) }}"
     follow: false
     mode: "0644"
     owner: root
     group: root
   when: stack_case.service is defined
+
+- name: Faillock stack case | Make the service file of the case a symbolic link, to its file or to nothing
+  ansible.builtin.file:
+    src: "{{ stack_case.target | default(stack_case.dangling) }}"
+    dest: "{{ stack_service }}"
+    state: link
+    force: true
+    follow: false
+    owner: root
+    group: root
+  when: stack_case.target is defined or stack_case.dangling is defined
 
 - name: Faillock stack case | Switch every rule of the topic on
   ansible.builtin.set_fact:
@@ -43,6 +54,9 @@
         | reject('search', stack_service
                    if stack_case.service is defined else stack_files | first) | list == []
       - lifecycle_results | selectattr('status', 'equalto', 'overridden') | selectattr('changed') | list == []
+      - >-
+        stack_case.reason is not defined
+        or lifecycle_results | map(attribute='reason') | reject('search', stack_case.reason | default('')) | list == []
     fail_msg: "{{ stack_label }}, {{ stack_case.name }}, apply: {{ lifecycle_results }}"
     quiet: true
 
@@ -95,7 +109,8 @@
     fail_msg: "{{ stack_label }}, {{ stack_case.name }}, cleanup: {{ lifecycle_results }}"
     quiet: true
 
-- name: Faillock stack case | Remove the service file of the case
+- name: Faillock stack case | Remove the service file of the case and the file that its link names
   ansible.builtin.file:
-    path: "{{ stack_service }}"
+    path: "{{ item }}"
     state: absent
+  loop: "{{ [stack_service] + ([stack_case.target] if stack_case.target is defined else []) }}"

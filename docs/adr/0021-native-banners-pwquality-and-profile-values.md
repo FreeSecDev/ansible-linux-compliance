@@ -377,9 +377,61 @@ The source of `libpam/pam_handlers.c` in both Molecule images, fetched the way `
   pwhistory families of ADR 0027.
 - An include of a target with a `/` still refuses every rule; the reason is the lookup above: `../security/x` and
   `site/x` open a file outside the three directories or below one of them, which the collection does not read. A bare
-  name is looked up in the three directories, and every file of them is read.
+  name is looked up in the three directories, and every regular file of them is read (and, since FREES-213 below,
+  every symbolic link there that resolves to one).
 - The regression group `readers` adds a service file that only `/usr/share/pam.d` holds, with
   `pam_pwquality.so minlen=8 enforcing=0`, on both platforms (the directory is created for the test on Ubuntu and
   removed again): `minlen` is `overridden` by the argument and `enforce_for_root` by `enforcing=0`, with nothing
   written. The test declares `/usr/share/pam.d` as rewritten, so that the whole-instance comparison leaves out the
   times of that directory and of `/usr/share`, which the test changes for good.
+
+## Amendment of 2026-11-10: PAM files and directories that are symbolic links (FREES-213)
+
+**Context.** The amendment of FREES-211 recorded as a known gap that a PAM file that is a symbolic link, and a PAM
+directory that is one, are not read, and gave the `find` as the cause of both. The causes, checked with ansible-core
+2.21.5, are two different ones:
+
+- `ansible.builtin.find` with `file_type: file` calls `os.lstat` on each entry and keeps only regular files;
+  `follow: true` changes only how directories are walked. A service file that is a link, such as the
+  `/etc/pam.d/system-auth` and `password-auth` that authselect links into `/etc/authselect` on RHEL 9, was never read.
+- `find` does read a directory that is a link when it is given as a path. The pwquality family dropped such a PAM
+  directory earlier: its stat "Inspect the PAM directories, the vendor directory included" did not follow links, so
+  `isdir` was false and the directory was not listed. The faillock and pwhistory families already stat the
+  directories with `follow: true` ([ADR 0027](0027-native-faillock-pwhistory.md)), so they read a linked directory;
+  their gap was only the linked files.
+
+A `pam_pwquality minlen=8` or `enforcing=0` in a linked file, or in a file of a linked directory, was missed, and the
+rule could be reported `compliant` or `applied` while libpwquality, called by `pam_pwquality`, used the looser value.
+
+libpam opens a service name and every `include` and `substack` target with `fopen(path, "r")` in
+`_pam_open_config_file` of `libpam/pam_handlers.c` (linux-pam 1.5.1 and 1.5.3), which follows links. A name that
+`fopen` cannot open, such as a link to nothing, is looked up in the next directory. A directory opens, `getline`
+fails with `EISDIR`, and `_pam_assemble_line` takes that for the end of the file, so libpam reads no line from it.
+
+**Decision.**
+
+- The PAM directories are inspected with `follow: true`, so a linked `/etc/pam.d`, `/usr/lib/pam.d` or
+  `/usr/share/pam.d` is listed and read under its own path.
+- Every entry is listed with `find` `file_type: any` and `follow: false`; every entry that is a link is inspected with
+  `ansible.builtin.stat` and `follow: true`; the filter `pam_service_files`
+  (`plugins/module_utils/compliance/pam_files.py`) sorts the entries:
+  - a regular file, or a link that resolves to one, is read with `ansible.builtin.slurp`, which follows the link,
+    under its name in the PAM directory, the name that libpam opens and that a reason names;
+  - a directory, or a link to one, is left out, because libpam reads no line from it;
+  - a link to nothing, a link to anything else (a FIFO, a device, a socket), an entry that is none of a regular file,
+    a directory and a link, and an entry that `find` could not inspect refuse every rule of the family as
+    `overridden`, with the entry and what it is in the reason. libpam would skip a link to nothing, but the
+    collection cannot tell what such an entry would read when it resolves, so it refuses instead of guessing; this is
+    the status that an include the collection does not read already gives.
+- Nothing is read through an entry that is not a regular file once followed, so a link to `/dev/zero` or to a FIFO is
+  never opened. The family puts no size limit on a PAM file; a link to a large regular file is read as a large
+  regular file is. A link loop makes the stat fail, which stops the run.
+- The union of FREES-211 stays: every file read from every directory is searched together. A target read under two
+  names, through a link and under its own name, is searched twice, which repeats a refusal but cannot change it.
+- The regression group `readers` adds, on both platforms: a service file `/etc/pam.d/freesecdev-readers-linked` that
+  is a relative link into `/etc/security`, as authselect lays out `system-auth`, with
+  `pam_pwquality.so minlen=8 enforcing=0` (both rules `overridden`, the reason naming the link); the vendor directory
+  made a link to a directory that holds such a file (both rules `overridden`, the reason naming the file below
+  `/usr/share/pam.d`), with the empty vendor directory of Rocky Linux put back afterwards; and a link to nothing next
+  to a link to `/dev/null` (both rules `overridden`, the reason naming both). Nothing is written in any of them.
+- The known gap of the FREES-211 amendment is closed.
