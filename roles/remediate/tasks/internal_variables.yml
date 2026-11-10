@@ -744,6 +744,12 @@
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_plan$') == [] or
         '__linux_compliance_remediate_plan' in (hostvars[inventory_hostname] | list)
       - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_again$') == [] or
+        '__linux_compliance_remediate_pwq_again' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_already$') == [] or
+        '__linux_compliance_remediate_pwq_already' in (hostvars[inventory_hostname] | list)
+      - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_benchmark$') == [] or
         '__linux_compliance_remediate_pwq_benchmark' in (hostvars[inventory_hostname] | list)
       - >-
@@ -759,8 +765,14 @@
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_current$') == [] or
         '__linux_compliance_remediate_pwq_current' in (hostvars[inventory_hostname] | list)
       - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_decision$') == [] or
+        '__linux_compliance_remediate_pwq_decision' in (hostvars[inventory_hostname] | list)
+      - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_directory$') == [] or
         '__linux_compliance_remediate_pwq_directory' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_directory_kind$') == [] or
+        '__linux_compliance_remediate_pwq_directory_kind' in (hostvars[inventory_hostname] | list)
       - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_directory_missing$') == [] or
         '__linux_compliance_remediate_pwq_directory_missing' in (hostvars[inventory_hostname] | list)
@@ -771,6 +783,9 @@
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_dropins$') == [] or
         '__linux_compliance_remediate_pwq_dropins' in (hostvars[inventory_hostname] | list)
       - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_entries$') == [] or
+        '__linux_compliance_remediate_pwq_entries' in (hostvars[inventory_hostname] | list)
+      - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_entry$') == [] or
         '__linux_compliance_remediate_pwq_entry' in (hostvars[inventory_hostname] | list)
       - >-
@@ -779,9 +794,6 @@
       - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_forget$') == [] or
         '__linux_compliance_remediate_pwq_forget' in (hostvars[inventory_hostname] | list)
-      - >-
-        query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_found$') == [] or
-        '__linux_compliance_remediate_pwq_found' in (hostvars[inventory_hostname] | list)
       - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_header$') == [] or
         '__linux_compliance_remediate_pwq_header' in (hostvars[inventory_hostname] | list)
@@ -795,17 +807,29 @@
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_line$') == [] or
         '__linux_compliance_remediate_pwq_line' in (hostvars[inventory_hostname] | list)
       - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_main_read$') == [] or
+        '__linux_compliance_remediate_pwq_main_read' in (hostvars[inventory_hostname] | list)
+      - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_main_stat$') == [] or
         '__linux_compliance_remediate_pwq_main_stat' in (hostvars[inventory_hostname] | list)
       - >-
-        query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_name$') == [] or
-        '__linux_compliance_remediate_pwq_name' in (hostvars[inventory_hostname] | list)
-      - >-
-        query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_overriding$') == [] or
-        '__linux_compliance_remediate_pwq_overriding' in (hostvars[inventory_hostname] | list)
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_main_text$') == [] or
+        '__linux_compliance_remediate_pwq_main_text' in (hostvars[inventory_hostname] | list)
       - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_owned$') == [] or
         '__linux_compliance_remediate_pwq_owned' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_pam$') == [] or
+        '__linux_compliance_remediate_pwq_pam' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_pam_directories$') == [] or
+        '__linux_compliance_remediate_pwq_pam_directories' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_pam_found$') == [] or
+        '__linux_compliance_remediate_pwq_pam_found' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_pam_read$') == [] or
+        '__linux_compliance_remediate_pwq_pam_read' in (hostvars[inventory_hostname] | list)
       - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_path$') == [] or
         '__linux_compliance_remediate_pwq_path' in (hostvars[inventory_hostname] | list)
@@ -840,11 +864,20 @@
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_rerecord$') == [] or
         '__linux_compliance_remediate_pwq_rerecord' in (hostvars[inventory_hostname] | list)
       - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_restore$') == [] or
+        '__linux_compliance_remediate_pwq_restore' in (hostvars[inventory_hostname] | list)
+      - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_restored$') == [] or
         '__linux_compliance_remediate_pwq_restored' in (hostvars[inventory_hostname] | list)
       - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_restored_text$') == [] or
+        '__linux_compliance_remediate_pwq_restored_text' in (hostvars[inventory_hostname] | list)
+      - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_rule$') == [] or
         '__linux_compliance_remediate_pwq_rule' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_rule_input$') == [] or
+        '__linux_compliance_remediate_pwq_rule_input' in (hostvars[inventory_hostname] | list)
       - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_setting$') == [] or
         '__linux_compliance_remediate_pwq_setting' in (hostvars[inventory_hostname] | list)
@@ -852,14 +885,17 @@
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_source$') == [] or
         '__linux_compliance_remediate_pwq_source' in (hostvars[inventory_hostname] | list)
       - >-
-        query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_sources$') == [] or
-        '__linux_compliance_remediate_pwq_sources' in (hostvars[inventory_hostname] | list)
-      - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_stat$') == [] or
         '__linux_compliance_remediate_pwq_stat' in (hostvars[inventory_hostname] | list)
       - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_state$') == [] or
+        '__linux_compliance_remediate_pwq_state' in (hostvars[inventory_hostname] | list)
+      - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_status$') == [] or
         '__linux_compliance_remediate_pwq_status' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_texts$') == [] or
+        '__linux_compliance_remediate_pwq_texts' in (hostvars[inventory_hostname] | list)
       - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_tidy$') == [] or
         '__linux_compliance_remediate_pwq_tidy' in (hostvars[inventory_hostname] | list)
@@ -873,6 +909,9 @@
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_tidy_stats$') == [] or
         '__linux_compliance_remediate_pwq_tidy_stats' in (hostvars[inventory_hostname] | list)
       - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_valid$') == [] or
+        '__linux_compliance_remediate_pwq_valid' in (hostvars[inventory_hostname] | list)
+      - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_values$') == [] or
         '__linux_compliance_remediate_pwq_values' in (hostvars[inventory_hostname] | list)
       - >-
@@ -881,6 +920,9 @@
       - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_written$') == [] or
         '__linux_compliance_remediate_pwq_written' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_written_back$') == [] or
+        '__linux_compliance_remediate_pwq_written_back' in (hostvars[inventory_hostname] | list)
       - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_results$') == [] or
         '__linux_compliance_remediate_results' in (hostvars[inventory_hostname] | list)
@@ -1074,6 +1116,9 @@
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_ssh_contents$') == [] or
         '__linux_compliance_remediate_ssh_contents' in (hostvars[inventory_hostname] | list)
       - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_ssh_current$') == [] or
+        '__linux_compliance_remediate_ssh_current' in (hostvars[inventory_hostname] | list)
+      - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_ssh_directory_created$') == [] or
         '__linux_compliance_remediate_ssh_directory_created' in (hostvars[inventory_hostname] | list)
       - >-
@@ -1086,8 +1131,14 @@
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_ssh_dropins$') == [] or
         '__linux_compliance_remediate_ssh_dropins' in (hostvars[inventory_hostname] | list)
       - >-
-        query('ansible.builtin.varnames', '^__linux_compliance_remediate_ssh_edit$') == [] or
-        '__linux_compliance_remediate_ssh_edit' in (hostvars[inventory_hostname] | list)
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_ssh_edit_file$') == [] or
+        '__linux_compliance_remediate_ssh_edit_file' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_ssh_edit_files$') == [] or
+        '__linux_compliance_remediate_ssh_edit_files' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_ssh_edit_stats$') == [] or
+        '__linux_compliance_remediate_ssh_edit_stats' in (hostvars[inventory_hostname] | list)
       - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_ssh_edited$') == [] or
         '__linux_compliance_remediate_ssh_edited' in (hostvars[inventory_hostname] | list)
@@ -1097,6 +1148,9 @@
       - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_ssh_entries$') == [] or
         '__linux_compliance_remediate_ssh_entries' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_ssh_expected$') == [] or
+        '__linux_compliance_remediate_ssh_expected' in (hostvars[inventory_hostname] | list)
       - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_ssh_files$') == [] or
         '__linux_compliance_remediate_ssh_files' in (hostvars[inventory_hostname] | list)
@@ -1110,8 +1164,32 @@
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_ssh_found$') == [] or
         '__linux_compliance_remediate_ssh_found' in (hostvars[inventory_hostname] | list)
       - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_ssh_found_edits$') == [] or
+        '__linux_compliance_remediate_ssh_found_edits' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_ssh_globs$') == [] or
+        '__linux_compliance_remediate_ssh_globs' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_ssh_in_place$') == [] or
+        '__linux_compliance_remediate_ssh_in_place' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_ssh_in_place_expected$') == [] or
+        '__linux_compliance_remediate_ssh_in_place_expected' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_ssh_in_place_settings$') == [] or
+        '__linux_compliance_remediate_ssh_in_place_settings' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_ssh_ineffective$') == [] or
+        '__linux_compliance_remediate_ssh_ineffective' in (hostvars[inventory_hostname] | list)
+      - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_ssh_inspected$') == [] or
         '__linux_compliance_remediate_ssh_inspected' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_ssh_kept$') == [] or
+        '__linux_compliance_remediate_ssh_kept' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_ssh_kept_lines$') == [] or
+        '__linux_compliance_remediate_ssh_kept_lines' in (hostvars[inventory_hostname] | list)
       - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_ssh_known$') == [] or
         '__linux_compliance_remediate_ssh_known' in (hostvars[inventory_hostname] | list)
@@ -1128,14 +1206,23 @@
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_ssh_lines$') == [] or
         '__linux_compliance_remediate_ssh_lines' in (hostvars[inventory_hostname] | list)
       - >-
-        query('ansible.builtin.varnames', '^__linux_compliance_remediate_ssh_main_lines$') == [] or
-        '__linux_compliance_remediate_ssh_main_lines' in (hostvars[inventory_hostname] | list)
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_ssh_main_read$') == [] or
+        '__linux_compliance_remediate_ssh_main_read' in (hostvars[inventory_hostname] | list)
       - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_ssh_main_stat$') == [] or
         '__linux_compliance_remediate_ssh_main_stat' in (hostvars[inventory_hostname] | list)
       - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_ssh_modes$') == [] or
+        '__linux_compliance_remediate_ssh_modes' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_ssh_now$') == [] or
+        '__linux_compliance_remediate_ssh_now' in (hostvars[inventory_hostname] | list)
+      - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_ssh_owned$') == [] or
         '__linux_compliance_remediate_ssh_owned' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_ssh_parsed$') == [] or
+        '__linux_compliance_remediate_ssh_parsed' in (hostvars[inventory_hostname] | list)
       - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_ssh_path$') == [] or
         '__linux_compliance_remediate_ssh_path' in (hostvars[inventory_hostname] | list)
@@ -1170,17 +1257,26 @@
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_ssh_removed$') == [] or
         '__linux_compliance_remediate_ssh_removed' in (hostvars[inventory_hostname] | list)
       - >-
-        query('ansible.builtin.varnames', '^__linux_compliance_remediate_ssh_reread$') == [] or
-        '__linux_compliance_remediate_ssh_reread' in (hostvars[inventory_hostname] | list)
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_ssh_restore_checks$') == [] or
+        '__linux_compliance_remediate_ssh_restore_checks' in (hostvars[inventory_hostname] | list)
       - >-
-        query('ansible.builtin.varnames', '^__linux_compliance_remediate_ssh_reread_texts$') == [] or
-        '__linux_compliance_remediate_ssh_reread_texts' in (hostvars[inventory_hostname] | list)
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_ssh_restore_file$') == [] or
+        '__linux_compliance_remediate_ssh_restore_file' in (hostvars[inventory_hostname] | list)
       - >-
-        query('ansible.builtin.varnames', '^__linux_compliance_remediate_ssh_restore$') == [] or
-        '__linux_compliance_remediate_ssh_restore' in (hostvars[inventory_hostname] | list)
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_ssh_restore_files$') == [] or
+        '__linux_compliance_remediate_ssh_restore_files' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_ssh_restore_stats$') == [] or
+        '__linux_compliance_remediate_ssh_restore_stats' in (hostvars[inventory_hostname] | list)
       - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_ssh_restored$') == [] or
         '__linux_compliance_remediate_ssh_restored' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_ssh_restored_texts$') == [] or
+        '__linux_compliance_remediate_ssh_restored_texts' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_ssh_restores$') == [] or
+        '__linux_compliance_remediate_ssh_restores' in (hostvars[inventory_hostname] | list)
       - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_ssh_reverted_ids$') == [] or
         '__linux_compliance_remediate_ssh_reverted_ids' in (hostvars[inventory_hostname] | list)
@@ -1206,6 +1302,15 @@
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_ssh_source$') == [] or
         '__linux_compliance_remediate_ssh_source' in (hostvars[inventory_hostname] | list)
       - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_ssh_stale$') == [] or
+        '__linux_compliance_remediate_ssh_stale' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_ssh_stale_ids$') == [] or
+        '__linux_compliance_remediate_ssh_stale_ids' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_ssh_swap$') == [] or
+        '__linux_compliance_remediate_ssh_swap' in (hostvars[inventory_hostname] | list)
+      - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_ssh_texts$') == [] or
         '__linux_compliance_remediate_ssh_texts' in (hostvars[inventory_hostname] | list)
       - >-
@@ -1218,9 +1323,6 @@
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_ssh_tidy_path$') == [] or
         '__linux_compliance_remediate_ssh_tidy_path' in (hostvars[inventory_hostname] | list)
       - >-
-        query('ansible.builtin.varnames', '^__linux_compliance_remediate_ssh_tidy_removal$') == [] or
-        '__linux_compliance_remediate_ssh_tidy_removal' in (hostvars[inventory_hostname] | list)
-      - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_ssh_tidy_stats$') == [] or
         '__linux_compliance_remediate_ssh_tidy_stats' in (hostvars[inventory_hostname] | list)
       - >-
@@ -1230,14 +1332,38 @@
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_ssh_undo$') == [] or
         '__linux_compliance_remediate_ssh_undo' in (hostvars[inventory_hostname] | list)
       - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_ssh_undo_ok$') == [] or
+        '__linux_compliance_remediate_ssh_undo_ok' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_ssh_undo_path$') == [] or
+        '__linux_compliance_remediate_ssh_undo_path' in (hostvars[inventory_hostname] | list)
+      - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_ssh_undo_rule$') == [] or
         '__linux_compliance_remediate_ssh_undo_rule' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_ssh_undo_stats$') == [] or
+        '__linux_compliance_remediate_ssh_undo_stats' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_ssh_undo_text$') == [] or
+        '__linux_compliance_remediate_ssh_undo_text' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_ssh_undone$') == [] or
+        '__linux_compliance_remediate_ssh_undone' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_ssh_unverified$') == [] or
+        '__linux_compliance_remediate_ssh_unverified' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_ssh_unwritten$') == [] or
+        '__linux_compliance_remediate_ssh_unwritten' in (hostvars[inventory_hostname] | list)
       - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_ssh_validation$') == [] or
         '__linux_compliance_remediate_ssh_validation' in (hostvars[inventory_hostname] | list)
       - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_ssh_values$') == [] or
         '__linux_compliance_remediate_ssh_values' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_ssh_with_status$') == [] or
+        '__linux_compliance_remediate_ssh_with_status' in (hostvars[inventory_hostname] | list)
       - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_ssh_write$') == [] or
         '__linux_compliance_remediate_ssh_write' in (hostvars[inventory_hostname] | list)
@@ -1477,25 +1603,34 @@
     __linux_compliance_remediate_ld_write: __linux_compliance_unset__
     __linux_compliance_remediate_ledger: __linux_compliance_unset__
     __linux_compliance_remediate_plan: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_again: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_already: __linux_compliance_unset__
     __linux_compliance_remediate_pwq_benchmark: __linux_compliance_unset__
     __linux_compliance_remediate_pwq_content: __linux_compliance_unset__
     __linux_compliance_remediate_pwq_content_sha256: __linux_compliance_unset__
     __linux_compliance_remediate_pwq_current: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_decision: __linux_compliance_unset__
     __linux_compliance_remediate_pwq_directory: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_directory_kind: __linux_compliance_unset__
     __linux_compliance_remediate_pwq_directory_missing: __linux_compliance_unset__
     __linux_compliance_remediate_pwq_directory_stat: __linux_compliance_unset__
     __linux_compliance_remediate_pwq_dropins: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_entries: __linux_compliance_unset__
     __linux_compliance_remediate_pwq_entry: __linux_compliance_unset__
     __linux_compliance_remediate_pwq_entry_method: __linux_compliance_unset__
     __linux_compliance_remediate_pwq_forget: __linux_compliance_unset__
-    __linux_compliance_remediate_pwq_found: __linux_compliance_unset__
     __linux_compliance_remediate_pwq_header: __linux_compliance_unset__
     __linux_compliance_remediate_pwq_inspected: __linux_compliance_unset__
     __linux_compliance_remediate_pwq_left: __linux_compliance_unset__
     __linux_compliance_remediate_pwq_line: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_main_read: __linux_compliance_unset__
     __linux_compliance_remediate_pwq_main_stat: __linux_compliance_unset__
-    __linux_compliance_remediate_pwq_overriding: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_main_text: __linux_compliance_unset__
     __linux_compliance_remediate_pwq_owned: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_pam: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_pam_directories: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_pam_found: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_pam_read: __linux_compliance_unset__
     __linux_compliance_remediate_pwq_prior: __linux_compliance_unset__
     __linux_compliance_remediate_pwq_read: __linux_compliance_unset__
     __linux_compliance_remediate_pwq_reason: __linux_compliance_unset__
@@ -1505,14 +1640,16 @@
     __linux_compliance_remediate_pwq_removed: __linux_compliance_unset__
     __linux_compliance_remediate_pwq_rerecord: __linux_compliance_unset__
     __linux_compliance_remediate_pwq_restored: __linux_compliance_unset__
-    __linux_compliance_remediate_pwq_sources: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_restored_text: __linux_compliance_unset__
     __linux_compliance_remediate_pwq_stat: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_state: __linux_compliance_unset__
     __linux_compliance_remediate_pwq_status: __linux_compliance_unset__
     __linux_compliance_remediate_pwq_tidy: __linux_compliance_unset__
     __linux_compliance_remediate_pwq_tidy_stats: __linux_compliance_unset__
     __linux_compliance_remediate_pwq_values: __linux_compliance_unset__
     __linux_compliance_remediate_pwq_write: __linux_compliance_unset__
     __linux_compliance_remediate_pwq_written: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_written_back: __linux_compliance_unset__
     __linux_compliance_remediate_results: __linux_compliance_unset__
     __linux_compliance_remediate_sd_already: __linux_compliance_unset__
     __linux_compliance_remediate_sd_attr: __linux_compliance_unset__
@@ -1557,10 +1694,13 @@
     __linux_compliance_remediate_ssh_benchmark: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_cleanup_plan: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_contents: __linux_compliance_unset__
+    __linux_compliance_remediate_ssh_current: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_directory_created: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_directory_missing: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_directory_stat: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_dropins: __linux_compliance_unset__
+    __linux_compliance_remediate_ssh_edit_files: __linux_compliance_unset__
+    __linux_compliance_remediate_ssh_edit_stats: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_edited: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_edits: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_entries: __linux_compliance_unset__
@@ -1568,13 +1708,19 @@
     __linux_compliance_remediate_ssh_final: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_forget: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_found: __linux_compliance_unset__
+    __linux_compliance_remediate_ssh_in_place: __linux_compliance_unset__
+    __linux_compliance_remediate_ssh_in_place_expected: __linux_compliance_unset__
+    __linux_compliance_remediate_ssh_in_place_settings: __linux_compliance_unset__
+    __linux_compliance_remediate_ssh_ineffective: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_inspected: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_known: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_layout: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_left: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_lines: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_main_stat: __linux_compliance_unset__
+    __linux_compliance_remediate_ssh_modes: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_owned: __linux_compliance_unset__
+    __linux_compliance_remediate_ssh_parsed: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_plan: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_read: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_record: __linux_compliance_unset__
@@ -1583,7 +1729,9 @@
     __linux_compliance_remediate_ssh_reload: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_removal: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_removed: __linux_compliance_unset__
-    __linux_compliance_remediate_ssh_reread: __linux_compliance_unset__
+    __linux_compliance_remediate_ssh_restore_checks: __linux_compliance_unset__
+    __linux_compliance_remediate_ssh_restore_files: __linux_compliance_unset__
+    __linux_compliance_remediate_ssh_restore_stats: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_restored: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_reverted_ids: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_running: __linux_compliance_unset__
@@ -1592,9 +1740,11 @@
     __linux_compliance_remediate_ssh_settings: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_texts: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_tidy: __linux_compliance_unset__
-    __linux_compliance_remediate_ssh_tidy_removal: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_tidy_stats: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_to_write: __linux_compliance_unset__
+    __linux_compliance_remediate_ssh_undo_ok: __linux_compliance_unset__
+    __linux_compliance_remediate_ssh_undo_stats: __linux_compliance_unset__
+    __linux_compliance_remediate_ssh_unwritten: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_validation: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_values: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_write: __linux_compliance_unset__
@@ -1797,25 +1947,34 @@
       - __linux_compliance_remediate_ld_write == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ledger == '__linux_compliance_unset__'
       - __linux_compliance_remediate_plan == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_pwq_again == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_pwq_already == '__linux_compliance_unset__'
       - __linux_compliance_remediate_pwq_benchmark == '__linux_compliance_unset__'
       - __linux_compliance_remediate_pwq_content == '__linux_compliance_unset__'
       - __linux_compliance_remediate_pwq_content_sha256 == '__linux_compliance_unset__'
       - __linux_compliance_remediate_pwq_current == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_pwq_decision == '__linux_compliance_unset__'
       - __linux_compliance_remediate_pwq_directory == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_pwq_directory_kind == '__linux_compliance_unset__'
       - __linux_compliance_remediate_pwq_directory_missing == '__linux_compliance_unset__'
       - __linux_compliance_remediate_pwq_directory_stat == '__linux_compliance_unset__'
       - __linux_compliance_remediate_pwq_dropins == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_pwq_entries == '__linux_compliance_unset__'
       - __linux_compliance_remediate_pwq_entry == '__linux_compliance_unset__'
       - __linux_compliance_remediate_pwq_entry_method == '__linux_compliance_unset__'
       - __linux_compliance_remediate_pwq_forget == '__linux_compliance_unset__'
-      - __linux_compliance_remediate_pwq_found == '__linux_compliance_unset__'
       - __linux_compliance_remediate_pwq_header == '__linux_compliance_unset__'
       - __linux_compliance_remediate_pwq_inspected == '__linux_compliance_unset__'
       - __linux_compliance_remediate_pwq_left == '__linux_compliance_unset__'
       - __linux_compliance_remediate_pwq_line == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_pwq_main_read == '__linux_compliance_unset__'
       - __linux_compliance_remediate_pwq_main_stat == '__linux_compliance_unset__'
-      - __linux_compliance_remediate_pwq_overriding == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_pwq_main_text == '__linux_compliance_unset__'
       - __linux_compliance_remediate_pwq_owned == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_pwq_pam == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_pwq_pam_directories == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_pwq_pam_found == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_pwq_pam_read == '__linux_compliance_unset__'
       - __linux_compliance_remediate_pwq_prior == '__linux_compliance_unset__'
       - __linux_compliance_remediate_pwq_read == '__linux_compliance_unset__'
       - __linux_compliance_remediate_pwq_reason == '__linux_compliance_unset__'
@@ -1825,14 +1984,16 @@
       - __linux_compliance_remediate_pwq_removed == '__linux_compliance_unset__'
       - __linux_compliance_remediate_pwq_rerecord == '__linux_compliance_unset__'
       - __linux_compliance_remediate_pwq_restored == '__linux_compliance_unset__'
-      - __linux_compliance_remediate_pwq_sources == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_pwq_restored_text == '__linux_compliance_unset__'
       - __linux_compliance_remediate_pwq_stat == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_pwq_state == '__linux_compliance_unset__'
       - __linux_compliance_remediate_pwq_status == '__linux_compliance_unset__'
       - __linux_compliance_remediate_pwq_tidy == '__linux_compliance_unset__'
       - __linux_compliance_remediate_pwq_tidy_stats == '__linux_compliance_unset__'
       - __linux_compliance_remediate_pwq_values == '__linux_compliance_unset__'
       - __linux_compliance_remediate_pwq_write == '__linux_compliance_unset__'
       - __linux_compliance_remediate_pwq_written == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_pwq_written_back == '__linux_compliance_unset__'
       - __linux_compliance_remediate_results == '__linux_compliance_unset__'
       - __linux_compliance_remediate_sd_already == '__linux_compliance_unset__'
       - __linux_compliance_remediate_sd_attr == '__linux_compliance_unset__'
@@ -1877,10 +2038,13 @@
       - __linux_compliance_remediate_ssh_benchmark == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ssh_cleanup_plan == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ssh_contents == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_ssh_current == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ssh_directory_created == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ssh_directory_missing == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ssh_directory_stat == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ssh_dropins == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_ssh_edit_files == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_ssh_edit_stats == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ssh_edited == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ssh_edits == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ssh_entries == '__linux_compliance_unset__'
@@ -1888,13 +2052,19 @@
       - __linux_compliance_remediate_ssh_final == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ssh_forget == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ssh_found == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_ssh_in_place == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_ssh_in_place_expected == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_ssh_in_place_settings == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_ssh_ineffective == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ssh_inspected == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ssh_known == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ssh_layout == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ssh_left == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ssh_lines == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ssh_main_stat == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_ssh_modes == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ssh_owned == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_ssh_parsed == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ssh_plan == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ssh_read == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ssh_record == '__linux_compliance_unset__'
@@ -1903,7 +2073,9 @@
       - __linux_compliance_remediate_ssh_reload == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ssh_removal == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ssh_removed == '__linux_compliance_unset__'
-      - __linux_compliance_remediate_ssh_reread == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_ssh_restore_checks == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_ssh_restore_files == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_ssh_restore_stats == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ssh_restored == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ssh_reverted_ids == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ssh_running == '__linux_compliance_unset__'
@@ -1912,9 +2084,11 @@
       - __linux_compliance_remediate_ssh_settings == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ssh_texts == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ssh_tidy == '__linux_compliance_unset__'
-      - __linux_compliance_remediate_ssh_tidy_removal == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ssh_tidy_stats == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ssh_to_write == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_ssh_undo_ok == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_ssh_undo_stats == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_ssh_unwritten == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ssh_validation == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ssh_values == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ssh_write == '__linux_compliance_unset__'
@@ -1973,15 +2147,18 @@
       - __linux_compliance_remediate_ld_setting == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ld_source == '__linux_compliance_unset__'
       - __linux_compliance_remediate_pwq_cleanup_status == '__linux_compliance_unset__'
-      - __linux_compliance_remediate_pwq_name == '__linux_compliance_unset__'
       - __linux_compliance_remediate_pwq_path == '__linux_compliance_unset__'
       - __linux_compliance_remediate_pwq_recorded == '__linux_compliance_unset__'
       - __linux_compliance_remediate_pwq_records == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_pwq_restore == '__linux_compliance_unset__'
       - __linux_compliance_remediate_pwq_rule == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_pwq_rule_input == '__linux_compliance_unset__'
       - __linux_compliance_remediate_pwq_setting == '__linux_compliance_unset__'
       - __linux_compliance_remediate_pwq_source == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_pwq_texts == '__linux_compliance_unset__'
       - __linux_compliance_remediate_pwq_tidy_check == '__linux_compliance_unset__'
       - __linux_compliance_remediate_pwq_tidy_path == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_pwq_valid == '__linux_compliance_unset__'
       - __linux_compliance_remediate_rule == '__linux_compliance_unset__'
       - __linux_compliance_remediate_sd_cleanup_status == '__linux_compliance_unset__'
       - __linux_compliance_remediate_sd_conflicts == '__linux_compliance_unset__'
@@ -2001,21 +2178,36 @@
       - __linux_compliance_remediate_sd_too_many == '__linux_compliance_unset__'
       - __linux_compliance_remediate_sd_value == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ssh_changed_ids == '__linux_compliance_unset__'
-      - __linux_compliance_remediate_ssh_edit == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_ssh_edit_file == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_ssh_expected == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_ssh_found_edits == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_ssh_globs == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_ssh_kept == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_ssh_kept_lines == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ssh_known_services == '__linux_compliance_unset__'
-      - __linux_compliance_remediate_ssh_main_lines == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_ssh_main_read == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_ssh_now == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ssh_path == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ssh_read_texts == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ssh_refusal == '__linux_compliance_unset__'
-      - __linux_compliance_remediate_ssh_reread_texts == '__linux_compliance_unset__'
-      - __linux_compliance_remediate_ssh_restore == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_ssh_restore_file == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_ssh_restored_texts == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_ssh_restores == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ssh_root_rule == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ssh_rule == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ssh_source == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_ssh_stale == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_ssh_stale_ids == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_ssh_swap == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ssh_tidy_check == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ssh_tidy_path == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ssh_undo == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_ssh_undo_path == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ssh_undo_rule == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_ssh_undo_text == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_ssh_undone == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_ssh_unverified == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_ssh_with_status == '__linux_compliance_unset__'
       - __linux_compliance_remediate_unaccounted == '__linux_compliance_unset__'
       - >-
         __linux_compliance_remediate_audit_dropin_pattern is not defined or
@@ -2198,6 +2390,10 @@
         __linux_compliance_remediate_pwquality_directory == (lookup('ansible.builtin.file', role_path ~
         '/vars/main.yml') | ansible.builtin.from_yaml)['__linux_compliance_remediate_pwquality_directory']
       - >-
+        __linux_compliance_remediate_pwquality_line_start is not defined or
+        __linux_compliance_remediate_pwquality_line_start == (lookup('ansible.builtin.file', role_path ~
+        '/vars/main.yml') | ansible.builtin.from_yaml)['__linux_compliance_remediate_pwquality_line_start']
+      - >-
         __linux_compliance_remediate_pwquality_main is not defined or __linux_compliance_remediate_pwquality_main ==
         (lookup('ansible.builtin.file', role_path ~ '/vars/main.yml') |
         ansible.builtin.from_yaml)['__linux_compliance_remediate_pwquality_main']
@@ -2206,6 +2402,10 @@
         (lookup('ansible.builtin.file', role_path ~ '/vars/main.yml') |
         ansible.builtin.from_yaml)['__linux_compliance_remediate_pwquality_marker']
       - >-
+        __linux_compliance_remediate_pwquality_pam_directories is not defined or
+        __linux_compliance_remediate_pwquality_pam_directories == (lookup('ansible.builtin.file', role_path ~
+        '/vars/main.yml') | ansible.builtin.from_yaml)['__linux_compliance_remediate_pwquality_pam_directories']
+      - >-
         __linux_compliance_remediate_rules is not defined or __linux_compliance_remediate_rules ==
         (lookup('ansible.builtin.file', role_path ~ '/vars/rules.yml') |
         ansible.builtin.from_yaml)['__linux_compliance_remediate_rules']
@@ -2213,6 +2413,10 @@
         __linux_compliance_remediate_sshd_directory is not defined or __linux_compliance_remediate_sshd_directory ==
         (lookup('ansible.builtin.file', role_path ~ '/vars/main.yml') |
         ansible.builtin.from_yaml)['__linux_compliance_remediate_sshd_directory']
+      - >-
+        __linux_compliance_remediate_sshd_known_includes is not defined or
+        __linux_compliance_remediate_sshd_known_includes == (lookup('ansible.builtin.file', role_path ~
+        '/vars/main.yml') | ansible.builtin.from_yaml)['__linux_compliance_remediate_sshd_known_includes']
       - >-
         __linux_compliance_remediate_sshd_main is not defined or __linux_compliance_remediate_sshd_main ==
         (lookup('ansible.builtin.file', role_path ~ '/vars/main.yml') |
@@ -2329,15 +2533,18 @@
     __linux_compliance_remediate_ld_setting: __linux_compliance_unset__
     __linux_compliance_remediate_ld_source: __linux_compliance_unset__
     __linux_compliance_remediate_pwq_cleanup_status: __linux_compliance_unset__
-    __linux_compliance_remediate_pwq_name: __linux_compliance_unset__
     __linux_compliance_remediate_pwq_path: __linux_compliance_unset__
     __linux_compliance_remediate_pwq_recorded: __linux_compliance_unset__
     __linux_compliance_remediate_pwq_records: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_restore: __linux_compliance_unset__
     __linux_compliance_remediate_pwq_rule: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_rule_input: __linux_compliance_unset__
     __linux_compliance_remediate_pwq_setting: __linux_compliance_unset__
     __linux_compliance_remediate_pwq_source: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_texts: __linux_compliance_unset__
     __linux_compliance_remediate_pwq_tidy_check: __linux_compliance_unset__
     __linux_compliance_remediate_pwq_tidy_path: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_valid: __linux_compliance_unset__
     __linux_compliance_remediate_rule: __linux_compliance_unset__
     __linux_compliance_remediate_sd_cleanup_status: __linux_compliance_unset__
     __linux_compliance_remediate_sd_conflicts: __linux_compliance_unset__
@@ -2357,21 +2564,36 @@
     __linux_compliance_remediate_sd_too_many: __linux_compliance_unset__
     __linux_compliance_remediate_sd_value: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_changed_ids: __linux_compliance_unset__
-    __linux_compliance_remediate_ssh_edit: __linux_compliance_unset__
+    __linux_compliance_remediate_ssh_edit_file: __linux_compliance_unset__
+    __linux_compliance_remediate_ssh_expected: __linux_compliance_unset__
+    __linux_compliance_remediate_ssh_found_edits: __linux_compliance_unset__
+    __linux_compliance_remediate_ssh_globs: __linux_compliance_unset__
+    __linux_compliance_remediate_ssh_kept: __linux_compliance_unset__
+    __linux_compliance_remediate_ssh_kept_lines: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_known_services: __linux_compliance_unset__
-    __linux_compliance_remediate_ssh_main_lines: __linux_compliance_unset__
+    __linux_compliance_remediate_ssh_main_read: __linux_compliance_unset__
+    __linux_compliance_remediate_ssh_now: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_path: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_read_texts: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_refusal: __linux_compliance_unset__
-    __linux_compliance_remediate_ssh_reread_texts: __linux_compliance_unset__
-    __linux_compliance_remediate_ssh_restore: __linux_compliance_unset__
+    __linux_compliance_remediate_ssh_restore_file: __linux_compliance_unset__
+    __linux_compliance_remediate_ssh_restored_texts: __linux_compliance_unset__
+    __linux_compliance_remediate_ssh_restores: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_root_rule: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_rule: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_source: __linux_compliance_unset__
+    __linux_compliance_remediate_ssh_stale: __linux_compliance_unset__
+    __linux_compliance_remediate_ssh_stale_ids: __linux_compliance_unset__
+    __linux_compliance_remediate_ssh_swap: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_tidy_check: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_tidy_path: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_undo: __linux_compliance_unset__
+    __linux_compliance_remediate_ssh_undo_path: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_undo_rule: __linux_compliance_unset__
+    __linux_compliance_remediate_ssh_undo_text: __linux_compliance_unset__
+    __linux_compliance_remediate_ssh_undone: __linux_compliance_unset__
+    __linux_compliance_remediate_ssh_unverified: __linux_compliance_unset__
+    __linux_compliance_remediate_ssh_with_status: __linux_compliance_unset__
     __linux_compliance_remediate_unaccounted: __linux_compliance_unset__
   tags:
     - always
@@ -2569,25 +2791,34 @@
     __linux_compliance_remediate_ld_write: __linux_compliance_unset_again__
     __linux_compliance_remediate_ledger: __linux_compliance_unset_again__
     __linux_compliance_remediate_plan: __linux_compliance_unset_again__
+    __linux_compliance_remediate_pwq_again: __linux_compliance_unset_again__
+    __linux_compliance_remediate_pwq_already: __linux_compliance_unset_again__
     __linux_compliance_remediate_pwq_benchmark: __linux_compliance_unset_again__
     __linux_compliance_remediate_pwq_content: __linux_compliance_unset_again__
     __linux_compliance_remediate_pwq_content_sha256: __linux_compliance_unset_again__
     __linux_compliance_remediate_pwq_current: __linux_compliance_unset_again__
+    __linux_compliance_remediate_pwq_decision: __linux_compliance_unset_again__
     __linux_compliance_remediate_pwq_directory: __linux_compliance_unset_again__
+    __linux_compliance_remediate_pwq_directory_kind: __linux_compliance_unset_again__
     __linux_compliance_remediate_pwq_directory_missing: __linux_compliance_unset_again__
     __linux_compliance_remediate_pwq_directory_stat: __linux_compliance_unset_again__
     __linux_compliance_remediate_pwq_dropins: __linux_compliance_unset_again__
+    __linux_compliance_remediate_pwq_entries: __linux_compliance_unset_again__
     __linux_compliance_remediate_pwq_entry: __linux_compliance_unset_again__
     __linux_compliance_remediate_pwq_entry_method: __linux_compliance_unset_again__
     __linux_compliance_remediate_pwq_forget: __linux_compliance_unset_again__
-    __linux_compliance_remediate_pwq_found: __linux_compliance_unset_again__
     __linux_compliance_remediate_pwq_header: __linux_compliance_unset_again__
     __linux_compliance_remediate_pwq_inspected: __linux_compliance_unset_again__
     __linux_compliance_remediate_pwq_left: __linux_compliance_unset_again__
     __linux_compliance_remediate_pwq_line: __linux_compliance_unset_again__
+    __linux_compliance_remediate_pwq_main_read: __linux_compliance_unset_again__
     __linux_compliance_remediate_pwq_main_stat: __linux_compliance_unset_again__
-    __linux_compliance_remediate_pwq_overriding: __linux_compliance_unset_again__
+    __linux_compliance_remediate_pwq_main_text: __linux_compliance_unset_again__
     __linux_compliance_remediate_pwq_owned: __linux_compliance_unset_again__
+    __linux_compliance_remediate_pwq_pam: __linux_compliance_unset_again__
+    __linux_compliance_remediate_pwq_pam_directories: __linux_compliance_unset_again__
+    __linux_compliance_remediate_pwq_pam_found: __linux_compliance_unset_again__
+    __linux_compliance_remediate_pwq_pam_read: __linux_compliance_unset_again__
     __linux_compliance_remediate_pwq_prior: __linux_compliance_unset_again__
     __linux_compliance_remediate_pwq_read: __linux_compliance_unset_again__
     __linux_compliance_remediate_pwq_reason: __linux_compliance_unset_again__
@@ -2597,14 +2828,16 @@
     __linux_compliance_remediate_pwq_removed: __linux_compliance_unset_again__
     __linux_compliance_remediate_pwq_rerecord: __linux_compliance_unset_again__
     __linux_compliance_remediate_pwq_restored: __linux_compliance_unset_again__
-    __linux_compliance_remediate_pwq_sources: __linux_compliance_unset_again__
+    __linux_compliance_remediate_pwq_restored_text: __linux_compliance_unset_again__
     __linux_compliance_remediate_pwq_stat: __linux_compliance_unset_again__
+    __linux_compliance_remediate_pwq_state: __linux_compliance_unset_again__
     __linux_compliance_remediate_pwq_status: __linux_compliance_unset_again__
     __linux_compliance_remediate_pwq_tidy: __linux_compliance_unset_again__
     __linux_compliance_remediate_pwq_tidy_stats: __linux_compliance_unset_again__
     __linux_compliance_remediate_pwq_values: __linux_compliance_unset_again__
     __linux_compliance_remediate_pwq_write: __linux_compliance_unset_again__
     __linux_compliance_remediate_pwq_written: __linux_compliance_unset_again__
+    __linux_compliance_remediate_pwq_written_back: __linux_compliance_unset_again__
     __linux_compliance_remediate_results: __linux_compliance_unset_again__
     __linux_compliance_remediate_sd_already: __linux_compliance_unset_again__
     __linux_compliance_remediate_sd_attr: __linux_compliance_unset_again__
@@ -2649,10 +2882,13 @@
     __linux_compliance_remediate_ssh_benchmark: __linux_compliance_unset_again__
     __linux_compliance_remediate_ssh_cleanup_plan: __linux_compliance_unset_again__
     __linux_compliance_remediate_ssh_contents: __linux_compliance_unset_again__
+    __linux_compliance_remediate_ssh_current: __linux_compliance_unset_again__
     __linux_compliance_remediate_ssh_directory_created: __linux_compliance_unset_again__
     __linux_compliance_remediate_ssh_directory_missing: __linux_compliance_unset_again__
     __linux_compliance_remediate_ssh_directory_stat: __linux_compliance_unset_again__
     __linux_compliance_remediate_ssh_dropins: __linux_compliance_unset_again__
+    __linux_compliance_remediate_ssh_edit_files: __linux_compliance_unset_again__
+    __linux_compliance_remediate_ssh_edit_stats: __linux_compliance_unset_again__
     __linux_compliance_remediate_ssh_edited: __linux_compliance_unset_again__
     __linux_compliance_remediate_ssh_edits: __linux_compliance_unset_again__
     __linux_compliance_remediate_ssh_entries: __linux_compliance_unset_again__
@@ -2660,13 +2896,19 @@
     __linux_compliance_remediate_ssh_final: __linux_compliance_unset_again__
     __linux_compliance_remediate_ssh_forget: __linux_compliance_unset_again__
     __linux_compliance_remediate_ssh_found: __linux_compliance_unset_again__
+    __linux_compliance_remediate_ssh_in_place: __linux_compliance_unset_again__
+    __linux_compliance_remediate_ssh_in_place_expected: __linux_compliance_unset_again__
+    __linux_compliance_remediate_ssh_in_place_settings: __linux_compliance_unset_again__
+    __linux_compliance_remediate_ssh_ineffective: __linux_compliance_unset_again__
     __linux_compliance_remediate_ssh_inspected: __linux_compliance_unset_again__
     __linux_compliance_remediate_ssh_known: __linux_compliance_unset_again__
     __linux_compliance_remediate_ssh_layout: __linux_compliance_unset_again__
     __linux_compliance_remediate_ssh_left: __linux_compliance_unset_again__
     __linux_compliance_remediate_ssh_lines: __linux_compliance_unset_again__
     __linux_compliance_remediate_ssh_main_stat: __linux_compliance_unset_again__
+    __linux_compliance_remediate_ssh_modes: __linux_compliance_unset_again__
     __linux_compliance_remediate_ssh_owned: __linux_compliance_unset_again__
+    __linux_compliance_remediate_ssh_parsed: __linux_compliance_unset_again__
     __linux_compliance_remediate_ssh_plan: __linux_compliance_unset_again__
     __linux_compliance_remediate_ssh_read: __linux_compliance_unset_again__
     __linux_compliance_remediate_ssh_record: __linux_compliance_unset_again__
@@ -2675,7 +2917,9 @@
     __linux_compliance_remediate_ssh_reload: __linux_compliance_unset_again__
     __linux_compliance_remediate_ssh_removal: __linux_compliance_unset_again__
     __linux_compliance_remediate_ssh_removed: __linux_compliance_unset_again__
-    __linux_compliance_remediate_ssh_reread: __linux_compliance_unset_again__
+    __linux_compliance_remediate_ssh_restore_checks: __linux_compliance_unset_again__
+    __linux_compliance_remediate_ssh_restore_files: __linux_compliance_unset_again__
+    __linux_compliance_remediate_ssh_restore_stats: __linux_compliance_unset_again__
     __linux_compliance_remediate_ssh_restored: __linux_compliance_unset_again__
     __linux_compliance_remediate_ssh_reverted_ids: __linux_compliance_unset_again__
     __linux_compliance_remediate_ssh_running: __linux_compliance_unset_again__
@@ -2684,9 +2928,11 @@
     __linux_compliance_remediate_ssh_settings: __linux_compliance_unset_again__
     __linux_compliance_remediate_ssh_texts: __linux_compliance_unset_again__
     __linux_compliance_remediate_ssh_tidy: __linux_compliance_unset_again__
-    __linux_compliance_remediate_ssh_tidy_removal: __linux_compliance_unset_again__
     __linux_compliance_remediate_ssh_tidy_stats: __linux_compliance_unset_again__
     __linux_compliance_remediate_ssh_to_write: __linux_compliance_unset_again__
+    __linux_compliance_remediate_ssh_undo_ok: __linux_compliance_unset_again__
+    __linux_compliance_remediate_ssh_undo_stats: __linux_compliance_unset_again__
+    __linux_compliance_remediate_ssh_unwritten: __linux_compliance_unset_again__
     __linux_compliance_remediate_ssh_validation: __linux_compliance_unset_again__
     __linux_compliance_remediate_ssh_values: __linux_compliance_unset_again__
     __linux_compliance_remediate_ssh_write: __linux_compliance_unset_again__
@@ -2889,25 +3135,34 @@
       - __linux_compliance_remediate_ld_write == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ledger == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_plan == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_pwq_again == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_pwq_already == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_pwq_benchmark == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_pwq_content == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_pwq_content_sha256 == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_pwq_current == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_pwq_decision == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_pwq_directory == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_pwq_directory_kind == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_pwq_directory_missing == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_pwq_directory_stat == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_pwq_dropins == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_pwq_entries == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_pwq_entry == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_pwq_entry_method == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_pwq_forget == '__linux_compliance_unset_again__'
-      - __linux_compliance_remediate_pwq_found == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_pwq_header == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_pwq_inspected == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_pwq_left == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_pwq_line == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_pwq_main_read == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_pwq_main_stat == '__linux_compliance_unset_again__'
-      - __linux_compliance_remediate_pwq_overriding == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_pwq_main_text == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_pwq_owned == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_pwq_pam == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_pwq_pam_directories == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_pwq_pam_found == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_pwq_pam_read == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_pwq_prior == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_pwq_read == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_pwq_reason == '__linux_compliance_unset_again__'
@@ -2917,14 +3172,16 @@
       - __linux_compliance_remediate_pwq_removed == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_pwq_rerecord == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_pwq_restored == '__linux_compliance_unset_again__'
-      - __linux_compliance_remediate_pwq_sources == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_pwq_restored_text == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_pwq_stat == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_pwq_state == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_pwq_status == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_pwq_tidy == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_pwq_tidy_stats == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_pwq_values == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_pwq_write == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_pwq_written == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_pwq_written_back == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_results == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_sd_already == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_sd_attr == '__linux_compliance_unset_again__'
@@ -2969,10 +3226,13 @@
       - __linux_compliance_remediate_ssh_benchmark == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ssh_cleanup_plan == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ssh_contents == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_ssh_current == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ssh_directory_created == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ssh_directory_missing == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ssh_directory_stat == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ssh_dropins == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_ssh_edit_files == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_ssh_edit_stats == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ssh_edited == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ssh_edits == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ssh_entries == '__linux_compliance_unset_again__'
@@ -2980,13 +3240,19 @@
       - __linux_compliance_remediate_ssh_final == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ssh_forget == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ssh_found == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_ssh_in_place == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_ssh_in_place_expected == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_ssh_in_place_settings == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_ssh_ineffective == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ssh_inspected == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ssh_known == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ssh_layout == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ssh_left == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ssh_lines == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ssh_main_stat == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_ssh_modes == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ssh_owned == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_ssh_parsed == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ssh_plan == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ssh_read == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ssh_record == '__linux_compliance_unset_again__'
@@ -2995,7 +3261,9 @@
       - __linux_compliance_remediate_ssh_reload == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ssh_removal == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ssh_removed == '__linux_compliance_unset_again__'
-      - __linux_compliance_remediate_ssh_reread == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_ssh_restore_checks == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_ssh_restore_files == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_ssh_restore_stats == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ssh_restored == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ssh_reverted_ids == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ssh_running == '__linux_compliance_unset_again__'
@@ -3004,9 +3272,11 @@
       - __linux_compliance_remediate_ssh_settings == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ssh_texts == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ssh_tidy == '__linux_compliance_unset_again__'
-      - __linux_compliance_remediate_ssh_tidy_removal == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ssh_tidy_stats == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ssh_to_write == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_ssh_undo_ok == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_ssh_undo_stats == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_ssh_unwritten == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ssh_validation == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ssh_values == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ssh_write == '__linux_compliance_unset_again__'
@@ -3065,15 +3335,18 @@
       - __linux_compliance_remediate_ld_setting == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ld_source == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_pwq_cleanup_status == '__linux_compliance_unset_again__'
-      - __linux_compliance_remediate_pwq_name == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_pwq_path == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_pwq_recorded == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_pwq_records == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_pwq_restore == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_pwq_rule == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_pwq_rule_input == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_pwq_setting == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_pwq_source == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_pwq_texts == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_pwq_tidy_check == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_pwq_tidy_path == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_pwq_valid == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_rule == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_sd_cleanup_status == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_sd_conflicts == '__linux_compliance_unset_again__'
@@ -3093,21 +3366,36 @@
       - __linux_compliance_remediate_sd_too_many == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_sd_value == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ssh_changed_ids == '__linux_compliance_unset_again__'
-      - __linux_compliance_remediate_ssh_edit == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_ssh_edit_file == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_ssh_expected == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_ssh_found_edits == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_ssh_globs == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_ssh_kept == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_ssh_kept_lines == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ssh_known_services == '__linux_compliance_unset_again__'
-      - __linux_compliance_remediate_ssh_main_lines == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_ssh_main_read == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_ssh_now == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ssh_path == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ssh_read_texts == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ssh_refusal == '__linux_compliance_unset_again__'
-      - __linux_compliance_remediate_ssh_reread_texts == '__linux_compliance_unset_again__'
-      - __linux_compliance_remediate_ssh_restore == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_ssh_restore_file == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_ssh_restored_texts == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_ssh_restores == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ssh_root_rule == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ssh_rule == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ssh_source == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_ssh_stale == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_ssh_stale_ids == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_ssh_swap == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ssh_tidy_check == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ssh_tidy_path == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ssh_undo == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_ssh_undo_path == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ssh_undo_rule == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_ssh_undo_text == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_ssh_undone == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_ssh_unverified == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_ssh_with_status == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_unaccounted == '__linux_compliance_unset_again__'
     fail_msg: >-
       An internal variable of the remediate role (__linux_compliance_remediate_*) is set from outside the role: by a
@@ -3169,15 +3457,18 @@
     __linux_compliance_remediate_ld_setting: __linux_compliance_unset_again__
     __linux_compliance_remediate_ld_source: __linux_compliance_unset_again__
     __linux_compliance_remediate_pwq_cleanup_status: __linux_compliance_unset_again__
-    __linux_compliance_remediate_pwq_name: __linux_compliance_unset_again__
     __linux_compliance_remediate_pwq_path: __linux_compliance_unset_again__
     __linux_compliance_remediate_pwq_recorded: __linux_compliance_unset_again__
     __linux_compliance_remediate_pwq_records: __linux_compliance_unset_again__
+    __linux_compliance_remediate_pwq_restore: __linux_compliance_unset_again__
     __linux_compliance_remediate_pwq_rule: __linux_compliance_unset_again__
+    __linux_compliance_remediate_pwq_rule_input: __linux_compliance_unset_again__
     __linux_compliance_remediate_pwq_setting: __linux_compliance_unset_again__
     __linux_compliance_remediate_pwq_source: __linux_compliance_unset_again__
+    __linux_compliance_remediate_pwq_texts: __linux_compliance_unset_again__
     __linux_compliance_remediate_pwq_tidy_check: __linux_compliance_unset_again__
     __linux_compliance_remediate_pwq_tidy_path: __linux_compliance_unset_again__
+    __linux_compliance_remediate_pwq_valid: __linux_compliance_unset_again__
     __linux_compliance_remediate_rule: __linux_compliance_unset_again__
     __linux_compliance_remediate_sd_cleanup_status: __linux_compliance_unset_again__
     __linux_compliance_remediate_sd_conflicts: __linux_compliance_unset_again__
@@ -3197,21 +3488,36 @@
     __linux_compliance_remediate_sd_too_many: __linux_compliance_unset_again__
     __linux_compliance_remediate_sd_value: __linux_compliance_unset_again__
     __linux_compliance_remediate_ssh_changed_ids: __linux_compliance_unset_again__
-    __linux_compliance_remediate_ssh_edit: __linux_compliance_unset_again__
+    __linux_compliance_remediate_ssh_edit_file: __linux_compliance_unset_again__
+    __linux_compliance_remediate_ssh_expected: __linux_compliance_unset_again__
+    __linux_compliance_remediate_ssh_found_edits: __linux_compliance_unset_again__
+    __linux_compliance_remediate_ssh_globs: __linux_compliance_unset_again__
+    __linux_compliance_remediate_ssh_kept: __linux_compliance_unset_again__
+    __linux_compliance_remediate_ssh_kept_lines: __linux_compliance_unset_again__
     __linux_compliance_remediate_ssh_known_services: __linux_compliance_unset_again__
-    __linux_compliance_remediate_ssh_main_lines: __linux_compliance_unset_again__
+    __linux_compliance_remediate_ssh_main_read: __linux_compliance_unset_again__
+    __linux_compliance_remediate_ssh_now: __linux_compliance_unset_again__
     __linux_compliance_remediate_ssh_path: __linux_compliance_unset_again__
     __linux_compliance_remediate_ssh_read_texts: __linux_compliance_unset_again__
     __linux_compliance_remediate_ssh_refusal: __linux_compliance_unset_again__
-    __linux_compliance_remediate_ssh_reread_texts: __linux_compliance_unset_again__
-    __linux_compliance_remediate_ssh_restore: __linux_compliance_unset_again__
+    __linux_compliance_remediate_ssh_restore_file: __linux_compliance_unset_again__
+    __linux_compliance_remediate_ssh_restored_texts: __linux_compliance_unset_again__
+    __linux_compliance_remediate_ssh_restores: __linux_compliance_unset_again__
     __linux_compliance_remediate_ssh_root_rule: __linux_compliance_unset_again__
     __linux_compliance_remediate_ssh_rule: __linux_compliance_unset_again__
     __linux_compliance_remediate_ssh_source: __linux_compliance_unset_again__
+    __linux_compliance_remediate_ssh_stale: __linux_compliance_unset_again__
+    __linux_compliance_remediate_ssh_stale_ids: __linux_compliance_unset_again__
+    __linux_compliance_remediate_ssh_swap: __linux_compliance_unset_again__
     __linux_compliance_remediate_ssh_tidy_check: __linux_compliance_unset_again__
     __linux_compliance_remediate_ssh_tidy_path: __linux_compliance_unset_again__
     __linux_compliance_remediate_ssh_undo: __linux_compliance_unset_again__
+    __linux_compliance_remediate_ssh_undo_path: __linux_compliance_unset_again__
     __linux_compliance_remediate_ssh_undo_rule: __linux_compliance_unset_again__
+    __linux_compliance_remediate_ssh_undo_text: __linux_compliance_unset_again__
+    __linux_compliance_remediate_ssh_undone: __linux_compliance_unset_again__
+    __linux_compliance_remediate_ssh_unverified: __linux_compliance_unset_again__
+    __linux_compliance_remediate_ssh_with_status: __linux_compliance_unset_again__
     __linux_compliance_remediate_unaccounted: __linux_compliance_unset_again__
   tags:
     - always
@@ -3409,25 +3715,34 @@
     __linux_compliance_remediate_ld_write: __linux_compliance_unset__
     __linux_compliance_remediate_ledger: __linux_compliance_unset__
     __linux_compliance_remediate_plan: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_again: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_already: __linux_compliance_unset__
     __linux_compliance_remediate_pwq_benchmark: __linux_compliance_unset__
     __linux_compliance_remediate_pwq_content: __linux_compliance_unset__
     __linux_compliance_remediate_pwq_content_sha256: __linux_compliance_unset__
     __linux_compliance_remediate_pwq_current: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_decision: __linux_compliance_unset__
     __linux_compliance_remediate_pwq_directory: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_directory_kind: __linux_compliance_unset__
     __linux_compliance_remediate_pwq_directory_missing: __linux_compliance_unset__
     __linux_compliance_remediate_pwq_directory_stat: __linux_compliance_unset__
     __linux_compliance_remediate_pwq_dropins: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_entries: __linux_compliance_unset__
     __linux_compliance_remediate_pwq_entry: __linux_compliance_unset__
     __linux_compliance_remediate_pwq_entry_method: __linux_compliance_unset__
     __linux_compliance_remediate_pwq_forget: __linux_compliance_unset__
-    __linux_compliance_remediate_pwq_found: __linux_compliance_unset__
     __linux_compliance_remediate_pwq_header: __linux_compliance_unset__
     __linux_compliance_remediate_pwq_inspected: __linux_compliance_unset__
     __linux_compliance_remediate_pwq_left: __linux_compliance_unset__
     __linux_compliance_remediate_pwq_line: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_main_read: __linux_compliance_unset__
     __linux_compliance_remediate_pwq_main_stat: __linux_compliance_unset__
-    __linux_compliance_remediate_pwq_overriding: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_main_text: __linux_compliance_unset__
     __linux_compliance_remediate_pwq_owned: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_pam: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_pam_directories: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_pam_found: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_pam_read: __linux_compliance_unset__
     __linux_compliance_remediate_pwq_prior: __linux_compliance_unset__
     __linux_compliance_remediate_pwq_read: __linux_compliance_unset__
     __linux_compliance_remediate_pwq_reason: __linux_compliance_unset__
@@ -3437,14 +3752,16 @@
     __linux_compliance_remediate_pwq_removed: __linux_compliance_unset__
     __linux_compliance_remediate_pwq_rerecord: __linux_compliance_unset__
     __linux_compliance_remediate_pwq_restored: __linux_compliance_unset__
-    __linux_compliance_remediate_pwq_sources: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_restored_text: __linux_compliance_unset__
     __linux_compliance_remediate_pwq_stat: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_state: __linux_compliance_unset__
     __linux_compliance_remediate_pwq_status: __linux_compliance_unset__
     __linux_compliance_remediate_pwq_tidy: __linux_compliance_unset__
     __linux_compliance_remediate_pwq_tidy_stats: __linux_compliance_unset__
     __linux_compliance_remediate_pwq_values: __linux_compliance_unset__
     __linux_compliance_remediate_pwq_write: __linux_compliance_unset__
     __linux_compliance_remediate_pwq_written: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_written_back: __linux_compliance_unset__
     __linux_compliance_remediate_results: __linux_compliance_unset__
     __linux_compliance_remediate_sd_already: __linux_compliance_unset__
     __linux_compliance_remediate_sd_attr: __linux_compliance_unset__
@@ -3489,10 +3806,13 @@
     __linux_compliance_remediate_ssh_benchmark: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_cleanup_plan: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_contents: __linux_compliance_unset__
+    __linux_compliance_remediate_ssh_current: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_directory_created: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_directory_missing: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_directory_stat: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_dropins: __linux_compliance_unset__
+    __linux_compliance_remediate_ssh_edit_files: __linux_compliance_unset__
+    __linux_compliance_remediate_ssh_edit_stats: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_edited: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_edits: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_entries: __linux_compliance_unset__
@@ -3500,13 +3820,19 @@
     __linux_compliance_remediate_ssh_final: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_forget: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_found: __linux_compliance_unset__
+    __linux_compliance_remediate_ssh_in_place: __linux_compliance_unset__
+    __linux_compliance_remediate_ssh_in_place_expected: __linux_compliance_unset__
+    __linux_compliance_remediate_ssh_in_place_settings: __linux_compliance_unset__
+    __linux_compliance_remediate_ssh_ineffective: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_inspected: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_known: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_layout: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_left: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_lines: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_main_stat: __linux_compliance_unset__
+    __linux_compliance_remediate_ssh_modes: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_owned: __linux_compliance_unset__
+    __linux_compliance_remediate_ssh_parsed: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_plan: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_read: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_record: __linux_compliance_unset__
@@ -3515,7 +3841,9 @@
     __linux_compliance_remediate_ssh_reload: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_removal: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_removed: __linux_compliance_unset__
-    __linux_compliance_remediate_ssh_reread: __linux_compliance_unset__
+    __linux_compliance_remediate_ssh_restore_checks: __linux_compliance_unset__
+    __linux_compliance_remediate_ssh_restore_files: __linux_compliance_unset__
+    __linux_compliance_remediate_ssh_restore_stats: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_restored: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_reverted_ids: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_running: __linux_compliance_unset__
@@ -3524,9 +3852,11 @@
     __linux_compliance_remediate_ssh_settings: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_texts: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_tidy: __linux_compliance_unset__
-    __linux_compliance_remediate_ssh_tidy_removal: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_tidy_stats: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_to_write: __linux_compliance_unset__
+    __linux_compliance_remediate_ssh_undo_ok: __linux_compliance_unset__
+    __linux_compliance_remediate_ssh_undo_stats: __linux_compliance_unset__
+    __linux_compliance_remediate_ssh_unwritten: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_validation: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_values: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_write: __linux_compliance_unset__

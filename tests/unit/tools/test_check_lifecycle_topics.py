@@ -960,7 +960,10 @@ def test_regression_groups_are_planned_on_the_platforms_whose_docker_scenario_ru
 
 def test_the_repository_declares_regression_groups_for_pwquality_ssh_and_sudo() -> None:
     found = lifecycle.regression_platforms(REPOSITORY_ROOT)
-    assert found["pwquality"] == {"changes": frozenset({"ubuntu", "rhel_compatible"})}
+    assert found["pwquality"] == {
+        "changes": frozenset({"ubuntu", "rhel_compatible"}),
+        "readers": frozenset({"ubuntu", "rhel_compatible"}),
+    }
     assert found["sudo"] == {
         "changes": frozenset({"ubuntu", "rhel_compatible"}),
         "files": frozenset({"ubuntu"}),
@@ -969,6 +972,7 @@ def test_the_repository_declares_regression_groups_for_pwquality_ssh_and_sudo() 
     assert found["ssh"] == {
         "changes": frozenset({"ubuntu", "rhel_compatible"}),
         "vendor": frozenset({"ubuntu", "rhel_compatible"}),
+        "readers": frozenset({"ubuntu", "rhel_compatible"}),
     }
     assert found["login_defs"] == {
         "changes": frozenset({"ubuntu", "rhel_compatible"}),
@@ -984,7 +988,7 @@ def test_the_repository_declares_regression_groups_for_pwquality_ssh_and_sudo() 
     assert found["file_permissions"] == {}
     assert found["auditd_conf"] == {"changes": frozenset({"ubuntu", "rhel_compatible"})}
     assert found["auditd_rules_time"] == {"changes": frozenset({"ubuntu", "rhel_compatible"})}
-    assert len(lifecycle.dispatched_regressions(REPOSITORY_ROOT)) == 18
+    assert len(lifecycle.dispatched_regressions(REPOSITORY_ROOT)) == 20
 
 
 @pytest.mark.parametrize(
