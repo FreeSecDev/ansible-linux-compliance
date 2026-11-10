@@ -462,7 +462,7 @@ evidence. A cycle that does depend on the machine declares `requires: [libvirt]`
 ## CI
 
 The `molecule-libvirt` job of `.github/workflows/ci.yml` runs on the GitHub-hosted `ubuntu-24.04` runners and is part
-of `ci-gate`, which the merge queue requires within its check timeout of 90 minutes (30 until 2026-11-10). Its matrix comes from the
+of `ci-gate`, which the merge queue requires within its check timeout of 240 minutes (30 until 2026-11-10, then 90, then 240 the same day). Its matrix comes from the
 `molecule-plan` job, which runs `make -s molecule-matrix MOLECULE_MATRIX_DRIVER=libvirt`
 (`tools/roles/molecule_matrix.py`) and is part of `ci-gate` too. The plan holds, per platform, the base leg
 (`libvirt-<platform>`), one lifecycle leg (`libvirt-<platform>-lifecycle` with `MOLECULE_LIFECYCLE_TOPIC` and
@@ -512,7 +512,7 @@ Each leg spends about a minute installing QEMU and libvirt and seconds restoring
 take about 1.5 minutes. The rest of a lifecycle leg is one cycle, with the warm-up scan, its no-change snapshots and
 whole-instance records of the machine (see [what each record guarantees](molecule.md#what-each-record-guarantees)). The same steps took up to 1.7 times as long on a slow runner as on a fast one, which explains
 the spread between legs that do the same work. The job's `timeout-minutes` is 28, about one and a half times the
-slowest observed leg, and stays within the 30 minutes that the merge queue allowed until 2026-11-10 (90 since).
+slowest observed leg, and stays within the 30 minutes that the merge queue allowed until 2026-11-10 (then 90, and 240 since the same day).
 
 Before and after the [host package cache](#host-packages-of-the-ci-runner) (FREES-180), in minutes. The two runs of
 `main` installed QEMU and libvirt with `apt-get --snapshot`; the pull request run 41071337240 found the cache empty

@@ -92,7 +92,7 @@ the original list remain for the scenarios of FREES-62 and FREES-63, which build
   libvirt, platform and toggle mode, and the self-test. It runs on GitHub-hosted `ubuntu-24.04` runners with KVM,
   installs QEMU and libvirt in exact versions from a fixed Ubuntu archive snapshot, and is part of `ci-gate`. Without
   `/dev/kvm` it fails instead of emulating. Each leg must finish well within the 30-minute check timeout of the merge
-  queue (90 minutes since 2026-11-10); the first version, which ran every cycle on the machines, took 65 minutes, so the machines now run only what
+  queue (on 2026-11-10 raised to 90 minutes, then to 240 the same day); the first version, which ran every cycle on the machines, took 65 minutes, so the machines now run only what
   containers cannot prove.
 
 ## Amendment 2026-10-30: cached host packages and task timings (FREES-180)
@@ -121,7 +121,7 @@ On slow runs the snapshot answered at 128 to 239 kB/s, and installing QEMU and l
 
 Every Docker leg built both instance images in `create`, and every Molecule leg and `lint` installed the collections
 from Galaxy, about 35 times per run. Two flakes took pull requests out of the merge queue, whose check timeout was 30
-minutes (90 since 2026-11-10): building the Rocky Linux image took 532 to 540 seconds on a slow package mirror instead of about 24, and
+minutes (on 2026-11-10 raised to 90, then to 240 the same day): building the Rocky Linux image took 532 to 540 seconds on a slow package mirror instead of about 24, and
 Galaxy answered HTTP 500, cut downloads short, failed TLS or left its cache incomplete. These refinements apply
 ([Molecule guide](../molecule.md#images-and-collections-built-once-per-run)).
 

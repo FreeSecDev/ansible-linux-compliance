@@ -174,4 +174,5 @@ Tooling that needs the key searches the message for a line that matches `^Refs: 
 ## Amendment 2026-11-10: merge queue check timeout (FREES-204)
 
 On 2026-11-10 the merge queue's check timeout (`check_response_timeout_minutes`) in the live ruleset was raised from
-30 to 90 minutes. `.github/rulesets/main.json` follows, so it still matches the live ruleset.
+30 to 90 minutes, and the same day to 240 minutes after merge queue runs took 90 to 108 minutes.
+`.github/rulesets/main.json` follows, so it still matches the live ruleset.
