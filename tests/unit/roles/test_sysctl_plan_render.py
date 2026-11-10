@@ -196,20 +196,20 @@ def scenario_vars(scenario: Scenario, by_key: dict[str, Rule]) -> dict[str, obje
     main = cast("dict[str, object]", load(ROLE / "vars" / "main.yml"))
     checked = cast("dict[str, object]", main["__linux_compliance_remediate_sysctl_checked"])
     return {
-        "__linux_compliance_remediate_sc_checked": checked[scenario.benchmark],
-        "__linux_compliance_remediate_sc_entries": host.entries,
-        "__linux_compliance_remediate_sc_texts": host.texts,
-        "__linux_compliance_remediate_sc_directory_stat": {"exists": True, "isdir": True},
-        "__linux_compliance_remediate_sc_removed": [
+        "__linux_compliance_remediate_kp_checked": checked[scenario.benchmark],
+        "__linux_compliance_remediate_kp_entries": host.entries,
+        "__linux_compliance_remediate_kp_texts": host.texts,
+        "__linux_compliance_remediate_kp_directory_stat": {"exists": True, "isdir": True},
+        "__linux_compliance_remediate_kp_removed": [
             str(parameters(rule)["path"]) for rule in cleanup
         ],
         "__linux_compliance_remediate_family": {"apply": apply, "cleanup": cleanup},
-        "__linux_compliance_remediate_sc_values": wanted_values(scenario, apply),
-        "__linux_compliance_remediate_sc_records": host.records,
-        "__linux_compliance_remediate_sc_contents": contents,
-        "__linux_compliance_remediate_sc_running_values": scenario.running,
-        "__linux_compliance_remediate_sc_runtime": scenario.runtime,
-        "__linux_compliance_remediate_sc_writable": dict.fromkeys(scenario.running, True),
+        "__linux_compliance_remediate_kp_values": wanted_values(scenario, apply),
+        "__linux_compliance_remediate_kp_records": host.records,
+        "__linux_compliance_remediate_kp_contents": contents,
+        "__linux_compliance_remediate_kp_running_values": scenario.running,
+        "__linux_compliance_remediate_kp_runtime": scenario.runtime,
+        "__linux_compliance_remediate_kp_writable": dict.fromkeys(scenario.running, True),
     }
 
 
@@ -348,8 +348,8 @@ def render(tmp: Path) -> dict[str, dict[str, object]]:
         "name": "Show the plans",
         "ansible.builtin.debug": {
             "msg": (
-                "{{ {'plan': __linux_compliance_remediate_sc_plan,"
-                " 'cleanup': __linux_compliance_remediate_sc_cleanup_plan} }}"
+                "{{ {'plan': __linux_compliance_remediate_kp_plan,"
+                " 'cleanup': __linux_compliance_remediate_kp_cleanup_plan} }}"
             )
         },
     }
