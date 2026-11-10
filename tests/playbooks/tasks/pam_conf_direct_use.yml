@@ -1,0 +1,110 @@
+---
+- name: Faillock and pwhistory direct use | faillock.yml refuses to run without the opt-in
+  block:
+    - name: Faillock and pwhistory direct use | Run faillock.yml with remediation disabled
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.remediate
+        tasks_from: faillock.yml
+      vars:
+        linux_compliance_remediate_enabled: false
+
+    - name: Faillock and pwhistory direct use | Fail because faillock.yml ran without the opt-in
+      ansible.builtin.fail:
+        msg: faillock.yml ran without the opt-in.
+  rescue:
+    - name: Faillock and pwhistory direct use | Check that faillock.yml refused to run before anything else
+      ansible.builtin.assert:
+        that:
+          - ansible_failed_task.name is search('Refuse')
+          - "'linux_compliance_remediate_enabled true' in ansible_failed_result.msg"
+          - "'No change was made to the host' in ansible_failed_result.msg"
+        fail_msg: "faillock.yml: {{ ansible_failed_task.name }}: {{ ansible_failed_result.msg }}"
+        quiet: true
+
+- name: Faillock and pwhistory direct use | pwhistory.yml refuses to run without the opt-in
+  block:
+    - name: Faillock and pwhistory direct use | Run pwhistory.yml with remediation disabled
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.remediate
+        tasks_from: pwhistory.yml
+      vars:
+        linux_compliance_remediate_enabled: false
+
+    - name: Faillock and pwhistory direct use | Fail because pwhistory.yml ran without the opt-in
+      ansible.builtin.fail:
+        msg: pwhistory.yml ran without the opt-in.
+  rescue:
+    - name: Faillock and pwhistory direct use | Check that pwhistory.yml refused to run before anything else
+      ansible.builtin.assert:
+        that:
+          - ansible_failed_task.name is search('Refuse')
+          - "'linux_compliance_remediate_enabled true' in ansible_failed_result.msg"
+          - "'No change was made to the host' in ansible_failed_result.msg"
+        fail_msg: "pwhistory.yml: {{ ansible_failed_task.name }}: {{ ansible_failed_result.msg }}"
+        quiet: true
+
+- name: Faillock and pwhistory direct use | pam_conf_prepare.yml refuses to run without the opt-in
+  block:
+    - name: Faillock and pwhistory direct use | Run pam_conf_prepare.yml with remediation disabled
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.remediate
+        tasks_from: pam_conf_prepare.yml
+      vars:
+        linux_compliance_remediate_enabled: false
+
+    - name: Faillock and pwhistory direct use | Fail because pam_conf_prepare.yml ran without the opt-in
+      ansible.builtin.fail:
+        msg: pam_conf_prepare.yml ran without the opt-in.
+  rescue:
+    - name: Faillock and pwhistory direct use | Check that pam_conf_prepare.yml refused to run before anything else
+      ansible.builtin.assert:
+        that:
+          - ansible_failed_task.name is search('Refuse')
+          - "'linux_compliance_remediate_enabled true' in ansible_failed_result.msg"
+          - "'No change was made to the host' in ansible_failed_result.msg"
+        fail_msg: "pam_conf_prepare.yml: {{ ansible_failed_task.name }}: {{ ansible_failed_result.msg }}"
+        quiet: true
+
+- name: Faillock and pwhistory direct use | pam_conf_apply.yml refuses to run without the opt-in
+  block:
+    - name: Faillock and pwhistory direct use | Run pam_conf_apply.yml with remediation disabled
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.remediate
+        tasks_from: pam_conf_apply.yml
+      vars:
+        linux_compliance_remediate_enabled: false
+
+    - name: Faillock and pwhistory direct use | Fail because pam_conf_apply.yml ran without the opt-in
+      ansible.builtin.fail:
+        msg: pam_conf_apply.yml ran without the opt-in.
+  rescue:
+    - name: Faillock and pwhistory direct use | Check that pam_conf_apply.yml refused to run before anything else
+      ansible.builtin.assert:
+        that:
+          - ansible_failed_task.name is search('Refuse')
+          - "'linux_compliance_remediate_enabled true' in ansible_failed_result.msg"
+          - "'No change was made to the host' in ansible_failed_result.msg"
+        fail_msg: "pam_conf_apply.yml: {{ ansible_failed_task.name }}: {{ ansible_failed_result.msg }}"
+        quiet: true
+
+- name: Faillock and pwhistory direct use | pam_conf_cleanup.yml refuses to run without the opt-in
+  block:
+    - name: Faillock and pwhistory direct use | Run pam_conf_cleanup.yml with remediation disabled
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.remediate
+        tasks_from: pam_conf_cleanup.yml
+      vars:
+        linux_compliance_remediate_enabled: false
+
+    - name: Faillock and pwhistory direct use | Fail because pam_conf_cleanup.yml ran without the opt-in
+      ansible.builtin.fail:
+        msg: pam_conf_cleanup.yml ran without the opt-in.
+  rescue:
+    - name: Faillock and pwhistory direct use | Check that pam_conf_cleanup.yml refused to run before anything else
+      ansible.builtin.assert:
+        that:
+          - ansible_failed_task.name is search('Refuse')
+          - "'linux_compliance_remediate_enabled true' in ansible_failed_result.msg"
+          - "'No change was made to the host' in ansible_failed_result.msg"
+        fail_msg: "pam_conf_cleanup.yml: {{ ansible_failed_task.name }}: {{ ansible_failed_result.msg }}"
+        quiet: true

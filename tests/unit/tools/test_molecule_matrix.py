@@ -200,6 +200,7 @@ def test_the_docker_matrix_holds_every_topic_with_a_docker_cycle(tmp_path: Path)
         if platform in running[topic]["docker"]
         for mode in matrix.MODES
     ]
+    assert ("ubuntu", "pwhistory") not in {(leg["platform"], leg["topic"]) for leg in cycles}
     assert all(leg["topic"] for leg in docker)
 
 

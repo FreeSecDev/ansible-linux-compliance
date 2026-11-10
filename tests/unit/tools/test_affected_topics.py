@@ -219,7 +219,8 @@ def test_every_role_task_file_belongs_to_the_native_topic_of_its_name(trees: Tre
     """A task file belongs to the native family that names it, with the families whose names
     its name starts with (``auditd_conf.yml`` also to the ``auditd`` umbrella family); a helper
     that no native family names, such as the kernel module or audit rule helpers that several
-    topics share, belongs to the topics of the task files that include it."""
+    topics share, belongs to the topics of the task files that include it and to the families
+    its own name starts with (the ``pam_conf`` helpers also to the ``pam`` umbrella family)."""
     files = role_task_files()
     assert files
     families = native()
@@ -242,9 +243,11 @@ def test_every_role_task_file_belongs_to_the_native_topic_of_its_name(trees: Tre
                 and Path(relative).name in (REPOSITORY_ROOT / other).read_text(encoding="utf-8")
             ]
             assert includers, relative
-            expected = {topic for other in includers for topic in trees.context.classify(other)[0]}
+            expected = named | {
+                topic for other in includers for topic in trees.context.classify(other)[0]
+            }
         assert set(trees.context.classify(relative)[0]) == expected, relative
-    assert shared == 5
+    assert shared == 8
 
 
 def test_every_regression_file_belongs_to_the_topics_whose_groups_name_it(trees: Trees) -> None:

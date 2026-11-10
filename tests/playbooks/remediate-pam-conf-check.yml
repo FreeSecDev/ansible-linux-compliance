@@ -1,0 +1,133 @@
+---
+- name: Faillock and pwhistory in check mode | Both families report every rule once and change nothing
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    linux_compliance_remediate_enabled: true
+    linux_compliance_remediate_allow_disruptive:
+      - faillock
+      - pwhistory
+    pam_conf_prefix: xccdf_org.ssgproject.content_rule_
+    pam_conf_cases:
+      - name: Ubuntu 24.04 STIG
+        datastream: ubuntu2404
+        profile_id: xccdf_org.ssgproject.content_profile_stig
+        benchmark_id: xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04
+        families:
+          - faillock
+        short_ids:
+          - accounts_passwords_pam_faillock_audit
+          - accounts_passwords_pam_faillock_deny
+          - accounts_passwords_pam_faillock_interval
+          - accounts_passwords_pam_faillock_silent
+          - accounts_passwords_pam_faillock_unlock_time
+      - name: RHEL 9 CIS workstation level 2
+        datastream: rhel9
+        profile_id: xccdf_org.ssgproject.content_profile_cis_workstation_l2
+        benchmark_id: xccdf_org.ssgproject.content_benchmark_RHEL-9
+        families:
+          - pwhistory
+          - faillock
+        short_ids:
+          - accounts_password_pam_pwhistory_enforce_for_root
+          - accounts_password_pam_pwhistory_remember_password_auth
+          - accounts_password_pam_pwhistory_remember_system_auth
+          - accounts_passwords_pam_faillock_deny
+          - accounts_passwords_pam_faillock_even_deny_root_or_root_unlock_time
+          - accounts_passwords_pam_faillock_unlock_time
+    pam_conf_statuses:
+      - applied
+      - compliant
+      - notapplicable
+      - not_regular_file
+      - overridden
+      - unreadable_stack
+      - hidden_setting
+      - duplicate_setting
+      - stricter_setting
+      - unreadable_file
+      - unreadable_value
+      - unsupported_value
+      - changed_during_run
+    pam_conf_watched:
+      - /etc/security/faillock.conf
+      - /etc/security/pwhistory.conf
+  tasks:
+    - name: Refuse to run outside check mode
+      ansible.builtin.assert:
+        that:
+          - ansible_check_mode
+        fail_msg: This test playbook only runs with --check; it must never change the host.
+        quiet: true
+
+    - name: Run each profile in check mode and check its results
+      ansible.builtin.include_tasks:
+        file: tasks/pam_conf_profile_case.yml
+      loop: "{{ pam_conf_cases }}"
+      loop_control:
+        loop_var: pam_conf_case
+        label: "{{ pam_conf_case.name }}"
+
+- name: Faillock and pwhistory in check mode | A rule without its profile value fails before any change
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    linux_compliance_remediate_enabled: true
+    linux_compliance_remediate_allow_disruptive:
+      - pam
+    linux_compliance_discovered:
+      profile_id: xccdf_org.ssgproject.content_profile_cis_level1_server
+      benchmark_id: xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04
+      content_sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+      rule_ids:
+        - xccdf_org.ssgproject.content_rule_accounts_passwords_pam_faillock_deny
+  tasks:
+    - name: Refuse to run outside check mode
+      ansible.builtin.assert:
+        that:
+          - ansible_check_mode
+        fail_msg: This test playbook only runs with --check; it must never change the host.
+        quiet: true
+
+    - name: Run the remediate role and expect the value check to stop it
+      block:
+        - name: Run the remediate role
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.remediate
+
+        - name: Fail because a faillock rule without its profile value was not refused
+          ansible.builtin.fail:
+            msg: REMEDIATE-PAM-CONF-PROFILE-VALUE-NOT-REFUSED
+      rescue:
+        - name: Check that the role stopped at the value check, before it read a file
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name
+                == 'PAM configuration line | Refuse a malformed rule or a missing profile value before anything changes'
+              - >-
+                ansible_failed_result.results | map(attribute='msg') | join(' ')
+                is search('generated from the pinned content')
+            quiet: true
+
+- name: Faillock and pwhistory in check mode | The family files and helpers refuse direct use
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+  tasks:
+    - name: Refuse to run outside check mode
+      ansible.builtin.assert:
+        that:
+          - ansible_check_mode
+        fail_msg: This test playbook only runs with --check; it must never change the host.
+        quiet: true
+
+    - name: Include each file without the opt-in and check that its first task refuses it
+      ansible.builtin.include_tasks:
+        file: tasks/pam_conf_direct_use.yml
