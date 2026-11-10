@@ -618,6 +618,7 @@ def test_the_repository_mapping_is_valid_and_matches_the_registry() -> None:
         details = dict(mapping.native_rules[str(rule["rule_id"])])
         value = details.pop(gen.PROFILE_VALUE_KEY, None)
         pinned = details.pop(gen.PROFILE_VALUE_ID_KEY, None)
+        comparison = details.pop(gen.VALUE_COMPARISON_KEY, None)
         if pinned is not None:
             value = str(pinned).removeprefix(profile_values.VALUE_PREFIX)
         parameters = cast("dict[str, object]", rule["parameters"])
@@ -629,6 +630,7 @@ def test_the_repository_mapping_is_valid_and_matches_the_registry() -> None:
         }
         assert hand_written == details["parameters"]
         assert parameters.get("value_id") == value
+        assert parameters.get(gen.VALUE_COMPARISON_KEY) == comparison
         assert ("profile_values" in parameters) is (value is not None)
 
 

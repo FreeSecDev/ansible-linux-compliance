@@ -1,0 +1,13 @@
+---
+minor_changes:
+  - >-
+    module_utils - new ``values`` helper with the comparison functions of ADR 0032 (FREES-203): named comparators
+    that validate an operator's value as the family and its reader take it, judge whether a value is at least as
+    strict as the profile's, with the readers' special values (``deny = 0`` the loosest, ``unlock_time = 0`` the
+    strictest, pwquality 0 for off), and keep the stricter of two values, for the ``login_defs``, pwquality,
+    pwhistory and faillock settings. Nothing uses them yet, so remediation is unchanged.
+  - >-
+    catalogue - a native rule with a profile value may name its comparator in ``value_comparison``, which
+    ``make catalogue`` copies into the rule's parameters; it is refused without a profile value, for a banner rule,
+    for an unknown comparator and when a profile value is not a canonical value of the comparator. No rule names one
+    yet, so the generated catalogue is unchanged.

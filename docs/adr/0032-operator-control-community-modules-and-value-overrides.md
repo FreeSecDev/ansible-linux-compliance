@@ -228,3 +228,39 @@ process helper's refusals stay in force.
   - check mode reports the same statuses.
 - Forward-looking: the faillock bounds (at most 604800 for the times) and its values come from FREES-186 (#78). They
   join the override set when that family's comparison functions are in place.
+
+## Amendment of 2026-11-10: the comparison functions and the catalogue key (FREES-203)
+
+The comparison functions of §3 are `plugins/module_utils/compliance/values.py`. Each is a named comparator in
+`COMPARATORS` with three operations: `validate` turns an operator's value (a YAML integer that is not a boolean, or a
+string) into its canonical text or refuses it; `meets` says whether a canonical value is at least as strict as the
+profile's, reflexively and transitively; `stricter` picks the stricter of two values, which for a umask is the union
+of their bits. `judge(name, profile, effective)` and `stricter_of(name, target, readings)` apply them by name;
+`stricter_of` is the `login_defs` merge that keeps a stricter host value, ported from the Jinja of
+`login_defs_decide.yml`.
+
+A rule of the catalogue is overridable only when it names its comparator in a new key, `value_comparison`, next to
+`profile_value` or `profile_value_id`. `make catalogue` copies the name into the rule's parameters, and refuses it
+without a profile value, for a banner rule, for an unknown name and when a profile value is not a canonical value of
+the comparator. So the "family without a comparison" of §2 is decided per rule, from data, and a family is wired for
+overrides by editing only its own catalogue entries and task files.
+
+The first comparators cover the integer families: `login_defs` (`at_least`, `at_most`, `umask`), pwquality
+(`at_least`, `minlen`, `minclass`, `credit`, `max_or_off`, `flag`, `retry`), `pwhistory_remember` and faillock
+(`deny`, `interval`, `unlock_time`, the last also for `root_unlock_time`). Their bounds are those of the family
+validators and of what the readers read as written:
+
+- a umask is three octal digits given as a string; a YAML integer is refused, because YAML 1.1 reads `027` as 23;
+- integers are decimal without a sign, leading zero or `-0`, so `016` is never read as octal by one reader and as
+  decimal by another;
+- `minlen` starts at libpwquality's floor of 6 and `minclass` ends at its 4 classes, because the library reads other
+  values as those;
+- `maxrepeat`, `maxclassrepeat` and `maxsequence` treat 0 (off) as the loosest value, and `retry` starts at 1;
+- `deny = 0` (never lock) is judged the loosest value but refused as an override, as the faillock family refuses a
+  maximum of 0; `unlock_time = 0` (never unlock) is the strictest and is accepted; the faillock times end at 604800
+  and `deny` at 65535, which pam_faillock stores in 16 bits.
+
+No catalogue entry names a comparator yet, so nothing is overridable and behaviour is unchanged.
+`plugins/filter/pam_conf.py` keeps its own decision until the faillock and pwhistory family is wired; the unit tests
+pin the faillock and pwhistory comparators to that filter's decisions over a table of values, and the `login_defs`
+comparators to the family's Jinja.

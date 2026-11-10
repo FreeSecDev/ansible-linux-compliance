@@ -28,7 +28,11 @@ rule pattern tags every rule whose short identifier contains it, a group every r
 unless an exclusion with a reason lists the rule (:func:`derive_tags`). A rule of an
 ``untagged_families`` family that a tag finds without an exclusion, an entry that finds no rule
 and an exclusion that excludes nothing are errors, so the tags cannot drift from the content.
-``ledger_family_aliases`` are copied into the catalogue for the remediation plan. The tool
+``ledger_family_aliases`` are copied into the catalogue for the remediation plan. A native rule
+with a profile value may name a comparator of ``values.COMPARATORS`` in ``value_comparison``
+(ADR 0032 §3), which makes its value overridable; the generator copies it into the rule's
+parameters and refuses it without a profile value, for a banner rule, for an unknown name and
+when a profile value is not a canonical value of the comparator. The tool
 writes the catalogue and
 ``docs/control-families.md``; ``make catalogue`` then runs ``generate_toggles`` for the toggles.
 With ``--check`` nothing is written: a unified diff of every file that differs is printed and the
@@ -52,6 +56,7 @@ import yaml
 from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance import (
     catalog,
     toggles,
+    values,
 )
 from tools.content import fetch_content
 from tools.roles import generate_toggles, profile_values
@@ -92,8 +97,12 @@ NATIVE_KEYS: Final[frozenset[str]] = frozenset(
 )
 PROFILE_VALUE_KEY: Final[str] = "profile_value"
 PROFILE_VALUE_ID_KEY: Final[str] = "profile_value_id"
-OPTIONAL_NATIVE_KEYS: Final[frozenset[str]] = frozenset({PROFILE_VALUE_KEY, PROFILE_VALUE_ID_KEY})
-GENERATED_PARAMETERS: Final[tuple[str, ...]] = ("value_id", "profile_values")
+VALUE_COMPARISON_KEY: Final[str] = "value_comparison"
+OPTIONAL_NATIVE_KEYS: Final[frozenset[str]] = frozenset(
+    {PROFILE_VALUE_KEY, PROFILE_VALUE_ID_KEY, VALUE_COMPARISON_KEY}
+)
+GENERATED_PARAMETERS: Final[tuple[str, ...]] = ("value_id", "profile_values", VALUE_COMPARISON_KEY)
+UNCOMPARED_FAMILIES: Final[frozenset[str]] = frozenset({"banners"})
 VALUE_NAME: Final[re.Pattern[str]] = re.compile(r"[a-z0-9][a-z0-9_]{0,127}")
 VALUE_ID: Final[re.Pattern[str]] = re.compile(
     re.escape(profile_values.VALUE_PREFIX) + r"(?P<short>[a-z0-9][a-z0-9_]{0,127})"
@@ -266,25 +275,11 @@ def _native(raw: object, index: int) -> tuple[str, dict[str, object]]:
     if table is None or frozenset(table) - OPTIONAL_NATIVE_KEYS != NATIVE_KEYS:
         message = (
             f"{where} must be a mapping with exactly {sorted(NATIVE_KEYS)} "
-            f"and an optional {PROFILE_VALUE_KEY!r} or {PROFILE_VALUE_ID_KEY!r}"
+            f"and an optional {PROFILE_VALUE_KEY!r} or {PROFILE_VALUE_ID_KEY!r}, "
+            f"with an optional {VALUE_COMPARISON_KEY!r}"
         )
         raise _fail(message)
-    if PROFILE_VALUE_KEY in table and PROFILE_VALUE_ID_KEY in table:
-        message = f"{where} may set {PROFILE_VALUE_KEY!r} or {PROFILE_VALUE_ID_KEY!r}, not both"
-        raise _fail(message)
-    value = table.get(PROFILE_VALUE_KEY)
-    if PROFILE_VALUE_KEY in table and not (isinstance(value, str) and VALUE_NAME.fullmatch(value)):
-        message = f"{where}.{PROFILE_VALUE_KEY} must be the short identifier of an XCCDF value"
-        raise _fail(message)
-    pinned = table.get(PROFILE_VALUE_ID_KEY)
-    if PROFILE_VALUE_ID_KEY in table and not (
-        isinstance(pinned, str) and VALUE_ID.fullmatch(pinned)
-    ):
-        message = (
-            f"{where}.{PROFILE_VALUE_ID_KEY} must be the full identifier of an XCCDF value, "
-            f"starting with {profile_values.VALUE_PREFIX!r}"
-        )
-        raise _fail(message)
+    optional = _value_keys(where, table)
     parameters = toggles.as_mapping(table["parameters"])
     if parameters is None or set(parameters) & set(GENERATED_PARAMETERS):
         message = (
@@ -301,11 +296,47 @@ def _native(raw: object, index: int) -> tuple[str, dict[str, object]]:
         message = f"{where}.rule_id is not a ComplianceAsCode rule identifier"
         raise _fail(message)
     details = {key: table[key] for key in ("revert_strategy", "runbook", "parameters")}
-    if value is not None:
-        details[PROFILE_VALUE_KEY] = value
-    if pinned is not None:
-        details[PROFILE_VALUE_ID_KEY] = pinned
-    return str(rule_id), details
+    return str(rule_id), details | optional
+
+
+def _value_keys(where: str, table: Mapping[str, object]) -> dict[str, object]:
+    """Return the valid profile value keys of a native rule and its value comparison."""
+    if PROFILE_VALUE_KEY in table and PROFILE_VALUE_ID_KEY in table:
+        message = f"{where} may set {PROFILE_VALUE_KEY!r} or {PROFILE_VALUE_ID_KEY!r}, not both"
+        raise _fail(message)
+    value = table.get(PROFILE_VALUE_KEY)
+    if PROFILE_VALUE_KEY in table and not (isinstance(value, str) and VALUE_NAME.fullmatch(value)):
+        message = f"{where}.{PROFILE_VALUE_KEY} must be the short identifier of an XCCDF value"
+        raise _fail(message)
+    pinned = table.get(PROFILE_VALUE_ID_KEY)
+    if PROFILE_VALUE_ID_KEY in table and not (
+        isinstance(pinned, str) and VALUE_ID.fullmatch(pinned)
+    ):
+        message = (
+            f"{where}.{PROFILE_VALUE_ID_KEY} must be the full identifier of an XCCDF value, "
+            f"starting with {profile_values.VALUE_PREFIX!r}"
+        )
+        raise _fail(message)
+    comparison = table.get(VALUE_COMPARISON_KEY)
+    if VALUE_COMPARISON_KEY in table:
+        _check_comparison(where, comparison, valued=value is not None or pinned is not None)
+    return {key: table[key] for key in sorted(OPTIONAL_NATIVE_KEYS) if key in table}
+
+
+def _check_comparison(where: str, comparison: object, *, valued: bool) -> None:
+    """Refuse a ``value_comparison`` without a profile value or with an unknown name."""
+    if not valued:
+        message = (
+            f"{where}.{VALUE_COMPARISON_KEY} needs {PROFILE_VALUE_KEY!r} or "
+            f"{PROFILE_VALUE_ID_KEY!r}: it compares the profile's value"
+        )
+        raise _fail(message)
+    if not isinstance(comparison, str) or comparison not in values.COMPARATORS:
+        message = (
+            f"{where}.{VALUE_COMPARISON_KEY} must name a comparator of "
+            f"{sorted(values.COMPARATORS)}, got {comparison!r}"
+        )
+        raise _fail(message)
 
 
 def _check_prefixes(families: Sequence[Family]) -> None:
@@ -667,7 +698,10 @@ def native_parameters(
     that value (:func:`profile_values.resolve`). ``profile_value`` names a value that the rule's
     checks export. ``profile_value_id`` pins the full identifier of a value that the checks do
     not export, because they accept a range; the value still comes only from each profile's
-    ``refine-value`` and the value's options (ADR 0025).
+    ``refine-value`` and the value's options (ADR 0025). A rule that also names a
+    ``value_comparison`` (ADR 0032) gets it in its parameters, and every profile value must be
+    a canonical value of that comparator, so the comparison of an override cannot misread the
+    profile's value.
     """
     parameters = dict(cast("Mapping[str, object]", native["parameters"]))
     pinned = native.get(PROFILE_VALUE_ID_KEY)
@@ -690,7 +724,31 @@ def native_parameters(
         raise _fail(str(error)) from error
     parameters["value_id"] = value
     parameters["profile_values"] = resolved
+    comparison = native.get(VALUE_COMPARISON_KEY)
+    if comparison is not None:
+        _check_profile_values(rule_id, str(comparison), resolved)
+        parameters[VALUE_COMPARISON_KEY] = comparison
     return parameters
+
+
+def _check_profile_values(
+    rule_id: str, comparison: str, resolved: Sequence[Mapping[str, object]]
+) -> None:
+    """Refuse a comparison that does not take every profile value of the rule as it is."""
+    found = values.comparator(comparison)
+    for entry in resolved:
+        text = "".join(cast("Sequence[str]", entry["value"]))
+        try:
+            canonical = found.validate(text)
+        except values.ValueOverrideError as error:
+            message = f"{rule_id}: the comparison {comparison} refuses a profile value: {error}"
+            raise _fail(message) from error
+        if canonical != text:
+            message = (
+                f"{rule_id}: the comparison {comparison} reads the profile value {text!r} "
+                f"as {canonical!r}"
+            )
+            raise _fail(message)
 
 
 def catalogue_entry(
@@ -698,6 +756,12 @@ def catalogue_entry(
 ) -> dict[str, object]:
     """Return the full catalogue entry of a rule in ``family``, native or ``audit_only``."""
     native = source.native_rules.get(rule_id)
+    if native is not None and VALUE_COMPARISON_KEY in native and family.name in UNCOMPARED_FAMILIES:
+        message = (
+            f"{rule_id}: the values of the {family.name} family are not compared and cannot be "
+            f"overridden, so it takes no {VALUE_COMPARISON_KEY!r} (ADR 0032)"
+        )
+        raise _fail(message)
     strategy = toggles.AUDIT_ONLY if native is None else str(native["revert_strategy"])
     return {
         "rule_id": rule_id,
