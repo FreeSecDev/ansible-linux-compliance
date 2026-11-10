@@ -248,6 +248,21 @@ a baseline of the host's own release.
 - XCCDF and ARF files named `*.off-platform.xml`, and files next to a marked or unreadable `scan-run.json` (in the
   same directory or the one above), are refused as input errors: they carry no marker.
 
+## Operator deviations
+
+Findings model schema 1.3 (FREES-203,
+[ADR 0013 amendment](adr/0013-normalized-findings-model.md#amendment-2026-11-10-operator-deviations-and-schema-13-frees-203))
+carries operator deviations: a finding flagged `operator_deviation`, whose value in force is looser than the profile
+value because of an operator override ([ADR 0032](adr/0032-operator-control-community-modules-and-value-overrides.md)).
+Such a finding must never count as a pass, and report schema 2.3 has neither a count nor a field for it. Until the
+report reads the flag, a scan run of schema 1.3 is an input error, never a pass:
+
+- a `--scan-run` file, an `--exceptions-evaluation` and an evidence bundle whose run is 1.3 become an item with status
+  `error` and a gap whose reason names the findings schema;
+- the run enters no rule list, group, aggregate or summary.
+
+Runs of schema 1.0 to 1.2 are read as before. No writer of the collection emits schema 1.3 yet.
+
 ## Host coverage
 
 `sections.compliance.host_coverage` (schema 2.1, FREES-142) says whether the report accounts for every target host.
@@ -362,7 +377,7 @@ Common behaviour of every parser:
 |---|---|---|
 | XCCDF 1.2 results | `parsers/xccdf.py` | Reuses `openscap.parse_results` of the findings model (more than 100000 selected rule results is an error): result mapping through `map_xccdf_result`, unknown values become `error`, exactly one TestResult. `notselected` results are counted in `not_selected`, not in the findings. `host` is `null`; `reported_host` is the self-asserted `target` or fqdn fact; a `target` and fqdn fact that name different hosts make the file an error. |
 | ARF 1.1 | `parsers/xccdf.py` | Bounds and parses with defusedxml, then requires exactly one embedded XCCDF 1.2 TestResult and hands it to the same parser. The asset fqdn and hostname must agree with the target and fact names. Other report contents are ignored. |
-| ScanRun JSON | `parsers/scanrun.py` | `model.loads`; the validated run is embedded unchanged and `findings` is empty in the item to avoid duplication. |
+| ScanRun JSON | `parsers/scanrun.py` | `model.loads`; the validated run is embedded unchanged and `findings` is empty in the item to avoid duplication. A run of findings model schema 1.3 is an error ([operator deviations](#operator-deviations)). |
 | JUnit XML | `parsers/junit.py` | Roots `testsuite` or `testsuites`. Totals come from `testcase` elements. The `tests`, `failures` and `errors` attributes of a `testsuite`, if present, must match its own test cases, otherwise the file is an error. `error` outranks `failure`; no test cases is an error. Durations are not read. |
 | Cobertura | `parsers/cobertura.py` | Root `coverage`; `line-rate` and `branch-rate` must be numbers from 0 to 1 (also per package). Counts are optional, and `lines-covered` or `branches-covered` above its `-valid` count is an error. Per-class and per-line data are ignored. |
 | pytest JSON | `parsers/pytest_json.py` | pytest-json-report layout. `exitcode` is required: 2, 3, 4 and 5 (interrupted, internal error, usage error, no tests) are errors, 0 must agree with zero failures and 1 with at least one. `summary.total` must equal the sum of the outcome counts. `xpassed` counts as failed, `xfailed` as skipped. |

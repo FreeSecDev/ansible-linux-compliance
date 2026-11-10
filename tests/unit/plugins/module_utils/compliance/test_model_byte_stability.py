@@ -95,7 +95,7 @@ def waived(finding: model.Finding) -> model.Finding:
 
 def remediated(finding: model.Finding) -> model.Finding:
     result = model.RemediationResult(
-        finding.rule_id, model.RemediationStatus.APPLIED, True, "drop-in written"
+        finding.rule_id, model.RemediationStatus.APPLIED, changed=True, message="drop-in written"
     )
     return replace(finding, remediation=result)
 

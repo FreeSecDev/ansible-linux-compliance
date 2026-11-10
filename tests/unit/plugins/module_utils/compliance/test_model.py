@@ -4,12 +4,17 @@ import ast
 import copy
 import dataclasses
 import json
+from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import pytest
 
-from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance import model
+from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance import (
+    deviations,
+    model,
+    vocabulary,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -698,7 +703,12 @@ def test_unchanged_remediation_statuses_cannot_report_changes(
 
 
 @pytest.mark.parametrize(
-    "status", [item for item in model.RemediationStatus if item not in UNCHANGED_STATUSES]
+    "status",
+    [
+        item
+        for item in model.RemediationStatus
+        if item not in UNCHANGED_STATUSES and item is not model.RemediationStatus.DEVIATION
+    ],
 )
 def test_other_remediation_statuses_may_report_changes(status: model.RemediationStatus) -> None:
     assert remediation(status=status, changed=True).changed is True
@@ -968,7 +978,7 @@ def test_serialized_keys_are_sorted_at_every_level() -> None:
 
 def test_loads_rejects_unsupported_schema_versions() -> None:
     data = scan_run().to_dict()
-    for bad in ("2.0", "1", "1.3", "", "1.0 ", "1.1 ", "1.2 "):
+    for bad in ("2.0", "1", "1.4", "", "1.0 ", "1.1 ", "1.2 ", "1.3 "):
         with pytest.raises(model.ModelError, match="unsupported schema_version"):
             model.ScanRun.from_dict({**data, "schema_version": bad})
     with pytest.raises(model.ModelError, match="must be a string"):
@@ -1032,7 +1042,22 @@ def test_model_error_is_a_value_error() -> None:
     assert issubclass(model.ModelError, ValueError)
 
 
+def test_the_model_reexports_its_vocabulary() -> None:
+    names = [
+        name
+        for name, value in vars(vocabulary).items()
+        if isinstance(value, type) and issubclass(value, Enum) and value is not Enum
+    ]
+    assert len(names) == 11
+    assert all(getattr(model, name) is getattr(vocabulary, name) for name in names)
+    assert model.Deviation is deviations.Deviation
+    assert model.ValueSource is deviations.ValueSource
+
+
 PLACEMENT_PATH = MODEL_PATH.with_name("placement.py")
+DEVIATIONS_PATH = MODEL_PATH.with_name("deviations.py")
+VOCABULARY_PATH = MODEL_PATH.with_name("vocabulary.py")
+SIBLING_PATHS = (PLACEMENT_PATH, DEVIATIONS_PATH, VOCABULARY_PATH)
 SIBLING_PACKAGE = "ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance"
 
 
@@ -1052,17 +1077,18 @@ def _imports(path: Path) -> tuple[set[str], list[tuple[str, tuple[str, ...]]]]:
     return imported, siblings
 
 
-def test_model_uses_only_the_standard_library_and_its_placement_module() -> None:
+def test_model_uses_only_the_standard_library_and_its_sibling_modules() -> None:
     imported, siblings = _imports(MODEL_PATH)
     assert imported
     assert imported <= STANDARD_LIBRARY_IMPORTS
-    assert siblings == [(SIBLING_PACKAGE, ("placement",))]
-    placement_imports, placement_siblings = _imports(PLACEMENT_PATH)
-    assert placement_imports <= STANDARD_LIBRARY_IMPORTS
-    assert placement_siblings == []
+    assert siblings == [(SIBLING_PACKAGE, ("deviations", "placement", "vocabulary"))]
+    for path in SIBLING_PATHS:
+        sibling_imports, sibling_siblings = _imports(path)
+        assert sibling_imports <= STANDARD_LIBRARY_IMPORTS
+        assert sibling_siblings == []
 
 
-@pytest.mark.parametrize("path", [MODEL_PATH, PLACEMENT_PATH])
+@pytest.mark.parametrize("path", [MODEL_PATH, *SIBLING_PATHS])
 def test_model_parses_with_the_oldest_managed_node_python_grammar(path: Path) -> None:
     source = path.read_text(encoding="utf-8")
     ast.parse(source, feature_version=(3, 9))
@@ -1071,7 +1097,7 @@ def test_model_parses_with_the_oldest_managed_node_python_grammar(path: Path) ->
     assert "kw_only" not in source
 
 
-@pytest.mark.parametrize("path", [MODEL_PATH, PLACEMENT_PATH])
+@pytest.mark.parametrize("path", [MODEL_PATH, *SIBLING_PATHS])
 def test_model_contains_no_comments(path: Path) -> None:
     lines = path.read_text(encoding="utf-8").splitlines()
     assert not [line for line in lines if line.lstrip().startswith("#")]

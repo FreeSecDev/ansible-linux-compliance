@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from typing import cast
@@ -348,3 +349,46 @@ def test_scan_summary_of_a_run_without_findings() -> None:
 def test_scan_summary_rejects_invalid_scan_runs(value: object, message: str) -> None:
     with pytest.raises(exceptions.ExceptionsError, match=message):
         scan_summary.scan_summary(value)
+
+
+DEVIATION = model.Deviation("var_password_pam_minlen", "14", "12")
+
+
+def deviated_run() -> model.ScanRun:
+    run = scan_run()
+    flagged = tuple(
+        replace(item, flags=(model.ResultFlag.OPERATOR_DEVIATION,), deviation=DEVIATION)
+        if item.rule_id == RULE
+        else item
+        for item in run.findings
+    )
+    return replace(run, findings=flagged)
+
+
+@pytest.mark.parametrize("form", ["mapping", "json"])
+def test_apply_exceptions_keeps_the_deviation_when_it_waives_a_failure(form: str) -> None:
+    run = deviated_run()
+    value: object = run.to_dict() if form == "mapping" else model.dumps(run)
+    result = apply_exceptions.apply_exceptions(value, exceptions_text(), "web01", ["web"])
+    assert outcomes(result) == {RULE: "waived", OTHER_RULE: "fail"}
+    document = cast("dict[str, object]", result["scan_run"])
+    assert document["schema_version"] == model.DEVIATION_SCHEMA_VERSION
+    waived = model.ScanRun.from_dict(document).findings
+    by_rule = {item.rule_id: item for item in waived}
+    assert by_rule[RULE].flags == (model.ResultFlag.OPERATOR_DEVIATION,)
+    assert by_rule[RULE].deviation == DEVIATION
+    assert by_rule[RULE].evaluated_outcome is model.Outcome.FAIL
+    assert by_rule[OTHER_RULE].deviation is None
+    assert exceptions.verify_evaluation(result, exceptions_text()).to_dict() == result
+
+
+def test_an_evaluation_without_deviations_keeps_its_bytes() -> None:
+    run = scan_run()
+    result = apply_exceptions.apply_exceptions(run.to_dict(), exceptions_text(), "web01", [])
+    document = cast("dict[str, object]", result["scan_run"])
+    assert document["schema_version"] == model.SCHEMA_VERSION
+    waived = model.ScanRun.from_dict(document)
+    assert model.dumps(waived) == json.dumps(
+        document, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+    )
+    assert "deviation" not in json.dumps(result)
