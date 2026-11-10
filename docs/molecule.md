@@ -834,9 +834,14 @@ drop-ins are read first) and cleaned up byte for byte; then a PAM file that pass
 `enforce_for_root` `unreadable_file`, with nothing written; then a service file that only the vendor directory
 `/usr/share/pam.d` holds (FREES-211; the directory is created for the test on Ubuntu, which does not ship it, and
 removed again), with `pam_pwquality.so minlen=8 enforcing=0`, makes `minlen` `overridden` by the argument and
-`enforce_for_root` by `enforcing=0`, with nothing written. The test declares `/usr/share/pam.d` as rewritten, so the
-whole-instance comparison leaves out the times of that directory and of `/usr/share`. It ends with the whole-instance
-comparison.
+`enforce_for_root` by `enforcing=0`, with nothing written. Then (FREES-213) the same arguments in
+`/etc/pam.d/freesecdev-readers-linked`, a relative symbolic link into `/etc/security` as authselect links
+`system-auth`, refuse both rules with the link named; the vendor directory made a link to a directory that holds such a
+file refuses both rules with the file below `/usr/share/pam.d` named (the empty directory of Rocky Linux is put back
+with its mode); and a link to nothing next to a link to `/dev/null` and a link to itself refuses both rules with all
+three named; and the vendor directory made a link to itself refuses both rules with `/usr/share/pam.d` named; nothing
+is written in any of them. The test declares `/usr/share/pam.d` as rewritten, so the whole-instance comparison leaves out
+the times and the inode of that directory and the times of `/usr/share`. It ends with the whole-instance comparison.
 
 The auditd topics ([ADR 0030](adr/0030-native-auditd-settings-and-audit-rules.md), FREES-110) select their rules
 with `profiles`: `auditd_conf` runs with `cis_level2_server` on Ubuntu and `stig` on Rocky Linux, `auditd_rules_time`
@@ -940,7 +945,10 @@ on the `pam_faillock` preauth line `deny` is `overridden` with that file named a
 `conf=` on that line both rules are `overridden`; and a service file of its own, `/etc/pam.d/fsd-regression-faillock`,
 with an upper-case `AUTH` type and `deny=3` on a continued line, and one with `auth [default=die]pam_faillock.so
 deny=3`, make `deny` `overridden` with that file named; an include of `/etc/security/fsd-site-auth`, which the
-collection does not read, makes both rules `unreadable_stack` (the order of `/etc/pam.d`, `/usr/lib/pam.d` and
+collection does not read, makes both rules `unreadable_stack`; `deny=3` in a service file that is a symbolic link to
+a file in `/etc/security`, as authselect links them (FREES-213), makes `deny` `overridden` with the link named, and a
+service file that is a link to nothing, and one that is a link to itself, make both rules `unreadable_stack` with the
+link named (the order of `/etc/pam.d`, `/usr/lib/pam.d` and
 `/usr/share/pam.d` is unit-tested only, because the whole-instance record keeps the times of `/usr`, which a file
 written there changes for good); no
 scan runs, because both contents put the faillock rules below a group limited to `system_with_kernel`, so a container
@@ -1038,6 +1046,13 @@ a half times its longest 6.6 minutes. Neither has a condition or `needs`, and on
 `molecule-libvirt` read the plan of `molecule-plan`, so every event that ran `test-playbooks` runs both;
 `ci-gate` needs both. When `test-playbooks-remediate` nears its limit, its playbooks can be split across jobs the same
 way.
+
+The timeout of `test-playbooks-remediate` is 20 minutes since FREES-213. Over the ten latest runs on `main` before it
+(4e50d0a to e5006f2) the job took 8.9 to 14.5 minutes, and the first run of FREES-213 was cancelled at 15 with every
+playbook about 30 percent slower than on `main`, also the ones that do not touch PAM (the disruptive play took 19
+seconds instead of 14), so the runner was slower; on the same worker the playbooks took no longer on the branch than on
+`main`. One and a half times 14.5 minutes is above the 20 minutes that `tests/unit/tools/test_ci_test_jobs.py` allows a
+test job, so the job gets those 20; the next step when it nears them is the split above.
 
 With `sudo` (FREES-175) the regressions moved out of the cycle legs: `make molecule-matrix` adds one leg per regression
 group that a declaration lists and platform it runs on, with the mode `regressions-<group>`, after the two toggle
