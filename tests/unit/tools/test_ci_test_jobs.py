@@ -5,8 +5,10 @@ keeps both 100% gates on the combined data. ``test-suites`` runs the audit-excep
 content and browser tests alongside it. The check-mode playbooks of the former ``test-playbooks``
 job run in ``test-playbooks-remediate`` (``make test-remediate-check``) and
 ``test-playbooks-evidence`` (evidence, role guards and verify). Every one of these jobs runs on
-every event without a condition, only the Molecule legs read the plan of ``molecule-plan``, so no
-plan can skip them, and ``ci-gate`` needs every job of the workflow.
+every event without a condition, on the job or on any of its steps, only the Molecule legs read the
+plan of ``molecule-plan``, so no plan can skip them, and ``ci-gate`` needs every job of the
+workflow. A job reads the plan exactly when it ``needs`` ``molecule-plan``: GitHub Actions gives a
+job the outputs of the jobs it needs only (FREES-206).
 """
 
 from __future__ import annotations
@@ -46,9 +48,17 @@ def jobs() -> dict[str, dict[str, object]]:
     return cast("dict[str, dict[str, object]]", workflow["jobs"])
 
 
+def steps_of(job: dict[str, object]) -> list[dict[str, object]]:
+    return cast("list[dict[str, object]]", job["steps"])
+
+
 def commands(job: dict[str, object]) -> list[str]:
-    steps = cast("list[dict[str, object]]", job["steps"])
-    return [cast("str", step["run"]).strip() for step in steps if "run" in step]
+    return [cast("str", step["run"]).strip() for step in steps_of(job) if "run" in step]
+
+
+def needs_of(job: dict[str, object]) -> list[str]:
+    needs = job.get("needs", [])
+    return [needs] if isinstance(needs, str) else cast("list[str]", needs)
 
 
 def recipe(target: str) -> list[str]:
@@ -68,6 +78,8 @@ def test_each_test_job_runs_its_targets_on_every_event(name: str) -> None:
     assert commands(job) == EXPECTED_COMMANDS[name]
     assert "if" not in job
     assert "needs" not in job
+    assert [step for step in steps_of(job) if "if" in step] == []
+    assert [step for step in steps_of(job) if "continue-on-error" in step] == []
     assert job["permissions"] == {"contents": "read"}
     timeout = job["timeout-minutes"]
     assert isinstance(timeout, int)
@@ -104,8 +116,20 @@ def test_only_the_molecule_legs_depend_on_the_plan() -> None:
     readers = {
         name
         for name, job in workflow_jobs.items()
-        if name not in {"molecule-plan", "ci-gate"} and "molecule-plan" in yaml.safe_dump(job)
+        if name != "ci-gate" and "molecule-plan" in needs_of(job)
     }
     assert readers == PLANNED_JOBS
     for name in EXPECTED_COMMANDS:
-        assert "molecule-plan" not in yaml.safe_dump(workflow_jobs[name])
+        assert needs_of(workflow_jobs[name]) == []
+        assert "needs." not in yaml.safe_dump(workflow_jobs[name])
+
+
+@pytest.mark.parametrize(
+    ("needs", "expected"),
+    [(None, []), ("molecule-plan", ["molecule-plan"]), (["lint", "test"], ["lint", "test"])],
+)
+def test_the_needs_of_a_job_are_read_in_both_forms(
+    needs: str | list[str] | None, expected: list[str]
+) -> None:
+    job: dict[str, object] = {} if needs is None else {"needs": needs}
+    assert needs_of(job) == expected

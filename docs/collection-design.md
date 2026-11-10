@@ -76,8 +76,9 @@ FQCN, for example `freesecdev.linux_compliance.audit`. The target comes from the
 
 `requires_ansible` is `>=2.20.0`. The ansible-core support matrix lists 2.20 with managed-node Python 3.9 to 3.14, so
 code in `plugins/modules` and `plugins/module_utils` must run on Python 3.9 and use only the standard library
-([ADR 0013](adr/0013-normalized-findings-model.md)). The developer environment pins ansible-core 2.21.5, the latest
-release that is at least seven days old, which is used by `ansible-lint`, `ansible-test` and `ansible-galaxy`.
+([ADR 0013](adr/0013-normalized-findings-model.md)). The developer environment pins ansible-core to one exact version,
+the latest release that is at least seven days old when the pin changes, in the `dev` dependency group of
+[`pyproject.toml`](../pyproject.toml) and in `uv.lock`; `ansible-lint`, `ansible-test` and `ansible-galaxy` use it.
 
 ## The temporary collection tree
 

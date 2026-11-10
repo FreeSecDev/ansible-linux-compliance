@@ -171,8 +171,11 @@ would not be.
 The family registry is in `roles/remediate/vars/rules.yml`, generated from `content/catalogue.yml`. Its order is the
 dispatch order: non-disruptive families first, so that a failure in a disruptive family leaves the harmless changes
 applied, then the families in order of growing lock-out risk, with the bootloader last because it takes effect only on
-the next boot. The [control family reference](control-families.md) lists all 21 families with the reason for each
-disruptive flag and their rules per profile.
+the next boot. The [control family reference](control-families.md) lists all 58 families with the reason for each
+disruptive flag and their rules per profile. The table names the 21 top-level topics, in registry order: the families
+that no umbrella groups and the umbrellas, with the flag of the families that each umbrella groups.
+`tests/unit/tools/test_docs_counts.py` fails when the table or the counts on this page differ from the registry
+(FREES-206).
 
 | Disruptive | Families |
 |---|---|

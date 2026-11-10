@@ -68,6 +68,7 @@ import yaml
 from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance import (
     toggles,
 )
+from tools import yaml_loader
 from tools.roles import generate_toggles
 
 if TYPE_CHECKING:
@@ -190,7 +191,7 @@ LINE: Final[re.Pattern[str]] = re.compile(r"-[A-Za-z0-9 ,=!<>/._+-]{1,511}")
 
 def _load(path: Path) -> object:
     try:
-        return cast("object", yaml.load(path.read_text(encoding="utf-8"), Loader=yaml.CSafeLoader))
+        return yaml_loader.safe_load(path.read_text(encoding="utf-8"))
     except (OSError, yaml.YAMLError) as error:
         message = f"{path}: cannot be read as YAML: {error}"
         raise GenerationError(message) from error
