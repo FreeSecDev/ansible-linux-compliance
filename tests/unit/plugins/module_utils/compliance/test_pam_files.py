@@ -214,7 +214,7 @@ def test_an_unreadable_pam_entry_refuses_a_pwquality_rule_before_anything_else()
 
 def test_an_unreadable_pam_entry_refuses_a_faillock_rule_as_an_unreadable_stack() -> None:
     stack = {"/etc/pam.d/login": "auth required pam_unix.so\n"}
-    assert pam_conf.pam_conf_decision("deny = 4\n", DENY, stack)["status"] == "compliant"
+    assert pam_conf.pam_conf_decision("deny = 4\n", DENY, stack, ())["status"] == "compliant"
     decision = pam_conf.pam_conf_decision("deny = 4\n", DENY, stack, [BROKEN])
     assert decision["status"] == "unreadable_stack"
     assert decision["new_text"] is None

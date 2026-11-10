@@ -64,10 +64,12 @@ options:
         and C(kind), as the C(pam_service_files) filter returns them: a symbolic link that
         resolves to nothing or to something that is neither a regular file nor a directory, for
         example. Any of them makes the rule C(unreadable_stack), because libpam may open it and
-        the collection cannot tell what it would read there (FREES-213).
+        the collection cannot tell what it would read there (FREES-213). It has no default, so that
+        a caller cannot leave the unreadable entries out by mistake; pass an empty list when there
+        are none.
     type: list
     elements: dict
-    default: []
+    required: true
 """
 
 EXAMPLES = r"""
@@ -76,7 +78,7 @@ EXAMPLES = r"""
     decision: >-
       {{ text | freesecdev.linux_compliance.pam_conf_decision({'reader': 'faillock',
          'setting': 'deny', 'comparison': 'at_most', 'required': '4', 'stack_checked': true},
-         stack) }}
+         stack, unreadable) }}
 """
 
 RETURN = r"""
@@ -655,7 +657,7 @@ def _stack(stack: dict[object, object], unreadable: object) -> tuple[dict[str, s
 
 
 def pam_conf_decision(
-    text: object, rule: object, stack: object, unreadable: object = ()
+    text: object, rule: object, stack: object, unreadable: object
 ) -> dict[str, object]:
     """Return the decision for one rule; see the documentation of the filter."""
     if not isinstance(text, str) or not isinstance(stack, dict):

@@ -92,7 +92,7 @@ def test_libpam_reads_a_service_name_from_the_first_directory_that_has_it() -> N
         "/usr/share/pam.d/other",
     ]
     assert problems == []
-    decision = pam_conf.pam_conf_decision("deny = 3\n", DENY, stack)
+    decision = pam_conf.pam_conf_decision("deny = 3\n", DENY, stack, ())
     assert decision["status"] == "overridden"
     assert "/usr/lib/pam.d/systemd-user" in str(decision["reason"])
     assert "/usr/lib/pam.d/login" not in str(decision["reason"])
@@ -109,9 +109,9 @@ def test_an_include_of_a_path_is_followed_to_a_file_read_or_refused() -> None:
     assert "/usr/lib/pam.d/login" in effective
     assert "/usr/lib/pam.d/site/auth" in effective
     assert problems == []
-    assert pam_conf.pam_conf_decision("deny = 3\n", DENY, stack)["status"] == "overridden"
+    assert pam_conf.pam_conf_decision("deny = 3\n", DENY, stack, ())["status"] == "overridden"
     stack["/etc/pam.d/common-auth"] = "auth include /etc/security/site-auth\n"
-    decision = pam_conf.pam_conf_decision("deny = 3\n", DENY, stack)
+    decision = pam_conf.pam_conf_decision("deny = 3\n", DENY, stack, ())
     assert decision["status"] == "unreadable_stack"
     assert "/etc/security/site-auth" in str(decision["reason"])
 
@@ -125,7 +125,7 @@ def test_a_service_file_that_the_readers_split_or_stop_on_is_refused(text: str) 
     effective, problems = pam_conf.effective_stack(stack)
     assert "/opt/elsewhere" in effective
     assert len(problems) == 1
-    assert pam_conf.pam_conf_decision("deny = 3\n", DENY, stack)["status"] == "unreadable_stack"
+    assert pam_conf.pam_conf_decision("deny = 3\n", DENY, stack, ())["status"] == "unreadable_stack"
 
 
 @pytest.mark.parametrize(
@@ -145,11 +145,11 @@ def test_the_written_text_changes_one_line_and_keeps_every_other_byte(
 
 
 def test_an_applied_decision_carries_the_exact_new_text_and_a_compliant_one_none() -> None:
-    applied = pam_conf.pam_conf_decision("# faillock\r\ndeny = 10\r\naudit\r\n", DENY, {})
+    applied = pam_conf.pam_conf_decision("# faillock\r\ndeny = 10\r\naudit\r\n", DENY, {}, ())
     assert applied["status"] == "applied"
     assert applied["setting_line"] == "deny = 10\r"
     assert applied["new_text"] == "# faillock\r\ndeny = 4\naudit\r\n"
-    compliant = pam_conf.pam_conf_decision("# faillock\r\naudit\r\n", AUDIT, {})
+    compliant = pam_conf.pam_conf_decision("# faillock\r\naudit\r\n", AUDIT, {}, ())
     assert compliant["status"] == "compliant"
     assert compliant["new_text"] is None
 
@@ -168,11 +168,11 @@ def test_an_applied_decision_carries_the_exact_new_text_and_a_compliant_one_none
 def test_values_and_files_that_cannot_be_written_back_exactly_are_refused(
     text: str, status: str
 ) -> None:
-    assert pam_conf.pam_conf_decision(text, DENY, {})["status"] == status
+    assert pam_conf.pam_conf_decision(text, DENY, {}, ())["status"] == status
 
 
 def test_a_profile_deny_above_16_bits_is_never_written() -> None:
-    decision = pam_conf.pam_conf_decision("", {**DENY, "required": "65536"}, {})
+    decision = pam_conf.pam_conf_decision("", {**DENY, "required": "65536"}, {}, ())
     assert decision["status"] == "unsupported_value"
 
 

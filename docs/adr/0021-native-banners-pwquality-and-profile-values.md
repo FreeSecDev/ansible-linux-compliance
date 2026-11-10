@@ -377,8 +377,7 @@ The source of `libpam/pam_handlers.c` in both Molecule images, fetched the way `
   pwhistory families of ADR 0027.
 - An include of a target with a `/` still refuses every rule; the reason is the lookup above: `../security/x` and
   `site/x` open a file outside the three directories or below one of them, which the collection does not read. A bare
-  name is looked up in the three directories, and every regular file of them is read (and, since FREES-213 below,
-  every symbolic link there that resolves to one).
+  name is looked up in the three directories, and every file of them is read.
 - The regression group `readers` adds a service file that only `/usr/share/pam.d` holds, with
   `pam_pwquality.so minlen=8 enforcing=0`, on both platforms (the directory is created for the test on Ubuntu and
   removed again): `minlen` is `overridden` by the argument and `enforce_for_root` by `enforcing=0`, with nothing
