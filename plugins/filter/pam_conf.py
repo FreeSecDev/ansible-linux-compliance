@@ -61,14 +61,14 @@ options:
   unreadable:
     description:
       - The entries of the PAM service directories that the collection cannot read, with C(path)
-        and C(kind), as the C(pam_service_files) filter returns them: a symbolic link that
-        resolves to nothing or to something that is neither a regular file nor a directory, for
-        example. Any of them makes the rule C(unreadable_stack), because libpam may open it and
+        and C(kind), as the C(pam_service_files) filter returns them, for example a symbolic
+        link that resolves to nothing or to something that is neither a regular file nor a
+        directory. Any of them makes the rule C(unreadable_stack), because libpam may open it and
         the collection cannot tell what it would read there (FREES-213). C(unsupported_value) is
-        decided before it: a profile value that C(pam_faillock) ignores or cannot store refuses
-        the rule as C(unsupported_value) whatever the entries are. It has no default, so that
-        a caller cannot leave the unreadable entries out by mistake; pass an empty list when there
-        are none.
+        decided before it, so a profile value that C(pam_faillock) ignores or cannot store
+        refuses the rule as C(unsupported_value) whatever the entries are. It has no default, so
+        that a caller cannot leave the unreadable entries out by mistake; pass an empty list when
+        there are none.
     type: list
     elements: dict
     required: true

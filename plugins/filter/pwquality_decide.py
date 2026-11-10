@@ -60,8 +60,8 @@ options:
         file, read through the link under its name in the PAM directory (FREES-213). A PAM
         directory that is itself a symbolic link to a directory is read through the link.
       - An entry with C(path) and C(kind) instead of C(content) is one that the collection
-        cannot read, as the C(pam_service_files) filter returns it: a link that resolves to
-        nothing or to something that is neither a regular file nor a directory, for example.
+        cannot read, as the C(pam_service_files) filter returns it, for example a link that
+        resolves to nothing or to something that is neither a regular file nor a directory.
         Any such entry makes the rule C(overridden) before anything else is decided, because
         libpam may open it and a C(pam_pwquality) argument there could override the file
         (FREES-213).

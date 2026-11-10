@@ -1044,6 +1044,13 @@ a half times its longest 6.6 minutes. Neither has a condition or `needs`, and on
 `ci-gate` needs both. When `test-playbooks-remediate` nears its limit, its playbooks can be split across jobs the same
 way.
 
+The timeout of `test-playbooks-remediate` is 20 minutes since FREES-213. Over the ten latest runs on `main` before it
+(4e50d0a to e5006f2) the job took 8.9 to 14.5 minutes, and the first run of FREES-213 was cancelled at 15 with every
+playbook about 30 percent slower than on `main`, also the ones that do not touch PAM (the disruptive play took 19
+seconds instead of 14), so the runner was slower; on the same worker the playbooks took no longer on the branch than on
+`main`. One and a half times 14.5 minutes is above the 20 minutes that `tests/unit/tools/test_ci_test_jobs.py` allows a
+test job, so the job gets those 20; the next step when it nears them is the split above.
+
 With `sudo` (FREES-175) the regressions moved out of the cycle legs: `make molecule-matrix` adds one leg per regression
 group that a declaration lists and platform it runs on, with the mode `regressions-<group>`, after the two toggle
 modes of the topic, so 40 cycle legs and 37 regression legs (`pwquality` `changes`, `ssh` `changes` and
