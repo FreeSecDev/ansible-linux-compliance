@@ -32,5 +32,6 @@
 | [0029](0029-native-kernel-parameters.md) | Native kernel parameters through sysctl drop-ins and the running kernel | proposed |
 | [0030](0030-native-auditd-settings-and-audit-rules.md) | Native auditd settings and audit rule drop-ins | proposed |
 | [0031](0031-fast-records-for-the-lifecycle-harness.md) | Fast records for the Molecule lifecycle harness | proposed |
+| [0033](0033-review-policy-independent-verdict-without-required-approval.md) | Review policy: an independent verdict on the pull request, without a required GitHub approval | accepted |
 
 Proposed ADRs are accepted through the pull request that introduces their first implementation.

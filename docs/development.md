@@ -139,6 +139,15 @@ overriding them.
 Pending targets print `not implemented yet: <target> (tracked in FREES-<key>)` to standard error and exit
 with status 2. They never succeed silently and are not part of `lint`, `test` or `ci`.
 
+A unit test that reads a repository YAML file more than once, such as the remediation catalogue
+`roles/remediate/vars/rules.yml`, loads it with `tests/unit/yaml_cache.py`. It parses each file once per test
+process with the libyaml safe loader, keyed by the resolved path and the SHA-256 of the content, so a changed file or
+a copy in a temporary root is parsed again, and it returns a deep copy on every call, so no test can change what
+another reads. The YAML loaders of `tools/roles` that the tests call most use the libyaml safe loader as well. Before
+FREES-199 the pure Python parser took most of the time of the slowest tests: the unit suite took 532 seconds serially
+and 186 on four workers on a workstation, and 330 and 92 after it, with the same tests and the same covered lines and
+branches.
+
 ## Pre-commit stages
 
 Configuration: `.pre-commit-config.yaml`. Install the hooks with `make install`.
@@ -400,7 +409,8 @@ Configuration relaxations, each with its reason:
 | `typecheck` | `make typecheck` |
 | `test` | `make test-coverage` (on the four workers of the hosted runner) |
 | `test-suites` | `make test-audit-exceptions`, `make test-content-golden`, `make test-browser`, alongside `test` |
-| `test-playbooks` | `make test-evidence`, `make test-remediate-check`, `make test-role-guards`, `make test-verify` |
+| `test-playbooks-remediate` | `make test-remediate-check` (with `test-remediate-disruptive`) |
+| `test-playbooks-evidence` | `make test-evidence`, `make test-role-guards`, `make test-verify` |
 | `name-sets` | matrix over the pinned Python releases 3.9.25, 3.10.21, 3.11.16, 3.12.14, 3.13.15 and 3.14.6: `uv python install`, then `make test-name-sets` |
 | `security` | `make security` |
 | `collection` | `make test-sanity test-ansible-units package-check` |

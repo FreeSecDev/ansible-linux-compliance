@@ -2,7 +2,10 @@
 
 ``test`` runs only ``make test-coverage``, which runs pytest on ``PYTEST_WORKERS`` workers and
 keeps both 100% gates on the combined data. ``test-suites`` runs the audit-exception, golden
-content and browser tests alongside it. Both run on every event without a condition, so no
+content and browser tests alongside it. The check-mode playbooks of the former ``test-playbooks``
+job run in ``test-playbooks-remediate`` (``make test-remediate-check``) and
+``test-playbooks-evidence`` (evidence, role guards and verify). Every one of these jobs runs on
+every event without a condition, only the Molecule legs read the plan of ``molecule-plan``, so no
 plan can skip them, and ``ci-gate`` needs every job of the workflow.
 """
 
@@ -28,7 +31,14 @@ EXPECTED_COMMANDS = {
         "make test-content-golden",
         "make test-browser",
     ],
+    "test-playbooks-remediate": ["make test-remediate-check"],
+    "test-playbooks-evidence": [
+        "make test-evidence",
+        "make test-role-guards",
+        "make test-verify",
+    ],
 }
+PLANNED_JOBS = frozenset({"molecule-lifecycle", "molecule-libvirt"})
 
 
 def jobs() -> dict[str, dict[str, object]]:
@@ -87,3 +97,15 @@ def test_coverage_runs_in_parallel_and_keeps_both_gates_on_the_combined_data() -
         "$(RUN) coverage report --include='tools/*' --fail-under=100",
         "$(RUN) coverage report --include='plugins/*' --fail-under=100",
     ]
+
+
+def test_only_the_molecule_legs_depend_on_the_plan() -> None:
+    workflow_jobs = jobs()
+    readers = {
+        name
+        for name, job in workflow_jobs.items()
+        if name not in {"molecule-plan", "ci-gate"} and "molecule-plan" in yaml.safe_dump(job)
+    }
+    assert readers == PLANNED_JOBS
+    for name in EXPECTED_COMMANDS:
+        assert "molecule-plan" not in yaml.safe_dump(workflow_jobs[name])
