@@ -83,8 +83,9 @@ each file as JSON first and decrypts a vaulted file. So every file below `roles/
 such a mapping into another value); `make lint-repo` refuses anything else there, so every task and handler file of
 the role is one the rule reads.
 
-A task or block of `roles/remediate` may not use `delegate_to`, `delegate_facts`, `local_action` or `connection`: the
-role runs its tasks on the managed host, never on the controller or another host. `ansible_network_os` and
+A task or block of `roles/remediate` may not use the keywords `delegate_to`, `delegate_facts`, `local_action` or
+`connection`. Only these keyword forms are refused; the other ways to reach the controller or another host are listed
+in "What the module rule does not cover" below. `ansible_network_os` and
 `network_os` are refused wherever the repository sets variables or facts, like `ansible_facts_modules`,
 `ansible_package_use`, `pkg_mgr` and `service_mgr`, because they choose the module that a play's fact gathering runs
 after the role.
@@ -108,6 +109,9 @@ builds a bypass in several steps ([ADR 0032](adr/0032-operator-control-community
 boundary of 2026-11-10). It does not read Jinja filter, test and lookup plugins of other collections, files that tasks
 of the role plant (`files/`, `templates/`, a module written into one of Ansible's module paths), routing of other
 plugin types, settings of the play, inventory or configuration outside the role, or a change to the rule and its tests.
+Nor does it refuse the ways other than the four keywords in which a task reaches the controller or another host:
+connection and host variables (`ansible_connection`, `ansible_host`) set as `vars`, `delegate_to` and the other
+keywords inside `apply` of an include, and `ansible.builtin.fetch`, whose destination is on the controller.
 The independent review of every pull request covers those
 ([ADR 0033](adr/0033-review-policy-independent-verdict-without-required-approval.md)). A reviewer of a change to
 `roles/remediate`, `meta/runtime.yml` or the rule looks for such bypasses.

@@ -450,8 +450,9 @@ rule reads.
   `ansible_facts_modules`, `ansible_package_use`, `pkg_mgr` and `service_mgr` (`BACKEND_VARIABLES` of
   `tools/lint/repo_rules/exec_variables.py`, ADR 0004). These variables and facts choose the module that
   `gather_facts`, `package` and `service` run, also for a play's own fact gathering after the role has run;
-- `delegate_to`, `delegate_facts`, `local_action` and `connection` on any task or block of `roles/remediate`, so the
-  role never runs a task on the controller or on another host. The role used none of them when this was added;
+- the keywords `delegate_to`, `delegate_facts`, `local_action` and `connection` on any task or block of
+  `roles/remediate`. Only these keyword forms are refused; the other ways in which a task reaches the controller or
+  another host are listed below. The role used none of the four keywords when this was added;
 - repository-wide, names that Ansible learns only at run time (`tools/lint/repo_rules/runtime_names.py`).
 
 **What it does not defend against.** These are left to the independent review of every pull request under ADR 0033:
@@ -459,9 +460,15 @@ rule reads.
 - Jinja filter, test and lookup plugins of other collections in templates and expressions of the role. They are code
   on the controller, not modules, and the rule does not read them.
 - Files planted by tasks of the role, for example a module that a task writes into one of Ansible's module paths,
-  which ansible-core's own action plugins then load as an `ansible.legacy` module. Delegation is refused, so this needs
-  a controller that is also a managed host (a local connection, `ansible-pull`). The rule has no check on
-  `roles/remediate/files/` or `templates/`.
+  which ansible-core's own action plugins then load as an `ansible.legacy` module. Such a file can be planted on the
+  controller through any of the forms in the next item, not only on a controller that is also a managed host. The rule
+  has no check on `roles/remediate/files/` or `templates/`.
+- Ways other than the four keywords in which a task of the role runs on the controller or on another host, or writes
+  there: connection and host variables such as `ansible_connection` (for example `local`) and `ansible_host` set as
+  `vars` of a task, block or the role; `delegate_to`, `connection` and the other keywords inside `apply` of an
+  `include_tasks`, which is not a task and which the rule does not read; and `ansible.builtin.fetch`, an accepted
+  `ansible.builtin` module whose `dest` is on the controller by design. Today the role sets none of these variables,
+  has no such key in `apply` and does not use `fetch`.
 - Plugin routing outside the forms it checks: `plugin_routing` of other plugin types (filters, tests, lookups and the
   rest), and routing or plugin paths that the operator's configuration sets.
 - Settings of the play, inventory or configuration that run the role and that are outside `roles/remediate`, other

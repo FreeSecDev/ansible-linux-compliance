@@ -523,13 +523,16 @@ rule of [ADR 0032](../adr/0032-operator-control-community-modules-and-value-over
   role files the rule cannot read, includes outside `{{ role_path }}/tasks/`, `meta/runtime.yml` routing other than
   `redirect`, `tombstone` and `deprecation` (`module_utils`: `deprecation`) and any `import_redirection`, the
   variables and facts that choose a dispatching module (`ansible_network_os`, `network_os`, `ansible_facts_modules`,
-  `ansible_package_use`, `pkg_mgr`, `service_mgr`), and `delegate_to`, `delegate_facts`, `local_action` and
-  `connection` in the role.
+  `ansible_package_use`, `pkg_mgr`, `service_mgr`), and the keywords `delegate_to`, `delegate_facts`, `local_action`
+  and `connection` on the tasks and blocks of the role.
 - **Residual:** the rule guards against mistakes and unreviewed additions; it is not a sandbox against a contributor
   who deliberately builds a bypass in several steps. It does not cover Jinja filter, test and lookup plugins of other
   collections, files that tasks of the role plant (for example a module written into one of Ansible's module paths on
-  a controller that is also a managed host), routing outside the forms it checks, play, inventory and configuration
-  settings outside the role, or a change to the rule and its tests. These are left to the independent review of every
+  the controller), the ways other than the four keywords in which a task reaches the controller or another host
+  (connection and host variables such as `ansible_connection` and `ansible_host` set as `vars`, delegation keywords
+  inside `apply` of an include, and `ansible.builtin.fetch`, whose destination is on the controller), routing outside
+  the forms it checks, play, inventory and configuration settings outside the role, or a change to the rule and its
+  tests. These are left to the independent review of every
   pull request ([ADR 0033](../adr/0033-review-policy-independent-verdict-without-required-approval.md)), whose
   checklist asks for that look on every change to `roles/remediate`, `meta/runtime.yml` or the rule. Accepted by the
   project lead on 2026-11-10 (FREES-203).

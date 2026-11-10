@@ -132,11 +132,11 @@ Rules:
   ``roles/remediate/tasks/``, ``handlers/`` and ``meta/`` that is not a readable ``.yml`` or
   ``.yaml`` file of task lists (``meta/``: mappings) or that holds a key starting with
   ``__ansible_``, which ansible-core's JSON loader decodes into another value. ``delegate_to``,
-  ``delegate_facts``, ``local_action`` and ``connection`` are refused on every task of the role,
-  and ``meta/runtime.yml`` may route modules and action plugins only with ``redirect``,
-  ``tombstone`` and ``deprecation``, ``module_utils`` only with ``deprecation``, and holds no
-  ``import_redirection`` (``tools/lint/repo_rules/remediate_routing.py``). The rule is a guard
-  against mistakes, not a sandbox; its boundary is in ADR 0032 (2026-11-10).
+  ``delegate_facts``, ``local_action`` and ``connection`` are refused as keywords of the role's
+  tasks and blocks, and ``meta/runtime.yml`` may route modules and action plugins only with
+  ``redirect``, ``tombstone`` and ``deprecation``, ``module_utils`` only with ``deprecation``, and
+  holds no ``import_redirection`` (``tools/lint/repo_rules/remediate_routing.py``). The rule is a
+  guard against mistakes, not a sandbox; its boundary is in ADR 0032 (2026-11-10).
 
 * Names that Ansible learns only at run time (FREES-203): in every task list, ``set_fact`` keys are
   literal (a templated key is accepted only below ``extensions/molecule/``), ``args``,

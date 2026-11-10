@@ -21,12 +21,14 @@ minor_changes:
     that is not YAML and vaulted files there, and no key in them may start with ``__ansible_``. An allow-listed
     module also needs its collection pinned at one exact version in ``galaxy.yml`` ``dependencies``,
     ``extensions/molecule/requirements.yml`` and ``extensions/molecule/collections.pins``. ``delegate_to``,
-    ``delegate_facts``, ``local_action`` and ``connection`` are refused on every task of ``roles/remediate``, and
+    ``delegate_facts``, ``local_action`` and ``connection`` are refused as keywords of the tasks and blocks of
+    ``roles/remediate``, and
     ``meta/runtime.yml`` may route modules and action plugins only with ``redirect``, ``tombstone`` and
     ``deprecation``, ``module_utils`` only with ``deprecation``, and may hold no ``import_redirection``. The check
     guards against mistakes and unreviewed additions, not against a deliberate multi-step bypass; ADR 0032 records
-    what it does not cover (Jinja plugins of other collections, files the role plants, other routing, play settings
-    outside the role, edits of the check itself), which the review of every pull request covers.
+    what it does not cover (Jinja plugins of other collections, files the role plants, connection and host variables
+    set as ``vars``, delegation inside ``apply`` of an include, ``ansible.builtin.fetch``, other routing, play
+    settings outside the role, edits of the check itself), which the review of every pull request covers.
   - >-
     Repository guard - ``ansible_network_os`` and ``network_os`` are refused wherever the repository sets variables or
     facts, like ``ansible_facts_modules`` and ``ansible_package_use``, because they choose the module that

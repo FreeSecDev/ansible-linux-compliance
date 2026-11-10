@@ -49,7 +49,7 @@ def documents(text: str) -> list[yaml.Node]:
         loader.dispose()
 
 
-DELEGATION = "the role runs its tasks on the managed host"
+DELEGATION = "are refused on its tasks and blocks"
 
 
 def check(
@@ -1317,6 +1317,8 @@ def test_tasks_that_run_elsewhere_are_refused(text: str, keyword: str, line: int
     assert [violation.line for violation in delegations] == [line]
     assert delegations[0].message.startswith(f"{keyword} {NOT_ALLOWED}")
     assert ADR in delegations[0].message
+    assert "never" not in delegations[0].message
+    assert "ansible.builtin.fetch are left to the review of ADR 0033" in delegations[0].message
     assert all(DELEGATION in violation.message for violation in violations)
 
 

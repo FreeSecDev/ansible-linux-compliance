@@ -39,9 +39,12 @@ root, such as ``vars/rules.yml`` or ``meta/argument_specs.yml``, is not a task l
 
 Ansible also loads role files that are not YAML, or that PyYAML cannot read, as tasks, handlers
 and metadata; :mod:`tools.lint.repo_rules.remediate_files` refuses every such file in the role, so
-every task and handler file of the role is a document that this rule reads. ``delegate_to``,
-``delegate_facts``, ``local_action`` and ``connection`` are refused on every task and block, so the
-role never runs a task on the controller or on another host.
+every task and handler file of the role is a document that this rule reads. The keywords
+``delegate_to``, ``delegate_facts``, ``local_action`` and ``connection`` are refused on every task
+and block. Only these keyword forms are refused: connection and host variables such as
+``ansible_connection`` and ``ansible_host`` set as ``vars``, the same keywords inside ``apply`` of
+an include, and ``ansible.builtin.fetch``, whose ``dest`` is on the controller, still let a task
+reach the controller or another host, and are left to review (ADR 0033).
 
 The rule guards against mistakes and unreviewed additions; it is not a sandbox against a
 contributor who deliberately builds a bypass (ADR 0032, boundary of 2026-11-10). It does not read
@@ -314,9 +317,10 @@ INCLUDE_TARGET_MESSAGE: Final[str] = (
     "playbook's directory too (ADR 0032 §1)"
 )
 DELEGATION_MESSAGE: Final[str] = (
-    "{keyword} is not allowed in roles/remediate: the role runs its tasks on the managed host "
-    "through the play's connection, so it never runs a task on the controller or another host "
-    "(ADR 0032 §1)"
+    "{keyword} is not allowed in roles/remediate: the keywords delegate_to, delegate_facts, "
+    "local_action and connection are refused on its tasks and blocks; connection and host "
+    "variables, delegation inside apply of an include and ansible.builtin.fetch are left to "
+    "the review of ADR 0033 (ADR 0032 §1)"
 )
 DEPENDENCY_MESSAGE: Final[str] = (
     "role dependencies are not allowed in roles/remediate/meta/main.yml: their tasks are not "
@@ -518,7 +522,8 @@ def _delegation_problems(task: yaml.MappingNode) -> Iterable[tuple[yaml.Node, st
 
     ``delegate_to``, ``delegate_facts``, ``local_action`` and ``connection`` let a task of the
     role write on the controller, for example into a module path of Ansible, from which
-    ansible-core's own action plugins then load ``ansible.legacy`` modules.
+    ansible-core's own action plugins then load ``ansible.legacy`` modules. Only these keyword
+    forms are refused; the other forms are left to review (ADR 0032, boundary of 2026-11-10).
     """
     for name, key, _ in scalar_items(task):
         if name in DELEGATION_KEYWORDS:
