@@ -1133,10 +1133,17 @@ runs and the ten latest `merge_group` runs of `ci.yml` (the tables are in the pu
   almost nothing else ran (#78).
 - The merge queue builds one merge group, and so one full run, for every pull request it holds, up to
   `max_entries_to_build` (5) at a time: the groups of #99, #100 and #101 were created within a minute of each other.
-- A merge group whose `ci-gate` did not report within `check_response_timeout_minutes` was removed although its run
-  passed later, and the pull request was queued again with a new full run: #88 had 8 merge group runs, #94 9 and #90 6
-  from the evening of 2026-11-09 (30 minutes then), and #99 3 and #100 2 on 2026-11-10 (90 minutes). Every drop adds
-  another 1,200 runner-minutes, which makes the other runs slower again.
+- A merge group whose `ci-gate` did not report within `check_response_timeout_minutes` is removed from the queue
+  (`checks_timed_out`) even when its run passes later. The removal also invalidates every group queued behind it,
+  because each of them contains the removed entry, and the queue rebuilds them, each with a new full run. The pull
+  request timelines (`REMOVED_FROM_MERGE_QUEUE_EVENT`) show these removals for `checks_timed_out`: #88 3, #94 3 and
+  #90 2 from the evening of 2026-11-09 to the night after (30 minutes then), and #99 1 (17:18 UTC) and #100 1 (19:13
+  UTC) on 2026-11-10 (90 minutes). The merge group runs of the same pull requests, counted separately: #88 8, #94 9,
+  #90 6, #99 3, #100 2 and #101 2. Each pull request had one run per time it was added to the queue, and the rest
+  were rebuilds after an entry ahead of it was removed: #99's third run and #101's second started at 19:13, seconds
+  after #100, ahead of both, was removed. One removal therefore costs a full run, about 1,200 runner-minutes, for
+  the removed entry and one for every group behind it, and that load makes the other runs slower again. All of these
+  runs ended `success` except #90's first (created 2026-11-09 22:00 UTC), which was cancelled.
 - Most pull requests ran the full matrix, and the plan was right for each (they changed plugins, `module_utils`,
   `tools/roles` or the `Makefile`). A pull request that changes only documentation, tests and fixtures, check-mode
   playbooks or the lint tools plans no lifecycle leg and runs 28 or 29 jobs.
@@ -1147,12 +1154,19 @@ run has a concurrency group of its own, so no merge group or run on `main` is ca
 ([above](#affected-legs-on-pull-requests)); and `test-playbooks-remediate` is split ([above](#ci-legs)). None of this
 makes a full run smaller.
 
+Open point, not measured in detail: when the queue invalidates a group, the run of its `gh-readonly-queue/...` branch
+can keep running (run 42715894165 of #88 ran until 00:29 UTC although #88 left the queue at 23:25), and the `ci-gate` of
+a cancelled pull request run still waits for a runner (run 42883888513 was cancelled at 19:45 and its `ci-gate` ran at
+20:36). Both take capacity from the runs that count. Cancelling the runs of invalidated `gh-readonly-queue` branches
+could free it; whether GitHub cancels them in some cases, and how a workflow could detect an invalidated branch, needs a
+separate look.
+
 The queue settings are the owner's to change in the live ruleset; `.github/rulesets/main.json` follows the live ruleset
 ([ADR 0033](adr/0033-review-policy-independent-verdict-without-required-approval.md)). Proposed from the data above:
 
 | Setting | Now | Proposed | Why |
 |---|---|---|---|
-| `max_entries_to_build` | 5 | 2 | Two merge groups in flight instead of five. The runs of the queue then compete with one other group and the pull request runs, not with four groups, so each finishes sooner; the queue cannot merge faster than the 60 runners allow, about three full runs an hour, either way |
+| `max_entries_to_build` | 5 | 2 | Two merge groups in flight instead of five. The runs of the queue then compete with one other group and the pull request runs, not with four groups, so each finishes sooner. Either way the queue cannot merge faster than the runners allow: at the 60 concurrent jobs observed (not a confirmed limit of the plan) about three full runs an hour |
 | `check_response_timeout_minutes` | 240 | 240 | The live value, read on 2026-11-10. A drop costs a full run and makes the queue slower, and the longest merge group measured took 140 minutes, so the limit stays well above that. Every job has its own `timeout-minutes` and `ci-gate` always reports, so a long limit only matters for a run that never reports. Once merge groups with two in flight are measured, one and a half times the longest of them is enough |
 | `min_entries_to_merge` | 1 | 1 | A larger minimum does not save a run, because every entry gets its own merge group, and makes a lone pull request wait for `min_entries_to_merge_wait_minutes` |
 | `max_entries_to_merge` | 5 | 5 | No effect on the load |

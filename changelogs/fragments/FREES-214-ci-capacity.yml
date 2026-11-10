@@ -1,7 +1,7 @@
 ---
 trivial:
   - >-
-    CI: test-playbooks-remediate, which took up to 14.8 minutes against its 15-minute timeout, is split in two jobs
+    CI: test-playbooks-remediate, which took up to 15.0 minutes against its 15-minute timeout, is split in two jobs
     that run alongside each other: test-playbooks-remediate runs make test-remediate-check-role (the check-mode and
     skip-always playbooks, with test-remediate-disruptive) and test-playbooks-native runs make
     test-remediate-check-native (the native, login.defs and PAM check-mode playbooks, timeout 12). make
