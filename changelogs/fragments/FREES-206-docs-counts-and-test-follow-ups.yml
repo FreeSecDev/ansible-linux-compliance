@@ -1,0 +1,15 @@
+---
+trivial:
+  - >-
+    Docs: the leg counts and regression groups of the Molecule CI matrix (60 cycle and 47 regression Docker legs; 24
+    cycle, 2 regression and 3 base or self-test libvirt legs), the disruptive native topics, the 58 families of the
+    control family reference and the ansible-core pin, which collection-design.md now leaves to pyproject.toml, are
+    brought up to date, and tests/unit/tools/test_docs_counts.py derives them and the native rule counts of
+    remediation.md and the remediate role README from the matrix and the catalogue, so they cannot drift again. The
+    README no longer refers to docs/support-matrix.yml, which is planned (FREES-45) and does not exist yet (FREES-206).
+  - >-
+    Tests and tools: the tools of tools/roles and the test YAML cache parse YAML through tools/yaml_loader.py, which
+    falls back to PyYAML's pure Python safe loader without libyaml instead of raising an AttributeError. The login.defs
+    readers test decides its cases in eight shards that the pytest-xdist workers share instead of one module-scoped
+    run of 105 seconds. The CI job tests also refuse a step-level condition or continue-on-error in a unit test job and
+    find the jobs that read the Molecule plan by their needs (FREES-206).

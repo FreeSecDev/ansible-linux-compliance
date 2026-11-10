@@ -5,8 +5,9 @@ baselines, using [OpenSCAP](https://www.open-scap.org/) and
 [ComplianceAsCode](https://github.com/ComplianceAsCode/content) content.
 
 > **Status: pre-alpha.** The project is in its governance and architecture phase. Nothing in this repository is
-> usable for auditing or hardening yet, and no operating system or benchmark is supported until it appears as tested
-> in `docs/support-matrix.yml`.
+> usable for auditing or hardening yet, and no operating system or benchmark is supported. Support will be recorded
+> only for tests that were executed, in a machine-readable support matrix that is planned (FREES-45,
+> [ADR 0010](docs/adr/0010-initial-os-and-benchmark-scope.md)) and does not exist yet.
 
 ## Principles
 
