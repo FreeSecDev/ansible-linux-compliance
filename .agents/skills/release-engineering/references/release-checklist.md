@@ -8,12 +8,12 @@ workflow; nobody pushes `v*` tags by hand ([ADR 0012](../../../../docs/adr/0012-
 - [ ] All changes since the last release have changelog fragments in `changelogs/fragments/`.
 - [ ] Version chosen by SemVer; a major bump has an accepted ADR.
 - [ ] The pull request bumps `galaxy.yml` (or the runner version file) and the generated changelog.
-- [ ] Approved by `freesecdev-review` after the last push; squash merged into `main`.
+- [ ] An independent reviewer's verdict (`approve` or `approve-with-follow-ups`) for the last pushed head is on the pull request (ADR 0033); squash merged into `main`.
 - [ ] Runner image reference in use is a digest of an immutable version.
 
 ## Release workflow gates (on push to `main`)
 
-- [ ] Merge commit came from a pull request approved by `freesecdev-review`.
+- [ ] Merge commit came from a pull request whose verdict marker names its merged head (ADR 0033).
 - [ ] All required checks and security scans passed on the merge commit.
 - [ ] Version is new SemVer with a changelog entry, and no `vX.Y.Z` tag or release exists yet.
 - [ ] Tarball rebuilt twice with `SOURCE_DATE_EPOCH` from the merge commit; SHA-256 sums identical.
