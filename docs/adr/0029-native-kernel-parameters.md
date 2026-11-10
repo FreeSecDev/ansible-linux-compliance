@@ -341,7 +341,8 @@ the bytes that it read:
   `cleanup_incomplete` with the reason `modified_since_read`, writes nothing and keeps its ledger entry; the other
   rules are cleaned up.
 - Apply checks every file that the rules were decided on (every configuration file that the family read, a link
-  through to its target, apart from the drop-ins that the cleanup of a real run removed), after every rule is decided
+  through to its target, apart from the drop-ins that the cleanup of a real run removed; a drop-in path that is a
+  link to `/dev/null` or a directory was never read, its rule is `not_regular_file`, and it is not checked), after every rule is decided
   and before anything is written: the ledger records, the drop-in directory, the drop-ins, the edits and the running
   values. The bytes expected are the texts as the cleanup of the same run leaves them (in check mode, as they were
   read, because the cleanup wrote nothing), and every file that the cleanup found changed counts as changed too. When

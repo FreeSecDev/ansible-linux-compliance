@@ -73,6 +73,49 @@ DEFINITIONS = {
   tags:
     - always
 """,
+    "set_fact args": """
+- name: Mutation | Set a fact through the task's arguments
+  ansible.builtin.set_fact:
+  args:
+    {name}: 1
+  tags:
+    - always
+""",
+    "set_fact args merged": """
+- name: Mutation | Set a fact through the task's arguments next to another
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_ssh_merged: 1
+  args:
+    {name}: 1
+  tags:
+    - always
+""",
+    "action mapping": """
+- name: Mutation | Set a fact through an action mapping
+  action:
+    module: ansible.builtin.set_fact
+    {name}: 1
+  tags:
+    - always
+""",
+    "local_action mapping": """
+- name: Mutation | Set a fact through a local action mapping
+  local_action:
+    module: set_fact
+    {name}: 1
+  tags:
+    - always
+""",
+    "index_var": """
+- name: Mutation | Loop with an index
+  ansible.builtin.debug:
+    msg: x
+  loop: [1]
+  loop_control:
+    index_var: {name}
+  tags:
+    - always
+""",
     "include apply vars": """
 - name: Mutation | Include with variables applied to the included tasks
   ansible.builtin.include_tasks:
@@ -353,8 +396,11 @@ def test_the_prefix_is_the_first_component_after_the_role_s_prefix(name: str, pr
 )
 def test_a_family_may_not_set_a_name_of_the_role_s_entry_files(role: Path, name: str) -> None:
     write(role, "new_family.yml", FACT.format(name=name))
-    found = messages(role, "new_family.yml")
-    assert any(OWNED in message and name in message for message in found), found
+    expected = (
+        f"{name} belongs to the role: only main.yml and dispatch.yml may define it, and a family "
+        f"may not set it {REFERENCE}"
+    )
+    assert messages(role, "new_family.yml") == [expected]
 
 
 def test_a_name_that_main_yml_adds_belongs_to_the_role(role: Path) -> None:
@@ -473,6 +519,32 @@ def test_foreign_includes_unnamed_variables_and_options_define_nothing(role: Pat
     found = prefixes.read_task_files(role / TASKS)["new_family.yml"]
     assert found.defined == frozenset()
     assert found.includes == frozenset()
+
+
+def test_args_next_to_a_short_form_and_other_actions_define_nothing(role: Path) -> None:
+    write(
+        role,
+        "new_family.yml",
+        """
+- name: Mutation | Short include_vars form with arguments
+  ansible.builtin.include_vars: main.yml
+  args:
+    other: 1
+  tags:
+    - always
+- name: Mutation | Action of another module
+  action:
+    module: ansible.builtin.debug
+    msg: x
+  tags:
+    - always
+- name: Mutation | Action in the string form
+  action: ansible.builtin.debug msg=x
+  tags:
+    - always
+""",
+    )
+    assert prefixes.read_task_files(role / TASKS)["new_family.yml"].defined == frozenset()
 
 
 @pytest.mark.parametrize("module", ["ansible.legacy.import_tasks", "include_tasks"])

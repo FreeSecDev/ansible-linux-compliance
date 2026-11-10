@@ -20,9 +20,10 @@ the existing files makes such a collision impossible, and this rule group checks
   ``__linux_compliance_remediate_<xx>_``, where ``<xx>`` is the first component of its name after
   the role's prefix; the name ``__linux_compliance_remediate_<xx>`` itself has that prefix too.
   A task defines a variable through a ``set_fact`` key (``ansible.builtin.``, ``ansible.legacy.``
-  or short), a ``register``, a key of its ``vars``, a key of the ``apply.vars`` of an include, the
-  ``name`` of an ``include_vars`` and a ``loop_var``, in blocks, ``rescue`` and ``always`` at any
-  depth.
+  or short; as a key of the task, the ``module`` of an ``action`` or ``local_action`` mapping, and
+  with the task's ``args`` merged in), a ``register``, a key of its ``vars``, a key of the
+  ``apply.vars`` of an include, the ``name`` of an ``include_vars``, a ``loop_var`` and an
+  ``index_var``, in blocks, ``rescue`` and ``always`` at any depth.
 * Every group uses exactly one such prefix, no other group uses it, and it is neither the first
   component of a constant of the role's variable files nor that of a name that ``main.yml`` or
   ``dispatch.yml`` defines.
@@ -35,9 +36,11 @@ the existing files makes such a collision impossible, and this rule group checks
   these task files.
 
 What the rule does not see: an ``include_vars`` without ``name`` (its keys are constants, which
-the role-guard generator checks), variables set by a module or plugin at run time, and anything
-outside ``roles/remediate/tasks``. A task file that cannot be parsed is left to the other rules.
-Violations are reported for the file being checked, at the first line that names the variable.
+the role-guard generator checks), a module called in the string form of ``action`` (``action:
+set_fact x=1``) or with ``key=value`` arguments, variables set by a module or plugin at run time,
+and anything outside ``roles/remediate/tasks``. A task file that cannot be parsed is left to the
+other rules. Violations are reported for the file being checked, at the first line that names the
+variable.
 """
 
 from __future__ import annotations
@@ -76,6 +79,8 @@ INCLUDES: Final[frozenset[str]] = frozenset(
     prefix + name for prefix in MODULE_PREFIXES for name in ("include_tasks", "import_tasks")
 )
 FACT_OPTIONS: Final[frozenset[str]] = frozenset({"cacheable"})
+ACTIONS: Final[tuple[str, ...]] = ("action", "local_action")
+LOOP_NAMES: Final[tuple[str, ...]] = ("loop_var", "index_var")
 COMPONENT: Final[str] = r"[A-Za-z0-9_][A-Za-z0-9_.-]*"
 INCLUDED_FILE: Final[re.Pattern[str]] = re.compile(
     r"\{\{ role_path \}\}/tasks/((?:" + COMPONENT + r"/)*" + COMPONENT + r"\.ya?ml)"
@@ -123,7 +128,34 @@ def _keys(value: object) -> list[str]:
 
 
 def _options(task: dict[str, object], modules: frozenset[str]) -> list[object]:
-    return [task[module] for module in sorted(modules) if module in task]
+    """Return the options of every call of one of ``modules`` in ``task``.
+
+    The module is a key of the task or the ``module`` of an ``action`` or ``local_action``
+    mapping; the task's ``args`` mapping is merged into the options, as Ansible does.
+    """
+    calls: list[object] = [task[module] for module in sorted(modules) if module in task]
+    for keyword in ACTIONS:
+        action = task.get(keyword)
+        if isinstance(action, dict) and cast("dict[str, object]", action).get("module") in modules:
+            calls.append(
+                {
+                    key: value
+                    for key, value in cast("dict[str, object]", action).items()
+                    if key != "module"
+                }
+            )
+    args = task.get("args")
+    if not isinstance(args, dict):
+        return calls
+    merged: list[object] = []
+    for options in calls:
+        if isinstance(options, dict):
+            merged.append({**cast("dict[str, object]", args), **cast("dict[str, object]", options)})
+        elif options is None:
+            merged.append(dict(cast("dict[str, object]", args)))
+        else:
+            merged.append(options)
+    return merged
 
 
 def _string_option(options: object, name: str) -> str | None:
@@ -149,6 +181,15 @@ def _include_names(task: dict[str, object]) -> tuple[set[str], set[str]]:
     return included, defined
 
 
+def _loop_names(task: dict[str, object]) -> set[str]:
+    """Return the ``loop_var`` and ``index_var`` that ``task`` names."""
+    loop_control = task.get("loop_control")
+    if not isinstance(loop_control, dict):
+        return set()
+    found = cast("dict[str, object]", loop_control)
+    return {name for option in LOOP_NAMES if isinstance(name := found.get(option), str)}
+
+
 def _defined(task: dict[str, object]) -> tuple[set[str], set[str], list[str]]:
     """Return the names that ``task`` defines, the files it includes and its templated keys."""
     names: set[str] = set()
@@ -167,11 +208,7 @@ def _defined(task: dict[str, object]) -> tuple[set[str], set[str], list[str]]:
     if isinstance(register, str):
         names.add(register)
     names.update(_keys(task.get("vars")))
-    loop_control = task.get("loop_control")
-    if isinstance(loop_control, dict):
-        loop_var = cast("dict[str, object]", loop_control).get("loop_var")
-        if isinstance(loop_var, str):
-            names.add(loop_var)
+    names.update(_loop_names(task))
     included, applied = _include_names(task)
     names.update(applied)
     return {name for name in names if name.startswith(ROLE_PREFIX)}, included, templated

@@ -74,6 +74,7 @@ CPU = "kernel.perf_cpu_time_max_percent"
 PORTS = "net.ipv4.ip_local_port_range"
 SEND = "net.ipv4.conf.all.send_redirects"
 KPTR = "kernel.kptr_restrict"
+CPU_DROP_IN = "/etc/sysctl.d/999-freesecdev-sysctl-kernel-perf-cpu-time-max-percent.conf"
 ACCEPT = "net.ipv4.conf.all.accept_redirects"
 HARDENING = "/etc/sysctl.d/10-kernel-hardening.conf"
 UFW = "/etc/ufw/sysctl.conf"
@@ -128,6 +129,24 @@ def regular(text: str) -> dict[str, object]:
     }
 
 
+MASKED: dict[str, object] = {
+    "isreg": False,
+    "islnk": True,
+    "isdir": False,
+    "readable": False,
+    "target": "null",
+    "checksum": "",
+}
+DIRECTORY: dict[str, object] = {
+    "isreg": False,
+    "islnk": False,
+    "isdir": True,
+    "readable": False,
+    "target": "other",
+    "checksum": "",
+}
+
+
 def linked(text: str) -> dict[str, object]:
     """Return the entry of a symbolic link to a regular file with ``text``."""
     return {**regular(text), "isreg": False, "islnk": True, "target": "file", "checksum": ""}
@@ -152,7 +171,11 @@ class Scenario:
     ``disk`` holds the bytes of a file on the disk when they are no longer those that the role
     read (``files``), as after a concurrent write between the read and the write, or ``None``
     when the file is gone. ``links`` names the files of ``files`` that are symbolic links to a
-    regular file with that text.
+    regular file with that text. ``masked`` and ``directories`` name the keys of rules to apply
+    whose drop-in path is a link to ``/dev/null`` or a directory; the role keeps the drop-in that
+    it composed as their text, as its known texts do for an entry that it did not read. ``real``
+    runs the play without check mode (every task of the plays only sets facts, which a test
+    checks), so ``disk`` then holds the bytes as the cleanup left them.
     """
 
     name: str
@@ -169,6 +192,9 @@ class Scenario:
     benchmark: str = RHEL
     disk: dict[str, str | None] = field(default_factory=dict[str, str | None])
     links: list[str] = field(default_factory=list[str])
+    masked: list[str] = field(default_factory=list[str])
+    directories: list[str] = field(default_factory=list[str])
+    real: bool = False
 
 
 def content_sha256(benchmark: str) -> str:
@@ -230,6 +256,11 @@ def host_state(
         rule_id = str(by_key[key]["rule_id"])
         host.add(str(parameters(by_key[key])["path"]), contents[rule_id])
         host.records[rule_id] = {"method": "dropin", "dropin_sha256": digest(contents[rule_id])}
+    for keys, entry in ((scenario.masked, MASKED), (scenario.directories, DIRECTORY)):
+        for key in keys:
+            rule_id = str(by_key[key]["rule_id"])
+            host.entries[str(parameters(by_key[key])["path"])] = dict(entry)
+            host.texts[str(parameters(by_key[key])["path"])] = contents[rule_id]
     if scenario.cleanup is None:
         return host, []
     spec = scenario.cleanup
@@ -291,9 +322,18 @@ def scenario_vars(scenario: Scenario, by_key: dict[str, Rule]) -> dict[str, obje
         "__linux_compliance_remediate_kp_running_values": scenario.running,
         "__linux_compliance_remediate_kp_runtime": scenario.runtime,
         "__linux_compliance_remediate_kp_writable": dict.fromkeys(scenario.running, True),
-        "harness_disk": {
-            path: text for path, text in {**host.texts, **scenario.disk}.items() if text is not None
-        },
+        "harness_disk": on_disk(host, scenario.disk),
+        "harness_read_disk": on_disk(host, {} if scenario.real else scenario.disk),
+    }
+
+
+def on_disk(host: Host, changes: dict[str, str | None]) -> dict[str, str]:
+    """Return the regular files of ``host`` and their text after ``changes`` (``None``: gone)."""
+    return {
+        path: text
+        for path, text in {**host.texts, **changes}.items()
+        if text is not None
+        and cast("dict[str, object]", host.entries.get(path, {})).get("readable", True)
     }
 
 
@@ -301,22 +341,31 @@ def mocked_stat(task: dict[str, object]) -> dict[str, object]:
     """Return a task that registers what the role's ``stat`` task would, from the scenario's disk.
 
     The role's own loop expression names the paths, and each result carries the role's loop
-    variable and the SHA-256 of the bytes that ``harness_disk`` holds for the path.
+    variable and the SHA-256 of the bytes that the disk holds for the path: ``harness_read_disk``
+    before the cleanup writes (the cleanup's check) and ``harness_disk`` after it (the apply's).
     """
     loop_control = cast("dict[str, str]", task["loop_control"])
     loop_var = loop_control["loop_var"]
     template = (
         "{%- set results = [] -%}{%- for path in harness_paths -%}"
         "{%- set _ = results.append({'" + loop_var + "': path, 'stat': {"
-        "'exists': path in harness_disk, 'isreg': path in harness_disk,"
-        " 'checksum': harness_disk[path] | default('') | hash('sha256')}}) -%}"
+        "'exists': path in disk, 'isreg': path in disk,"
+        " 'checksum': disk[path] | default('') | hash('sha256')}}) -%}"
         "{%- endfor -%}{{ {'results': results} }}"
     )
+    disk = "harness_read_disk" if str(task["name"]).startswith(RESTORE_STAT) else "harness_disk"
     return {
         "name": f"Harness | {task['name']}",
-        "vars": {"harness_paths": task["loop"]},
+        "vars": {"harness_paths": task["loop"], "disk": "{{ " + disk + " }}"},
         "ansible.builtin.set_fact": {str(task["register"]): template},
     }
+
+
+def changes_nothing(task: dict[str, object]) -> bool:
+    """Return whether ``task`` only sets facts, so a play without check mode changes no host."""
+    return "ansible.builtin.set_fact" in task and not {
+        key for key in task if key.startswith(("ansible.", "freesecdev."))
+    } - {"ansible.builtin.set_fact"}
 
 
 def role_tasks() -> list[dict[str, object]]:
@@ -565,6 +614,42 @@ SCENARIOS = [
         cleanup_detail=f"{HARDENING} is not a regular file (a symbolic link)",
         links=[HARDENING],
     ),
+    Scenario(
+        "a masked drop-in of one rule leaves the re-check of the other rules alone",
+        [KPTR, SEND],
+        {},
+        ["not_regular_file", "applied"],
+        running={**RUNNING, KPTR: "1", SEND: "1"},
+        masked=[KPTR],
+    ),
+    Scenario(
+        "a directory at the drop-in path of one rule leaves the re-check of the other rules alone",
+        [KPTR, SEND],
+        {},
+        ["not_regular_file", "applied"],
+        running={**RUNNING, KPTR: "1", SEND: "1"},
+        directories=[KPTR],
+    ),
+    Scenario(
+        "a changed file refuses a run whose rules are all compliant",
+        [SAMPLE],
+        {"/etc/sysctl.d/50-x.conf": f"{KPTR} = 1\n"},
+        ["modified_since_read"],
+        running={**RUNNING, SAMPLE: "1", CPU: "1"},
+        exact=[SAMPLE],
+        reason="/etc/sysctl.d/50-x.conf changed after the collection read it",
+        disk={"/etc/sysctl.d/50-x.conf": f"{KPTR} = 2\n"},
+    ),
+    Scenario(
+        "a real run re-checks the files as its cleanup left them, without the drop-in it removed",
+        [KPTR],
+        {HARDENING: f"{KPTR} = 1\n{CPU} = 1\n"},
+        ["compliant"],
+        running={**RUNNING, SAMPLE: "1", CPU: "1", KPTR: "1"},
+        cleanup=COMPANION_CLEANUP,
+        disk={HARDENING: f"{KPTR} = 1\n{CPU} = 0\n", CPU_DROP_IN: None},
+        real=True,
+    ),
 ]
 
 
@@ -593,8 +678,15 @@ def render(tmp: Path) -> dict[str, dict[str, object]]:
         }
         for number, scenario in enumerate(SCENARIOS)
     ]
-    playbook = tmp / "play.yml"
-    playbook.write_text("---\n" + yaml.safe_dump(plays, sort_keys=False), encoding="utf-8")
+    playbooks: list[tuple[Path, list[str]]] = []
+    for real in (False, True):
+        chosen = [
+            play for play, scenario in zip(plays, SCENARIOS, strict=True) if scenario.real is real
+        ]
+        if chosen:
+            playbook = tmp / ("real.yml" if real else "check.yml")
+            playbook.write_text("---\n" + yaml.safe_dump(chosen, sort_keys=False), encoding="utf-8")
+            playbooks.append((playbook, [] if real else ["--check"]))
     inventory = tmp / "inventory.ini"
     inventory.write_text(
         "[all]\n"
@@ -618,10 +710,11 @@ def render(tmp: Path) -> dict[str, dict[str, object]]:
         "ANSIBLE_LOCALHOST_WARNING": "false",
         "ANSIBLE_NOCOLOR": "true",
     }
-    completed = run_playbook(
-        [str(PLAYBOOK), "-i", str(inventory), "--check", str(playbook)], environment
-    )
-    assert completed.returncode == 0, completed.stdout[-4000:] + completed.stderr[-4000:]
+    for playbook, mode in playbooks:
+        completed = run_playbook(
+            [str(PLAYBOOK), "-i", str(inventory), *mode, str(playbook)], environment
+        )
+        assert completed.returncode == 0, completed.stdout[-4000:] + completed.stderr[-4000:]
     results: dict[str, dict[str, object]] = {}
     for number, scenario in enumerate(SCENARIOS):
         found = cast("dict[str, object]", json.loads((tree / f"scenario{number}").read_text()))
@@ -714,6 +807,11 @@ def test_a_profile_value_is_written_as_the_profile_sets_it(
     assert contents[str(by_key[ACCEPT]["rule_id"])].endswith(f"\n{ACCEPT} = 0\n")
 
 
+def test_the_plays_without_check_mode_only_set_facts() -> None:
+    assert any(scenario.real for scenario in SCENARIOS)
+    assert all(changes_nothing(task) for task in role_tasks())
+
+
 def test_every_mocked_task_replaces_a_stat_of_the_role() -> None:
     tasks = cast(
         "list[dict[str, object]]", yaml_cache.load(ROLE / "tasks" / "sysctl_parameters.yml")
@@ -721,11 +819,15 @@ def test_every_mocked_task_replaces_a_stat_of_the_role() -> None:
     for prefix in STATS:
         task = next(task for task in tasks if str(task["name"]).startswith(prefix))
         stat = cast("dict[str, object]", task["ansible.builtin.stat"])
-        assert stat["follow"] is False or "islnk" in str(stat["follow"])
+        if prefix == RESTORE_STAT:
+            assert stat["follow"] is False
+        else:
+            assert "__linux_compliance_remediate_kp_entries" in str(stat["follow"])
+            assert "islnk" in str(stat["follow"])
         assert stat["get_checksum"] is True
         assert stat["checksum_algorithm"] == "sha256"
         mocked = mocked_stat(task)
-        assert mocked["vars"] == {"harness_paths": task["loop"]}
+        assert cast("dict[str, object]", mocked["vars"])["harness_paths"] == task["loop"]
         assert list(cast("dict[str, object]", mocked["ansible.builtin.set_fact"])) == [
             task["register"]
         ]

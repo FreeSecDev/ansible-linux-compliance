@@ -945,6 +945,8 @@
     get_attributes: false
   loop: >-
     {{ (__linux_compliance_remediate_kp_disk_texts.keys()
+        | select('in', __linux_compliance_remediate_kp_entries | dict2items | selectattr('value.readable')
+                       | map(attribute='key') | list)
         | reject('in', [] if ansible_check_mode else __linux_compliance_remediate_kp_removed) | sort)
        if __linux_compliance_remediate_kp_plan.values() | selectattr('status', 'in', ['applied', 'compliant'])
           | list | length > 0
