@@ -4,7 +4,7 @@
 |---|---|---|
 | [0001](0001-record-architecture-decisions.md) | Record architecture decisions | accepted |
 | [0002](0002-documentation-in-git.md) | Documentation in Git instead of Confluence | accepted |
-| [0003](0003-native-module-remediation.md) | Native-module remediation keyed by ComplianceAsCode rule identifiers | proposed |
+| [0003](0003-native-module-remediation.md) | Native-module remediation keyed by ComplianceAsCode rule identifiers (widened by 0032 once accepted) | accepted |
 | [0004](0004-audited-process-execution.md) | Single audited helper for external process execution | proposed |
 | [0005](0005-renovate-version-annotations.md) | Version annotations on pinned GitHub Actions (amended for pre-commit revisions) | accepted |
 | [0006](0006-toolchain-selection.md) | Toolchain selection for infrastructure and supply-chain security | proposed |
@@ -26,11 +26,12 @@
 | [0022](0022-native-sudo-drop-ins.md) | Native sudo remediation through validated drop-ins | proposed |
 | [0023](0023-native-ssh-server-configuration.md) | Native SSH server configuration through validated drop-ins | proposed |
 | [0024](0024-native-login-defs.md) | Native login.defs remediation, one recorded line per setting | proposed |
-| [0025](0025-own-ansible-remediation-only.md) | Remediation is our own Ansible only; scanner remediation content is never used | proposed |
+| [0025](0025-own-ansible-remediation-only.md) | Remediation is our own Ansible only; scanner remediation content is never used (widened by 0032 once accepted) | accepted |
 | [0026](0026-no-content-scripts-on-hosts.md) | No script or remediation code of the scanner content reaches a managed host | proposed |
 | [0028](0028-native-kernel-module-drop-ins.md) | Native kernel module remediation through modprobe drop-ins | proposed |
 | [0030](0030-native-auditd-settings-and-audit-rules.md) | Native auditd settings and audit rule drop-ins | proposed |
 | [0031](0031-fast-records-for-the-lifecycle-harness.md) | Fast records for the Molecule lifecycle harness | proposed |
+| [0032](0032-operator-control-community-modules-and-value-overrides.md) | Operator control: community modules, and value overrides reported as deviations | proposed |
 | [0033](0033-review-policy-independent-verdict-without-required-approval.md) | Review policy: an independent verdict on the pull request, without a required GitHub approval | accepted |
 
 Proposed ADRs are accepted through the pull request that introduces their first implementation.
