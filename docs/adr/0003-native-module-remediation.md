@@ -1,6 +1,6 @@
 # 0003. Native-module remediation keyed by ComplianceAsCode rule identifiers
 
-- **Status:** proposed
+- **Status:** accepted (to be widened by [ADR 0032](0032-operator-control-community-modules-and-value-overrides.md) once it is accepted)
 - **Date:** 2026-10-25
 - **Deciders:** lead architect
 - **Jira:** pending (remediation epic)
@@ -50,3 +50,11 @@ disruptive families require explicit opt-in.
 ## Operational consequences
 
 Remediation coverage is tracked per profile and published in the support matrix and report.
+
+## Amendment 2026-11-09: community modules, pending ADR 0032 (FREES-203)
+
+[ADR 0032](0032-operator-control-community-modules-and-value-overrides.md) §1 proposes to widen the module rule.
+**Once ADR 0032 is accepted**, remediation may also use modules of community collections that are pinned to an exact
+version in `galaxy.yml` and the requirements files, are on the allow list of a new repository rule, and run no
+process outside ADR 0004. Until then this ADR applies unchanged. The ban on `shell`, `command`, `raw` and `script`
+and on every form of scanner remediation stays either way.
