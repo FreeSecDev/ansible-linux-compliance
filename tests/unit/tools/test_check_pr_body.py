@@ -51,6 +51,18 @@ def test_a_body_that_ends_with_the_footer_is_valid(body: str) -> None:
         ("Text.\n\n`Refs: FREES-204`", "not a Refs footer"),
         (f"Text.\n\n{GENERATED}\nRefs: FREES-204", "is not a trailer"),
         ("Text right above the footer\nRefs: FREES-204", "is not a trailer"),
+        (
+            "Text.\n\nCo-Authored-By:Claude <noreply@anthropic.com>\nRefs: FREES-204",
+            "is not a trailer",
+        ),
+        ("Text.\n\nKey:value\nRefs: FREES-204", "is not a trailer"),
+        ("Text.\n\nprose\u2028Refs: FREES-204", "not a Refs footer"),
+        ("Text.\n\nprose\u2029Refs: FREES-204", "not a Refs footer"),
+        ("Text.\n\nprose\x85Refs: FREES-204", "not a Refs footer"),
+        ("Text.\n\nprose\vRefs: FREES-204", "not a Refs footer"),
+        ("Text.\n\nprose\rRefs: FREES-204", "not a Refs footer"),
+        ("Text.\n\nRefs: FREES-204\u2028", "not a Refs footer"),
+        ("Text.\n\nRefs: FREES-204\u00a0", "not a Refs footer"),
     ],
 )
 def test_a_body_without_the_footer_last_is_refused(body: str, fragment: str) -> None:
@@ -78,6 +90,9 @@ def test_each_line_that_is_not_a_trailer_is_named() -> None:
         ("fix/FREES-207-process-policy-copy", "Refs: FREES-207, FREES-210", True),
         ("dependabot/uv/dev-tools-bf61a79f8a", "Refs: FREES-81", True),
         ("", "Refs: FREES-1", True),
+        ("feat/FREES-204", "Refs: FREES-1", True),
+        ("feat/FREES-204-", "Refs: FREES-1", True),
+        ("FREES-204-no-type", "Refs: FREES-1", True),
     ],
 )
 def test_the_footer_lists_the_key_of_the_branch(head_ref: str, body: str, valid: bool) -> None:
@@ -90,17 +105,25 @@ def test_the_footer_lists_the_key_of_the_branch(head_ref: str, body: str, valid:
 
 
 def test_main_accepts_a_valid_body(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    body = tmp_path / "body.md"
+    body = tmp_path / "body.txt"
     body.write_text(f"Text.\n\n{GENERATED}\n\nRefs: FREES-204\n", encoding="utf-8")
     arguments = ["--body-file", str(body), "--author", "stefanfluit"]
     assert check_pr_body.main([*arguments, "--head-ref", "chore/FREES-204-x"]) == 0
     assert "ends with its Refs footer" in capsys.readouterr().out
 
 
+def test_main_reads_a_lone_carriage_return_as_git_does(tmp_path: Path) -> None:
+    body = tmp_path / "body.txt"
+    body.write_bytes(b"Text.\r\n\r\nprose\rRefs: FREES-204\r\n")
+    assert check_pr_body.main(["--body-file", str(body)]) == 1
+    body.write_bytes(b"Text.\r\n\r\nRefs: FREES-204\r\n")
+    assert check_pr_body.main(["--body-file", str(body)]) == 0
+
+
 def test_main_refuses_a_body_without_the_footer(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    body = tmp_path / "body.md"
+    body = tmp_path / "body.txt"
     body.write_text(f"Text.\n\nRefs: FREES-204\n\n{GENERATED}\n", encoding="utf-8")
     assert check_pr_body.main(["--body-file", str(body)]) == 1
     error = capsys.readouterr().err
@@ -111,7 +134,7 @@ def test_main_refuses_a_body_without_the_footer(
 def test_main_exempts_dependabot_without_reading_the_body(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    missing = tmp_path / "absent.md"
+    missing = tmp_path / "absent.txt"
     assert check_pr_body.main(["--body-file", str(missing), "--author", "dependabot[bot]"]) == 0
     assert "exempt: dependabot[bot]" in capsys.readouterr().out
 
@@ -120,7 +143,7 @@ def test_main_exempts_dependabot_without_reading_the_body(
 def test_only_dependabot_is_exempt(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], author: str
 ) -> None:
-    body = tmp_path / "body.md"
+    body = tmp_path / "body.txt"
     body.write_text("Bump things.\n", encoding="utf-8")
     assert check_pr_body.main(["--body-file", str(body), "--author", author]) == 1
     assert "not a Refs footer" in capsys.readouterr().err
@@ -129,7 +152,7 @@ def test_only_dependabot_is_exempt(
 def test_script_entry_point(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    body = tmp_path / "body.md"
+    body = tmp_path / "body.txt"
     body.write_text("Refs: FREES-1\n", encoding="utf-8")
     monkeypatch.setattr(sys, "argv", ["check_pr_body", "--body-file", str(body)])
     with pytest.raises(SystemExit) as raised:

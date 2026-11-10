@@ -10,6 +10,9 @@ Record each item as satisfied, not applicable (with reason) or violated.
 - [ ] The last line of the pull request body is `Refs: FREES-<n>`, in a paragraph of trailer lines only, with any
   attribution lines before it; the `pr-body` check passed for the current body. Not applicable to a Dependabot
   pull request (FREES-81).
+- [ ] If the pull request changes `.github/workflows/pr-body.yml`, `tools/lint/check_pr_body.py` or the
+  `lint-pr-body` target, that change was reviewed: a pull request runs its own copy of the workflow and the checker,
+  so its `pr-body` result proves only what its own version checks.
 - [ ] Jira issue updated with PR and CI links.
 - [ ] Interface change links an accepted ADR.
 

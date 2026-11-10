@@ -1,11 +1,20 @@
-"""Check that a pull request body ends with its ``Refs: FREES-<n>`` footer (FREES-204).
+r"""Check that a pull request body ends with its ``Refs: FREES-<n>`` footer (FREES-204).
 
 The repository squash merges with the pull request body as the commit message, so the
-commit on ``main`` ends with whatever ends the body. AGENTS.md asks every commit to end
-with a ``Refs: FREES-<n>`` footer, so the last non-empty line of the body must be that
-footer, and the paragraph that holds it must contain only trailer lines, so that Git
-reads it as a trailer of the body. Attribution lines such as ``Co-Authored-By:`` may
-share that paragraph; a line such as "Generated with ..." goes in a paragraph before it.
+squash commit on ``main`` carries the footer only if the body does. AGENTS.md asks for the
+footer, so the last non-empty line of the body must be ``Refs: FREES-<n>``, and the
+paragraph that holds it must contain only trailer lines (``Key: value``). Attribution lines
+such as ``Co-Authored-By:`` may share that paragraph; a line such as "Generated with ..."
+goes in a paragraph before it.
+
+This makes the footer the last line of the body, not of the commit: GitHub appends a
+``---------`` line and ``Co-authored-by:`` lines after the body of the squash commit, so on
+``main`` the footer is not the last line and Git does not read it as a trailer. Tools that
+need the key search the message for a line that starts with ``Refs: ``.
+
+Lines are split as Git splits them, on ``\n`` only, after ``\r\n`` is normalised, so a
+Unicode line separator or a lone ``\r`` does not start a new line. The body file is read
+as bytes for the same reason: text mode would turn a lone ``\r`` into a line break.
 
 When the head branch is named ``<type>/FREES-<n>-<slug>``, the footer must list that key.
 Dependabot writes its own body, cannot add a footer and has no Jira key; a pull request
@@ -31,6 +40,7 @@ ISSUE_KEY: Final[str] = r"FREES-[1-9][0-9]*"
 FOOTER: Final[re.Pattern[str]] = re.compile(rf"^Refs: {ISSUE_KEY}(?:, {ISSUE_KEY})*$")
 TRAILER: Final[re.Pattern[str]] = re.compile(r"^[A-Za-z][A-Za-z0-9-]*: \S")
 BRANCH_KEY: Final[re.Pattern[str]] = re.compile(rf"^[a-z]+/({ISSUE_KEY})-[a-z0-9]")
+ASCII_SPACE: Final[str] = " \t\r\v\f"
 EXEMPT_AUTHORS: Final[frozenset[str]] = frozenset({"dependabot[bot]"})
 FOOTER_HINT: Final[str] = (
     "end the body with a line 'Refs: FREES-<n>' in a paragraph of trailer lines only; "
@@ -39,13 +49,14 @@ FOOTER_HINT: Final[str] = (
 
 
 def footer_findings(body: str, head_ref: str = "") -> list[str]:
-    """Return what is wrong with the footer of ``body``; an empty list means it is valid.
+    r"""Return what is wrong with the footer of ``body``; an empty list means it is valid.
 
-    Lines are compared without trailing white space, and empty lines at the end of the
-    body are ignored, because GitHub keeps the line endings and final newlines that the
-    editor sent.
+    Lines are split on ``\n`` only, as Git splits them, after ``\r\n`` is normalised.
+    They are compared without trailing ASCII white space, and empty lines at the end of
+    the body are ignored, because GitHub keeps the line endings and final newlines that
+    the editor sent.
     """
-    lines = [line.rstrip() for line in body.splitlines()]
+    lines = [line.rstrip(ASCII_SPACE) for line in body.replace("\r\n", "\n").split("\n")]
     while lines and not lines[-1]:
         lines.pop()
     if not lines:
@@ -85,7 +96,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     if arguments.author in EXEMPT_AUTHORS:
         print(f"exempt: {arguments.author} writes its own body and has no Jira key (FREES-81)")
         return 0
-    findings = footer_findings(arguments.body_file.read_text(encoding="utf-8"), arguments.head_ref)
+    body = arguments.body_file.read_bytes().decode("utf-8")
+    findings = footer_findings(body, arguments.head_ref)
     for finding in findings:
         print(f"error: {finding}", file=sys.stderr)
     if findings:

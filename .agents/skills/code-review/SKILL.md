@@ -37,7 +37,8 @@ an independent agent or a human.
 
 - Branch name is `<type>/FREES-<n>-<slug>`; the pull request title is a Conventional Commit with the FREES reference.
 - The pull request body is the squash commit message, so its last line is `Refs: FREES-<n>`, in a paragraph of
-  trailer lines only. Attribution lines, such as `Co-Authored-By:` or a "Generated with" note, come before it. The
+  trailer lines only. It is the last line of the body, not of the commit: GitHub appends `Co-authored-by:` lines, so
+  on `main` the footer is not a Git trailer. Attribution lines, such as `Co-Authored-By:` or a "Generated with" note, come before it. The
   `pr-body` workflow (`make lint-pr-body`) checks this on every pull request; it is not a required check, so the
   reviewer confirms it passed for the current body. Dependabot pull requests are exempt: Dependabot writes its own
   body and has no Jira key; the gap is tracked on FREES-81.
@@ -78,8 +79,8 @@ an independent agent or a human.
 - Accepting a merge of `main` because the tree "only adds `main`", without comparing it to `git merge-tree`, or
   missing a semantic conflict that Git merged silently, such as a count, a shared name prefix or a threshold that
   both sides changed.
-- A pull request body that ends with an attribution line instead of `Refs: FREES-<n>`, so the commit on `main` has no
-  Jira footer.
+- A pull request body that ends with an attribution line instead of `Refs: FREES-<n>`, so the squash commit on `main`
+  carries no Jira footer.
 - Marking Jira done before the pull request merged.
 
 ## Security requirements

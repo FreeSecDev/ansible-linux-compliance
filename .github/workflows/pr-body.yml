@@ -31,9 +31,8 @@ jobs:
           enable-cache: false
       - name: Check that the body ends with the Refs footer
         env:
-          PR_BODY: ${{ github.event.pull_request.body }}
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
           PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
         run: |
-          printf '%s' "$PR_BODY" > "$RUNNER_TEMP/pr-body.md"
-          make lint-pr-body PR_BODY_FILE="$RUNNER_TEMP/pr-body.md"
+          jq -j '.pull_request.body // ""' "$GITHUB_EVENT_PATH" > "$RUNNER_TEMP/pr-body.txt"
+          make lint-pr-body PR_BODY_FILE="$RUNNER_TEMP/pr-body.txt"

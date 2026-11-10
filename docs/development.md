@@ -429,12 +429,16 @@ runs; runs on `main` and merge groups are never cancelled. `docs` is part of `ma
 added as a job together with the documentation pipeline (FREES-80).
 
 `.github/workflows/pr-body.yml` runs the job `refs-footer` for every pull request to `main` when it is opened, edited,
-reopened or pushed to: `make lint-pr-body` on the body, author and head branch of the event. They reach the step
-through environment variables, and the body through a file; none is interpolated into the script. The squash commit message is the pull request body, so
-this keeps the `Refs: FREES-<n>` footer of AGENTS.md on the commit on `main`
-([ADR 0033](adr/0033-review-policy-independent-verdict-without-required-approval.md#the-pull-request-body-ends-with-the-jira-footer)).
+reopened or pushed to: `make lint-pr-body` on the body, author and head branch of the event. The step reads the body
+with `jq` from the event file (`$GITHUB_EVENT_PATH`) into `$RUNNER_TEMP/pr-body.txt`, so a large body never passes
+through an environment variable; the author and head branch reach it through environment variables, and nothing from
+the event is interpolated into the script. The squash commit message is the pull request body, so this keeps the
+`Refs: FREES-<n>` footer of AGENTS.md on the squash commit on `main`. There it is not the last line and not a Git
+trailer, because GitHub appends `Co-authored-by:` lines after the body
+([ADR 0033](adr/0033-review-policy-independent-verdict-without-required-approval.md#amendment-2026-11-10-the-pull-request-body-ends-with-the-jira-footer-frees-204)).
 It has `contents: read` only and is not part of `ci-gate`: `ci.yml` does not run when only the body is edited, and the
-ruleset does not require the check, so the `code-review` skill has the reviewer confirm it passed. Requiring it would
+ruleset does not require the check, so the `code-review` skill has the reviewer confirm it passed. A pull request runs its own copy of the workflow and
+of `tools/lint/check_pr_body.py`, so a change to either is reviewed like any other change. Requiring it would
 also need a `merge_group` trigger, because the merge queue waits for every required check.
 
 `.github/workflows/scc-release-watch.yml` runs the job `scc-release-watch` daily at 05:43 UTC and on manual dispatch,

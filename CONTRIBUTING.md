@@ -48,10 +48,12 @@ described in [SECURITY.md](SECURITY.md), never in a public issue or pull request
    Refs: FREES-22
    ```
 
-   GitHub may add a `---------` line and `Co-authored-by:` lines for the co-authors of the branch's commits after
-   the body; those lines are GitHub's, and the footer stays the last line of the body. The `pr-body` workflow checks
-   the footer whenever the pull request is opened, edited or pushed to; run the same check locally with
-   `gh pr view <number> --json body -q .body > build/pr-body.md` and `make lint-pr-body PR_BODY_FILE=build/pr-body.md`.
+   The footer is the last line of the body, not of the commit. GitHub appends a `---------` line and
+   `Co-authored-by:` lines after the body of every squash commit, so on `main` the footer is followed by those lines
+   and Git does not read it as a trailer (`git log --format='%(trailers:key=Refs)'` finds nothing). To find the key
+   of a commit on `main`, search its message for a line that matches `^Refs: FREES-`. The `pr-body` workflow checks the
+   footer whenever the pull request is opened, edited, reopened or pushed to; run the same check locally with
+   `gh pr view <number> --json body -q .body > build/pr-body.txt` and `make lint-pr-body PR_BODY_FILE=build/pr-body.txt`.
    Dependabot pull requests are exempt: Dependabot writes its own body and has no Jira key (FREES-81).
 6. An independent reviewer, an agent or a human that did not write the change, reviews the current head and posts the
    verdict on the pull request, ending with the marker

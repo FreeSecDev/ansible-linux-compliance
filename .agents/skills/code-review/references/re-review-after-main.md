@@ -61,7 +61,7 @@ Names used below:
 6. **Tests.** The tests both sides added or changed pass on `H`, and `ci-gate` is green on `H`. Record the commands
    and results.
 
-## Examples from 2026-11-10
+## Examples from 2026-11-09 and 2026-11-10
 
 The merges of `main` into #78 (FREES-186) and #86 (FREES-107) needed real conflict resolution. The reviews around
 those merges and CI found semantic conflicts that Git did not report:
