@@ -257,6 +257,18 @@ What is in force with the acceptance:
   `roles/remediate/meta/main.yml` are refused. `include_tasks` and `import_tasks` are accepted only as task keys whose
   target is `{{ role_path }}/tasks/` followed by a literal relative path, because Ansible looks for any other relative
   target in the playbook's directory too.
+- Every file from which Ansible can load the role's tasks, handlers or metadata is one the rule reads. ansible-core
+  2.21.6 (`Role._load_role_yaml`) loads the `tasks`, `handlers` and `meta` entry point `main` as `main.yml`,
+  `main.yaml`, `main.json` or `main` without a suffix, and `tasks_from` and `handlers_from` of a caller load any file
+  below `tasks/` or `handlers/` by its exact name, whatever its suffix. `DataLoader` reads each file as JSON before YAML
+  and decrypts a vaulted file. So `tools/lint/repo_rules/remediate_files.py` requires of every file below
+  `roles/remediate/tasks/`, `handlers/` and `meta/`, at any depth and case-folded, that it ends in `.yml` or `.yaml` and
+  is YAML that PyYAML reads (JSON indented with tabs is not), and that each document is empty or a sequence of tasks
+  (`tasks/`, `handlers/`) or a mapping (`meta/`), so a vaulted document is refused too. The role has no `handlers/`
+  directory today; a handler file added later is read like any task file, whichever name or `listen` topic notifies it.
+  `vars/` and `defaults/` hold variables only. A unit test loads each refused form through `_load_role_yaml` of the
+  installed ansible-core to show that Ansible reads it, and keeps the directories and the `_from` options equal to
+  ansible-core's.
 - `ALLOWED_COMMUNITY_MODULES` is empty. `community.general.make` and `ansible.posix.at` are refused because they are
   not listed.
 - An allow-listed module is refused unless its collection is pinned at one exact version (see H below).
@@ -267,9 +279,9 @@ Molecule scenarios, test playbooks and the other roles are outside the allow lis
 before. One limit is documented rather than enforced: `ansible.builtin.service`, which the `ssh` family uses to reload
 sshd, runs the module that the host's service manager fact names (its `use` parameter is refused, ADR 0004). On the
 supported platforms that is `systemd`, a module of ansible-core; on a host with another service manager it can be a
-community module, if that collection is installed on the controller. The value overrides of §2 to §5 are not implemented yet: until their pull requests merge,
-`linux_compliance_remediate_value_overrides` does not exist, and nothing in this section changes what the remediate
-role writes.
+community module, if that collection is installed on the controller. The value overrides of §2 to §5 are not
+implemented yet: until their pull requests merge, `linux_compliance_remediate_value_overrides` does not exist, and
+nothing in this section changes what the remediate role writes.
 
 ## Corrections to the context (2026-11-10)
 

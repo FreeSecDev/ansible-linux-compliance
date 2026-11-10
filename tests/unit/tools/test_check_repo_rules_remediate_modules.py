@@ -1,15 +1,19 @@
-"""The modules that ``roles/remediate`` may run (FREES-203, ADR 0032 §1).
+"""The modules that ``roles/remediate`` may run and the files it holds (FREES-203, ADR 0032 §1).
 
 A task of the remediate role may use ``ansible.builtin`` modules, this collection's modules and the
 community modules of an allow list that starts empty. An allow-listed module also needs its
 collection pinned at one exact version in ``galaxy.yml``, the Molecule requirements and the
-collection pins.
+collection pins. Every file that Ansible may load as a task, handler or metadata of the role
+must be one that the rule reads.
 """
 
 from __future__ import annotations
 
 import importlib
 import importlib.util
+import inspect
+import operator
+import re
 from pathlib import Path
 from typing import cast
 
@@ -17,6 +21,7 @@ import pytest
 import yaml
 
 from tools.lint import check_repo_rules as rules
+from tools.lint.repo_rules import remediate_files as role_files
 from tools.lint.repo_rules import remediate_modules as remediate
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
@@ -750,3 +755,240 @@ def test_the_role_metadata_of_the_repository_passes() -> None:
         path, Path(META), documents(path.read_text(encoding="utf-8"))
     )
     assert found == []
+
+
+ROLE_TASK = '[{"name": "Write key", "listen": "go", "community.crypto.openssl_privatekey": {}}]\n'
+TAB_JSON = '[\n\t{"name": "Make",\t"community.general.make":\t{}}\n]\n'
+SUFFIX = "only .yml and .yaml files may be there"
+UNREADABLE = "cannot be read as YAML"
+ROOT = "must be empty or"
+
+
+def ansible_loads(
+    root: Path, directory: str, main: str | None = None, secret: bytes | None = None
+) -> object:
+    """Return what ansible-core's role loader reads from ``directory`` of the role at ``root``.
+
+    ``_load_role_yaml`` finds and reads a role's ``tasks``, ``handlers``, ``meta``, ``vars`` and
+    ``defaults`` entry points; ``main`` is a ``tasks_from`` or ``handlers_from`` value. It needs
+    only the role path, the role name and a ``DataLoader``, so no play, inventory or plugin loader
+    is set up. ``secret`` is the vault password.
+    """
+    loader = importlib.import_module("ansible.parsing.dataloader").DataLoader()
+    if secret is not None:
+        vault = importlib.import_module("ansible.parsing.vault")
+        loader.set_vault_secrets([("default", vault.VaultSecret(secret))])
+    role: object = object.__new__(importlib.import_module("ansible.playbook.role").Role)
+    vars(role).update({"_role_path": str(root), "_role_name": "remediate", "_loader": loader})
+    return operator.methodcaller("_load_role_yaml", directory, main=main)(role)
+
+
+def role_findings(relative: str, data: bytes) -> list[str]:
+    return [
+        violation.message
+        for violation in role_files.role_file_findings(Path(relative), Path(relative), data)
+    ]
+
+
+def write_role_file(root: Path, relative: str, data: bytes) -> Path:
+    target = root / relative
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(data)
+    return target
+
+
+ENTRY_POINT_FORMS = [
+    pytest.param("handlers/main.json", "handlers", None, id="handlers-main-json"),
+    pytest.param("handlers/main", "handlers", None, id="handlers-main-no-suffix"),
+    pytest.param("tasks/main.json", "tasks", None, id="tasks-main-json"),
+    pytest.param("tasks/main", "tasks", None, id="tasks-main-no-suffix"),
+    pytest.param("tasks/extra.txt", "tasks", "extra.txt", id="tasks-from-other-suffix"),
+    pytest.param("tasks/nested/extra", "tasks", "nested/extra", id="tasks-from-nested-no-suffix"),
+    pytest.param("handlers/extra.json", "handlers", "extra.json", id="handlers-from-json"),
+    pytest.param("handlers/extra.yml~", "handlers", "extra.yml~", id="handlers-from-backup"),
+]
+
+
+@pytest.mark.parametrize(("relative", "directory", "main"), ENTRY_POINT_FORMS)
+def test_ansible_loads_task_files_of_every_suffix(
+    tmp_path: Path, relative: str, directory: str, main: str | None
+) -> None:
+    write_role_file(tmp_path, relative, ROLE_TASK.encode())
+    loaded = ansible_loads(tmp_path, directory, main)
+    assert loaded == [
+        {"name": "Write key", "listen": "go", "community.crypto.openssl_privatekey": {}}
+    ]
+
+
+@pytest.mark.parametrize(("relative", "directory", "main"), ENTRY_POINT_FORMS)
+def test_task_files_without_a_yaml_suffix_are_refused(
+    tmp_path: Path, relative: str, directory: str, main: str | None
+) -> None:
+    del main
+    full = f"roles/remediate/{relative}"
+    messages = role_findings(full, ROLE_TASK.encode())
+    assert len(messages) == 1, messages
+    assert SUFFIX in messages[0]
+    assert f"roles/remediate/{directory}/" in messages[0]
+    assert ADR in messages[0]
+    target = write_role_file(tmp_path, full, ROLE_TASK.encode())
+    found = [violation.message for violation in rules.check_file(target, tmp_path)]
+    assert messages[0] in found, found
+    swept = [violation.message for violation in rules.check_paths([target], tmp_path)]
+    assert messages[0] in swept, swept
+
+
+def test_ansible_loads_role_metadata_without_a_yaml_suffix(tmp_path: Path) -> None:
+    for relative in ("meta/main.json", "meta/main"):
+        role = tmp_path / relative.replace("/", "_")
+        write_role_file(role, relative, b'{"dependencies": ["other.collection.role"]}\n')
+        loaded = ansible_loads(role, "meta")
+        assert loaded == {"dependencies": ["other.collection.role"]}
+
+
+@pytest.mark.parametrize(
+    "relative",
+    [
+        "roles/remediate/meta/main.json",
+        "roles/remediate/meta/main",
+        "roles/remediate/meta/argument_specs.json",
+        "Roles/Remediate/Handlers/main.JSON",
+        "roles/remediate/TASKS/main",
+    ],
+)
+def test_metadata_and_case_variants_without_a_yaml_suffix_are_refused(
+    tmp_path: Path, relative: str
+) -> None:
+    data = b'{"dependencies": ["other.collection.role"]}\n'
+    messages = role_findings(relative, data)
+    assert len(messages) == 1, messages
+    assert SUFFIX in messages[0]
+    target = write_role_file(tmp_path, relative, data)
+    assert messages[0] in [violation.message for violation in rules.check_file(target, tmp_path)]
+
+
+def test_ansible_loads_json_that_pyyaml_cannot_read(tmp_path: Path) -> None:
+    with pytest.raises(yaml.YAMLError):
+        yaml.safe_load(TAB_JSON)
+    write_role_file(tmp_path, "tasks/tabs.yml", TAB_JSON.encode())
+    loaded = ansible_loads(tmp_path, "tasks", "tabs.yml")
+    assert loaded == [{"name": "Make", "community.general.make": {}}]
+
+
+@pytest.mark.parametrize(
+    ("relative", "data"),
+    [
+        ("roles/remediate/tasks/tabs.yml", TAB_JSON.encode()),
+        ("roles/remediate/handlers/main.yml", TAB_JSON.encode()),
+        ("roles/remediate/meta/main.yml", b'{"dependencies":\t["a.b.c"]}\n'),
+        ("roles/remediate/tasks/latin1.yml", b"---\n- name: caf\xe9\n"),
+    ],
+)
+def test_role_files_that_pyyaml_cannot_read_are_refused(
+    tmp_path: Path, relative: str, data: bytes
+) -> None:
+    messages = role_findings(relative, data)
+    assert len(messages) == 1, messages
+    assert UNREADABLE in messages[0]
+    assert ADR in messages[0]
+    target = write_role_file(tmp_path, relative, data)
+    assert messages[0] in [violation.message for violation in rules.check_file(target, tmp_path)]
+
+
+def test_ansible_loads_a_vaulted_task_file(tmp_path: Path) -> None:
+    vault = importlib.import_module("ansible.parsing.vault")
+    secret = vault.VaultSecret(b"probe")
+    encrypted = cast("bytes", vault.VaultLib([("default", secret)]).encrypt(ROLE_TASK, secret))
+    write_role_file(tmp_path, "handlers/main.yml", encrypted)
+    loaded = ansible_loads(tmp_path, "handlers", secret=b"probe")
+    assert loaded == [
+        {"name": "Write key", "listen": "go", "community.crypto.openssl_privatekey": {}}
+    ]
+    messages = role_findings("roles/remediate/handlers/main.yml", encrypted)
+    assert len(messages) == 1, messages
+    assert ROOT in messages[0]
+    assert check(encrypted.decode(), "roles/remediate/handlers/main.yml") == []
+
+
+@pytest.mark.parametrize(
+    ("relative", "text", "line"),
+    [
+        ("roles/remediate/tasks/x.yml", "---\ncommunity.general.make: {}\n", 2),
+        ("roles/remediate/handlers/main.yml", "---\nplain\n", 2),
+        ("roles/remediate/tasks/x.yml", "---\n- name: x\n---\nplain\n", 4),
+        ("roles/remediate/meta/main.yml", "---\n- dependencies: [a.b.c]\n", 2),
+        ("roles/remediate/meta/argument_specs.yml", "---\nplain\n", 2),
+    ],
+)
+def test_role_documents_with_another_root_are_refused(relative: str, text: str, line: int) -> None:
+    found = role_files.role_file_findings(Path(relative), Path(relative), text.encode())
+    assert [violation.line for violation in found] == [line]
+    assert ROOT in found[0].message
+    assert ADR in found[0].message
+
+
+@pytest.mark.parametrize(
+    ("relative", "text"),
+    [
+        ("roles/remediate/tasks/x.yml", "---\n- name: x\n  ansible.builtin.debug: {}\n"),
+        ("roles/remediate/handlers/main.yaml", "---\n- name: x\n  listen: go\n"),
+        ("roles/remediate/tasks/nested/x.YML", "---\n[]\n"),
+        ("roles/remediate/tasks/empty.yml", ""),
+        ("roles/remediate/tasks/null.yml", "---\n"),
+        ("roles/remediate/handlers/tilde.yml", "---\n~\n"),
+        ("roles/remediate/meta/main.yml", "---\ndependencies: []\n"),
+        ("roles/remediate/meta/argument_specs.yml", "---\nargument_specs: {}\n"),
+    ],
+)
+def test_role_files_that_the_rule_reads_pass(relative: str, text: str) -> None:
+    assert role_findings(relative, text.encode()) == []
+
+
+@pytest.mark.parametrize(
+    "relative",
+    [
+        "roles/remediate/README.md",
+        "roles/remediate/vars/main.json",
+        "roles/remediate/defaults/main",
+        "roles/remediate/templates/x.j2",
+        "roles/remediate/tasks",
+        "roles/remediate.json",
+        "roles/audit/handlers/main.json",
+        "tests/roles/remediate/tasks/x.json",
+    ],
+)
+def test_files_outside_the_role_load_directories_are_not_refused(relative: str) -> None:
+    assert role_files.role_load_directory(Path(relative)) is None
+    assert role_findings(relative, ROLE_TASK.encode()) == []
+
+
+def test_relative_none_is_not_a_role_file() -> None:
+    assert role_files.role_file_findings(Path("main.json"), None, ROLE_TASK.encode()) == []
+
+
+def test_role_load_directories_match_ansible_core() -> None:
+    role_class = importlib.import_module("ansible.playbook.role").Role
+    include_class = importlib.import_module("ansible.playbook.role_include").IncludeRole
+    loaded = set(re.findall(r"_load_role_yaml\('(\w+)'", inspect.getsource(role_class)))
+    variables = {"vars", "defaults"}
+    assert loaded - variables == role_files.ROLE_LOAD_DIRECTORIES
+    entry_points = {
+        str(key).removesuffix("_from") for key in cast("frozenset[str]", include_class.FROM_ARGS)
+    }
+    assert entry_points - variables == role_files.TASK_LIST_DIRECTORIES
+
+
+def test_ansible_core_tries_these_role_file_forms() -> None:
+    source = inspect.getsource(importlib.import_module("ansible.playbook.role").Role)
+    assert "extensions = ['.yml', '.yaml', '.json']" in source
+    assert "extensions.append('')" in source
+    assert "extensions.insert(0, '')" in source
+
+
+def test_the_remediate_role_files_are_all_read() -> None:
+    role = REPOSITORY_ROOT / "roles" / "remediate"
+    files = [path for path in role.rglob("*") if path.is_file()]
+    assert files
+    for path in files:
+        relative = path.relative_to(REPOSITORY_ROOT)
+        assert role_files.role_file_findings(path, relative, path.read_bytes()) == [], relative

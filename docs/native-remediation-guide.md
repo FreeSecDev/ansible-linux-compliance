@@ -63,6 +63,13 @@ listed. To list one, the same pull request:
 The family keeps the reader as the oracle, whichever module writes the file. Molecule scenarios, test playbooks and
 the other roles are not in scope of the allow list; the banned modules apply to them as everywhere.
 
+Ansible loads a role's `tasks`, `handlers` and `meta` entry point `main` also as `main.json` or `main` without a
+suffix, and `tasks_from` or `handlers_from` loads any file below `tasks/` or `handlers/` by its exact name. It reads
+each file as JSON first and decrypts a vaulted file. So every file below `roles/remediate/tasks/`, `handlers/` and
+`meta/` must end in `.yml` or `.yaml`, must be YAML that PyYAML reads, and must hold only task lists (`tasks/`,
+`handlers/`) or a mapping (`meta/`); `make lint-repo` refuses anything else there, so no task or handler of the role
+escapes the allow list.
+
 The allow list governs modules, so the role does not run tasks it does not own: `include_role`, `import_role` and a
 dependency in `roles/remediate/meta/main.yml` are refused, and `include_tasks` and `import_tasks` are task keys whose
 target is `{{ role_path }}/tasks/` followed by a literal path. Ansible looks for any other relative target in the

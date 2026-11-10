@@ -34,6 +34,16 @@ by a literal relative path. Ansible looks for a plain relative target in the rol
 back to the playbook's directory, whose task files this rule never reads. A document with another
 root, such as ``vars/rules.yml`` or ``meta/argument_specs.yml``, is not a task list and is not read.
 
+Ansible also loads role files that are not YAML, or that PyYAML cannot read, as tasks, handlers
+and metadata; :mod:`tools.lint.repo_rules.remediate_files` refuses every such file in the role, so
+every task and handler that the role can run is in a document that this rule reads.
+
+``BUILTIN_MODULES`` equals the module files of the pinned ansible-core, without exception, so it
+also holds ``async_wrapper``, which ansible-core runs on the host for an ``async`` task, and
+``import_playbook``, which a role task cannot use. Both are code of ansible-core, so accepting them
+lets no other collection's code run, and the drift test that keeps the list equal to ansible-core
+fails if they are removed.
+
 An allow-listed module is accepted only while its collection is pinned at one exact version
 (``<major>.<minor>.<patch>``) in ``galaxy.yml`` ``dependencies``, in
 ``extensions/molecule/requirements.yml`` and in ``extensions/molecule/collections.pins``. Files

@@ -69,6 +69,9 @@ family, never a templated file name (FREES-137). Family files record and remove 
   `roles/remediate`.
 - `include_role`, `import_role` or a role dependency in `roles/remediate`, and an `include_tasks` or `import_tasks`
   target other than `{{ role_path }}/tasks/<file>`.
+- A file below `roles/remediate/tasks/`, `handlers/` or `meta/` that does not end in `.yml` or `.yaml`, that PyYAML
+  cannot read, or whose document is not a task list (`meta/`: a mapping), such as `handlers/main.json`,
+  `handlers/main` or a vaulted file: Ansible loads it, but the module check could not read it.
 - One large file for unrelated controls.
 - Nested toggle dictionaries, or a rule without a toggle.
 - A rule without a revert path, unless it is catalogued as `irreversible` with a runbook.

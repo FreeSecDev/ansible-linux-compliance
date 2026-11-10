@@ -121,7 +121,12 @@ Rules:
   be task keys whose target is ``{{ role_path }}/tasks/<literal path>``. The allow list is
   empty, and an allow-listed module needs its collection pinned at one exact version in
   ``galaxy.yml``, ``extensions/molecule/requirements.yml`` and
-  ``extensions/molecule/collections.pins``.
+  ``extensions/molecule/collections.pins``. Because Ansible also loads ``main.json``, ``main``
+  without a suffix, any file that ``tasks_from`` or ``handlers_from`` names, JSON that PyYAML
+  cannot read and vaulted files as a role's tasks, handlers or metadata,
+  ``tools/lint/repo_rules/remediate_files.py`` refuses every file below
+  ``roles/remediate/tasks/``, ``handlers/`` and ``meta/`` that is not a readable ``.yml`` or
+  ``.yaml`` file of task lists (``meta/``: mappings).
 
 Violations are printed as ``path:line: message`` and the exit status is 1. An
 ``--index-modes`` listing that cannot be read is reported with exit status 2.

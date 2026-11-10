@@ -11,8 +11,11 @@ minor_changes:
     ``ansible.builtin.sysctl``): only the module files of the pinned ansible-core that its routing leaves in place are
     accepted. A module of this collection needs its file and no redirect in ``meta/runtime.yml``. ``include_role``,
     ``import_role`` and role dependencies are refused, and ``include_tasks`` and ``import_tasks`` must target
-    ``{{ role_path }}/tasks/``. An allow-listed module also needs its collection pinned at one exact version in
-    ``galaxy.yml`` ``dependencies``, ``extensions/molecule/requirements.yml`` and
+    ``{{ role_path }}/tasks/``. Every file below ``roles/remediate/tasks``, ``handlers`` and ``meta`` must be a
+    ``.yml`` or ``.yaml`` file that the check can read, with task lists or a metadata mapping, because Ansible also
+    loads ``main.json``, ``main`` without a suffix, any file that ``tasks_from`` or ``handlers_from`` names, JSON
+    that is not YAML and vaulted files there. An allow-listed module also needs its collection pinned at one exact
+    version in ``galaxy.yml`` ``dependencies``, ``extensions/molecule/requirements.yml`` and
     ``extensions/molecule/collections.pins``.
 trivial:
   - >-

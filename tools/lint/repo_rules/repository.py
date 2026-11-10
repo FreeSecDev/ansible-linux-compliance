@@ -44,6 +44,7 @@ from tools.lint.repo_rules.load_locations import (
 )
 from tools.lint.repo_rules.names import FILE_IO_IMPORTERS, SHEBANG_PREFIX
 from tools.lint.repo_rules.own_remediation import own_remediation_findings
+from tools.lint.repo_rules.remediate_files import role_file_findings
 from tools.lint.repo_rules.remediate_modules import check_remediate_modules
 from tools.lint.repo_rules.rendered_files import NUL, rendered_file_findings
 from tools.lint.repo_rules.yaml_text import check_document_start, check_yaml_comments
@@ -83,6 +84,8 @@ def check_file(
     A compiled module (an extension module or bytecode) is refused wherever it is,
     without being read: the import system loads it before, or instead of, a ``.py``
     source of the same name, so it would run code that no rule has seen (FREES-153).
+    A file below ``roles/remediate/tasks``, ``handlers`` or ``meta`` that the module rule of
+    ADR 0032 §1 could not read is refused whatever its suffix (FREES-203).
     The location rules then apply to every file, and a symbolic link is never read
     through. ``configured`` holds the load directories that an ``ansible.cfg`` names;
     without it they are looked up for ``path`` alone (FREES-156). ``index`` maps
@@ -125,7 +128,8 @@ def check_file(
         if violation not in found
     ]
     own = own_remediation_findings(path, relative, data)
-    return [*violations, *found, *rendered, *own]
+    role = role_file_findings(path, relative, data)
+    return [*violations, *found, *rendered, *own, *role]
 
 
 def _is_executed(relative: Path | None) -> bool:
