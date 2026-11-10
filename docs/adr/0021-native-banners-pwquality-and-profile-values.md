@@ -338,3 +338,48 @@ rewrote a CRLF file or one with a lone CR other than byte for byte.
   does not read, is not taken for a `.conf` file.
 - *A cleanup that ends in `write_mismatch` says that the main file was written back (N6)*, instead of saying that
   nothing was changed.
+
+## Amendment of 2026-11-10: the vendor PAM directory (FREES-211)
+
+**Context.** The amendment of FREES-200 decided that every PAM file below `/etc/pam.d` and `/usr/lib/pam.d` is
+searched for `pam_pwquality` arguments, and its reviews explained the include refusals with "the collection reads
+only `/etc/pam.d` and `/usr/lib/pam.d`" (F8) and "Linux-PAM opens a relative path below `/etc/pam.d`" (N4).
+[ADR 0027](0027-native-faillock-pwhistory.md) records that libpam also opens a service from the vendor directory
+`/usr/share/pam.d`, and the `faillock` and `pwhistory` families read it. A `pam_pwquality minlen=8` line in a service
+file that only `/usr/share/pam.d` holds was therefore not read: the family could report `minlen` `compliant` or
+`applied` while libpwquality, called through that service, used 8.
+
+The source of `libpam/pam_handlers.c` in both Molecule images, fetched the way `make pam-reader-verdicts` fetches it
+(linux-pam 1.5.1-28.el9 and 1.5.3-5ubuntu5.7), and the strings of the installed `libpam.so.0` show:
+
+- `_pam_open_config_file` opens a service name and every `include` and `substack` target the same way, and on Ubuntu,
+  whose libpam also accepts `@include` (Rocky Linux's refuses the line), every `@include` target too:
+  an absolute path as given, and any other name in the first of `/etc/pam.d/<name>`, `/usr/lib/pam.d/<name>` and,
+  only when libpam is built with a vendor directory, `/usr/share/pam.d/<name>` that it can open. A relative target is
+  looked up in each directory in turn, not only below `/etc/pam.d`.
+- Rocky Linux 9 builds pam with `--enable-vendordir=/usr/share` and ships an empty `/usr/share/pam.d`. The Ubuntu
+  24.04 package is built without a vendor directory: its `libpam.so.0` names only `/etc/pam.d` and `/usr/lib/pam.d`,
+  and the image has no `/usr/share/pam.d`.
+
+**Decision.**
+
+- The family reads the shared list `__linux_compliance_remediate_pam_directories` of ADR 0027 (`/etc/pam.d`,
+  `/usr/lib/pam.d`, `/usr/share/pam.d`), and `__linux_compliance_remediate_pwquality_pam_directories` is removed.
+  Every regular file of every directory that exists is read and the files are searched together: no file is left
+  out because a file of the same name comes first in libpam's order. An argument in a file that libpam does not
+  open, such as a vendor file behind a file of the same name in `/etc/pam.d`, or any vendor file on Ubuntu, also
+  refuses the rule, so the added directory can only add refusals.
+- **Known gap, not closed here.** A PAM file that is a symbolic link, and a PAM directory that is one, are not read:
+  `ansible.builtin.find` with `file_type: file` keeps only regular files, whatever `follow` says. The decision of
+  FREES-200 above says the files are read through symbolic links; that is not what the role does. On a host where
+  authselect makes `/etc/pam.d/system-auth` a link, an argument there is missed and the rule can be reported
+  `compliant` or `applied`. FREES-213 records the fail-open and its fix, for this family and for the faillock and
+  pwhistory families of ADR 0027.
+- An include of a target with a `/` still refuses every rule; the reason is the lookup above: `../security/x` and
+  `site/x` open a file outside the three directories or below one of them, which the collection does not read. A bare
+  name is looked up in the three directories, and every file of them is read.
+- The regression group `readers` adds a service file that only `/usr/share/pam.d` holds, with
+  `pam_pwquality.so minlen=8 enforcing=0`, on both platforms (the directory is created for the test on Ubuntu and
+  removed again): `minlen` is `overridden` by the argument and `enforce_for_root` by `enforcing=0`, with nothing
+  written. The test declares `/usr/share/pam.d` as rewritten, so that the whole-instance comparison leaves out the
+  times of that directory and of `/usr/share`, which the test changes for good.
