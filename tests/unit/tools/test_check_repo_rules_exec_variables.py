@@ -39,6 +39,8 @@ NAMES = (
     "ansible_playbook_python",
     "pkg_mgr",
     "service_mgr",
+    "ansible_network_os",
+    "network_os",
     "discovered_interpreter_python",
     "ansible_discovered_interpreter_python",
     "_ansible_ansiballz_debugpy_config",

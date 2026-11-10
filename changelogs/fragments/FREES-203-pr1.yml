@@ -13,14 +13,24 @@ minor_changes:
     whose action plugins choose the module to run from an argument, a variable or a fact while the play runs. An
     ``action`` or ``local_action`` whose module is not a plain string is refused, because ansible-core's JSON loader
     reads a load marker such as ``__ansible_unsafe`` there as the module name. A module of this collection needs its
-    file and no redirect in ``meta/runtime.yml``. ``include_role``,
+    file and no routing entry other than ``deprecation`` in ``meta/runtime.yml``. ``include_role``,
     ``import_role`` and role dependencies are refused, and ``include_tasks`` and ``import_tasks`` must target
     ``{{ role_path }}/tasks/``. Every file below ``roles/remediate/tasks``, ``handlers`` and ``meta`` must be a
     ``.yml`` or ``.yaml`` file that the check can read, with task lists or a metadata mapping, because Ansible also
     loads ``main.json``, ``main`` without a suffix, any file that ``tasks_from`` or ``handlers_from`` names, JSON
     that is not YAML and vaulted files there, and no key in them may start with ``__ansible_``. An allow-listed
     module also needs its collection pinned at one exact version in ``galaxy.yml`` ``dependencies``,
-    ``extensions/molecule/requirements.yml`` and ``extensions/molecule/collections.pins``.
+    ``extensions/molecule/requirements.yml`` and ``extensions/molecule/collections.pins``. ``delegate_to``,
+    ``delegate_facts``, ``local_action`` and ``connection`` are refused on every task of ``roles/remediate``, and
+    ``meta/runtime.yml`` may route modules and action plugins only with ``redirect``, ``tombstone`` and
+    ``deprecation``, ``module_utils`` only with ``deprecation``, and may hold no ``import_redirection``. The check
+    guards against mistakes and unreviewed additions, not against a deliberate multi-step bypass; ADR 0032 records
+    what it does not cover (Jinja plugins of other collections, files the role plants, other routing, play settings
+    outside the role, edits of the check itself), which the review of every pull request covers.
+  - >-
+    Repository guard - ``ansible_network_os`` and ``network_os`` are refused wherever the repository sets variables or
+    facts, like ``ansible_facts_modules`` and ``ansible_package_use``, because they choose the module that
+    ``ansible.builtin.gather_facts`` runs, also for a play's own fact gathering (FREES-203).
   - >-
     Repository guard - ``make lint-repo`` refuses names that Ansible learns only while the play runs, in every task
     list (FREES-203): a templated ``set_fact`` key (accepted only in the Molecule harness below

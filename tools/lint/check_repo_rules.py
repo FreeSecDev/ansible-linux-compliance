@@ -119,8 +119,8 @@ Rules:
   ``ansible.builtin.sysctl`` (``ansible.posix.sysctl``) are refused, and its
   ``DISPATCHING_MODULES`` ``gather_facts``, ``package`` and ``service`` are refused because their
   action plugins choose the module to run while the play runs; a collection module needs its
-  file in ``plugins/modules`` or ``plugins/action`` and no redirect or tombstone in
-  ``meta/runtime.yml``. ``include_role``, ``import_role`` and a dependency in
+  file in ``plugins/modules`` or ``plugins/action`` and no routing entry other than
+  ``deprecation`` in ``meta/runtime.yml``. ``include_role``, ``import_role`` and a dependency in
   ``roles/remediate/meta/main.yml`` are refused, and ``include_tasks`` and ``import_tasks`` must
   be task keys whose target is ``{{ role_path }}/tasks/<literal path>``. The allow list is
   empty, and an allow-listed module needs its collection pinned at one exact version in
@@ -131,7 +131,12 @@ Rules:
   ``tools/lint/repo_rules/remediate_files.py`` refuses every file below
   ``roles/remediate/tasks/``, ``handlers/`` and ``meta/`` that is not a readable ``.yml`` or
   ``.yaml`` file of task lists (``meta/``: mappings) or that holds a key starting with
-  ``__ansible_``, which ansible-core's JSON loader decodes into another value.
+  ``__ansible_``, which ansible-core's JSON loader decodes into another value. ``delegate_to``,
+  ``delegate_facts``, ``local_action`` and ``connection`` are refused on every task of the role,
+  and ``meta/runtime.yml`` may route modules and action plugins only with ``redirect``,
+  ``tombstone`` and ``deprecation``, ``module_utils`` only with ``deprecation``, and holds no
+  ``import_redirection`` (``tools/lint/repo_rules/remediate_routing.py``). The rule is a guard
+  against mistakes, not a sandbox; its boundary is in ADR 0032 (2026-11-10).
 
 * Names that Ansible learns only at run time (FREES-203): in every task list, ``set_fact`` keys are
   literal (a templated key is accepted only below ``extensions/molecule/``), ``args``,

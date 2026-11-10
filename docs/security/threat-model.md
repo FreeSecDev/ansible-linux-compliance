@@ -502,6 +502,38 @@ process helper ([ADR 0030](../adr/0030-native-auditd-settings-and-audit-rules.md
   of the profile is written as its least disruptive choice (`syslog`, `email`, `single` before `halt`).
 - **Residual:** a profile that allows only `halt` gets `halt`, as its benchmark requires.
 
+## Modules of the remediate role
+
+The `remediate` role runs as root on managed hosts, and the modules it names decide which code runs there. The module
+rule of [ADR 0032](../adr/0032-operator-control-community-modules-and-value-overrides.md) §1 (`make lint-repo`,
+`tools/lint/repo_rules/remediate_modules.py`, `remediate_files.py`, `remediate_routing.py`) limits them to unrouted
+`ansible.builtin` modules, this collection's own and the allow list (empty today) (FREES-203).
+
+### T-REMEDIATE-1: a task of the role runs code that nobody reviewed as a remediation module
+
+- **Asset:** the managed hosts that remediation changes, and the controller that runs it.
+- **Attacker:** a contributor whose pull request adds or changes a task of `roles/remediate` or `meta/runtime.yml`, by
+  mistake or on purpose.
+- **Failure:** a community module, a builtin name that ansible-core routes to another collection, a builtin whose
+  action plugin chooses its module at run time, a routing entry that sends one of the collection's own names to other
+  code, or a task delegated to the controller runs during a remediation run.
+- **Mitigation:** the module rule refuses every module name of the role's task, handler and metadata files that is not
+  an unrouted `ansible.builtin` module outside `DISPATCHING_MODULES`, a module of this collection or an allow-listed,
+  pinned module, together with the forms listed in the ADR 0032 section "Boundary of the module rule (2026-11-10)":
+  role files the rule cannot read, includes outside `{{ role_path }}/tasks/`, `meta/runtime.yml` routing other than
+  `redirect`, `tombstone` and `deprecation` (`module_utils`: `deprecation`) and any `import_redirection`, the
+  variables and facts that choose a dispatching module (`ansible_network_os`, `network_os`, `ansible_facts_modules`,
+  `ansible_package_use`, `pkg_mgr`, `service_mgr`), and `delegate_to`, `delegate_facts`, `local_action` and
+  `connection` in the role.
+- **Residual:** the rule guards against mistakes and unreviewed additions; it is not a sandbox against a contributor
+  who deliberately builds a bypass in several steps. It does not cover Jinja filter, test and lookup plugins of other
+  collections, files that tasks of the role plant (for example a module written into one of Ansible's module paths on
+  a controller that is also a managed host), routing outside the forms it checks, play, inventory and configuration
+  settings outside the role, or a change to the rule and its tests. These are left to the independent review of every
+  pull request ([ADR 0033](../adr/0033-review-policy-independent-verdict-without-required-approval.md)), whose
+  checklist asks for that look on every change to `roles/remediate`, `meta/runtime.yml` or the rule. Accepted by the
+  project lead on 2026-11-10 (FREES-203).
+
 ## Libvirt CI caches
 
 The `molecule-libvirt` legs of `ci.yml` restore two Actions caches whose contents are installed or booted:

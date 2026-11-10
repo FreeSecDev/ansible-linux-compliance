@@ -412,3 +412,75 @@ This corrects the acceptance section above, which stays as written.
   `tools/lint/repo_rules/runtime_names.py` refuses these forms in every task list of the repository. A templated
   `set_fact` key is accepted only below `extensions/molecule/`, where the lifecycle harness switches the catalogue
   toggles of a family by name in throwaway instances; the roles, playbooks and test playbooks have none.
+
+## Boundary of the module rule (2026-11-10)
+
+Decision of the project lead, 2026-11-10, for FREES-203. This section corrects the sections above, which stay as
+written, wherever they claim more than what follows.
+
+The rule of §1 guards against mistakes and unreviewed additions. It is not a sandbox against a contributor who
+deliberately builds a bypass in several steps. That threat is handled by the independent review of every pull request
+([ADR 0033](0033-review-policy-independent-verdict-without-required-approval.md)), by CI and by the other rules of the
+repository.
+
+**What the rule guarantees.** Every module that a task, handler or metadata file of `roles/remediate` names is one of
+these: an `ansible.builtin` module of `BUILTIN_MODULES` that is not in `DISPATCHING_MODULES`, a module or action plugin
+of this collection, or a module on `ALLOWED_COMMUNITY_MODULES` whose collection is pinned. A module is named as a task
+key, as the module of `action` or `local_action`, or as the `module` key of their mapping form. A module of this
+collection must have its file in `plugins/modules` or `plugins/action`, and `meta/runtime.yml` may have no routing
+entry for it other than `deprecation`. Every file below `roles/remediate/tasks/`, `handlers/` and `meta/` is a file the
+rule reads.
+
+**What it refuses in addition**, so that the guarantee does not depend on how Ansible resolves a name:
+
+- `ansible.builtin` names that ansible-core redirects or removes, and short, `ansible.legacy` and templated names;
+- `ansible.builtin.gather_facts`, `package` and `service`, whose action plugins choose at run time which module they
+  run;
+- an `action` or `local_action` whose module is not a plain string, and any key that starts with `__ansible_` in the
+  role's task, handler and metadata files;
+- below `tasks/`, `handlers/` and `meta/` of the role, a file without a `.yml` or `.yaml` suffix, a file PyYAML cannot
+  read, and a document that is not a task list (`meta/`: a mapping);
+- `include_role`, `import_role` and role dependencies, and `include_tasks` or `import_tasks` with a target other than
+  `{{ role_path }}/tasks/` followed by a literal path;
+- in `meta/runtime.yml`, a `plugin_routing` entry for `modules` or `action` with a key other than `redirect`,
+  `tombstone` and `deprecation` (for example `action_plugin`), a `module_utils` entry with a key other than
+  `deprecation` (for example `redirect`), a routing section or entry that is not a mapping, and any
+  `import_redirection` (`tools/lint/repo_rules/remediate_routing.py`). The file has none of these today;
+- repository-wide, wherever variables or facts are set: `ansible_network_os` and `network_os`, next to
+  `ansible_facts_modules`, `ansible_package_use`, `pkg_mgr` and `service_mgr` (`BACKEND_VARIABLES` of
+  `tools/lint/repo_rules/exec_variables.py`, ADR 0004). These variables and facts choose the module that
+  `gather_facts`, `package` and `service` run, also for a play's own fact gathering after the role has run;
+- `delegate_to`, `delegate_facts`, `local_action` and `connection` on any task or block of `roles/remediate`, so the
+  role never runs a task on the controller or on another host. The role used none of them when this was added;
+- repository-wide, names that Ansible learns only at run time (`tools/lint/repo_rules/runtime_names.py`).
+
+**What it does not defend against.** These are left to the independent review of every pull request under ADR 0033:
+
+- Jinja filter, test and lookup plugins of other collections in templates and expressions of the role. They are code
+  on the controller, not modules, and the rule does not read them.
+- Files planted by tasks of the role, for example a module that a task writes into one of Ansible's module paths,
+  which ansible-core's own action plugins then load as an `ansible.legacy` module. Delegation is refused, so this needs
+  a controller that is also a managed host (a local connection, `ansible-pull`). The rule has no check on
+  `roles/remediate/files/` or `templates/`.
+- Plugin routing outside the forms it checks: `plugin_routing` of other plugin types (filters, tests, lookups and the
+  rest), and routing or plugin paths that the operator's configuration sets.
+- Settings of the play, inventory or configuration that run the role and that are outside `roles/remediate`, other
+  than those the rules of ADR 0004 refuse in this repository.
+- A contributor who edits the rule, its lists or its tests. The drift tests compare the lists with the installed
+  ansible-core only in the forms they read: the dispatch test finds `_execute_module` calls whose module name is not a
+  literal, and not a module chosen through routing or through variables that a play-level task reads.
+
+**Corrections of earlier sentences.**
+
+- "The role runs no tasks that the rule does not read" (acceptance) means: every task and handler file of the role is
+  a file the rule reads. It does not mean that only reviewed code runs during remediation. The limits above remain.
+- "No limit of §1 remains documented instead of enforced" (correction of 2026-11-10) is withdrawn. The limits above are
+  documented and left to review.
+- "`meta/runtime.yml` neither redirects nor removes" a module of this collection (acceptance) now reads: it has no
+  routing entry for the module other than `deprecation`, and it holds no routing that the rule does not read.
+- The `ssh` family's reload through `ansible.builtin.systemd_service` (correction of 2026-11-10) stays. On the supported
+  platforms (ADR 0010: Ubuntu 24.04 and RHEL 9-compatible hosts, both with systemd) `ansible.builtin.service` ran the
+  same `systemd` module of ansible-core (`systemd.py` and `systemd_service.py` are one file), and `service_facts` names
+  a unit `ssh.service` or `sshd.service` only with `source: systemd`, so the change is behaviour-neutral there. The
+  Molecule `ssh` lifecycle legs ran and passed on both Docker images, in `rule` and in `topic` mode. Their containers
+  run no systemd, so the reload was skipped there, as it was before the change.

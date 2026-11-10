@@ -48,7 +48,10 @@ A task of `roles/remediate` names its module by the fully qualified name, and th
   the dnf modules of ansible-core, and stays allowed; a unit test fails when ansible-core gains another action plugin
   that runs a module whose name is not a literal;
 - a module or action plugin of this collection, `freesecdev.linux_compliance.*`, whose file is in `plugins/modules` or
-  `plugins/action` and which `meta/runtime.yml` neither redirects nor removes;
+  `plugins/action` and for which `meta/runtime.yml` has no routing entry other than `deprecation`. `make lint-repo`
+  also refuses, in `meta/runtime.yml`, any routing of `modules` or `action` other than `redirect`, `tombstone` and
+  `deprecation` (such as `action_plugin`), any routing of `module_utils` other than `deprecation`, and any
+  `import_redirection`;
 - a module of a community collection that is on `ALLOWED_COMMUNITY_MODULES` in
   `tools/lint/repo_rules/remediate_modules.py`. **The list is empty today.**
 
@@ -77,8 +80,14 @@ suffix, and `tasks_from` or `handlers_from` loads any file below `tasks/` or `ha
 each file as JSON first and decrypts a vaulted file. So every file below `roles/remediate/tasks/`, `handlers/` and
 `meta/` must end in `.yml` or `.yaml`, must be YAML that PyYAML reads, and must hold only task lists (`tasks/`,
 `handlers/`) or a mapping (`meta/`), with no key that starts with `__ansible_` (ansible-core's JSON loader decodes
-such a mapping into another value); `make lint-repo` refuses anything else there, so no task or handler of the role
-escapes the allow list.
+such a mapping into another value); `make lint-repo` refuses anything else there, so every task and handler file of
+the role is one the rule reads.
+
+A task or block of `roles/remediate` may not use `delegate_to`, `delegate_facts`, `local_action` or `connection`: the
+role runs its tasks on the managed host, never on the controller or another host. `ansible_network_os` and
+`network_os` are refused wherever the repository sets variables or facts, like `ansible_facts_modules`,
+`ansible_package_use`, `pkg_mgr` and `service_mgr`, because they choose the module that a play's fact gathering runs
+after the role.
 
 The allow list governs modules, so the role does not run tasks it does not own: `include_role`, `import_role` and a
 dependency in `roles/remediate/meta/main.yml` are refused, and `include_tasks` and `import_tasks` are task keys whose
@@ -91,6 +100,17 @@ refuses them in every task list of the repository: a templated `set_fact` key (a
 mapping form of `action` that is not a mapping with literal keys, a free-form argument string with a template (other
 than an include target), and a `loop_var`, `index_var`, `register` or `include_vars`/`vars_prompt` `name` that is
 templated or names a variable that changes what Ansible executes, such as `ansible_python_interpreter`.
+
+#### What the module rule does not cover
+
+The rule guards against mistakes and unreviewed additions. It is not a sandbox against a contributor who deliberately
+builds a bypass in several steps ([ADR 0032](adr/0032-operator-control-community-modules-and-value-overrides.md),
+boundary of 2026-11-10). It does not read Jinja filter, test and lookup plugins of other collections, files that tasks
+of the role plant (`files/`, `templates/`, a module written into one of Ansible's module paths), routing of other
+plugin types, settings of the play, inventory or configuration outside the role, or a change to the rule and its tests.
+The independent review of every pull request covers those
+([ADR 0033](adr/0033-review-policy-independent-verdict-without-required-approval.md)). A reviewer of a change to
+`roles/remediate`, `meta/runtime.yml` or the rule looks for such bypasses.
 
 ## 1. Read what the content expects
 

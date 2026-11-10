@@ -26,8 +26,9 @@ another plugin before Ansible looks for the file. ansible-core routes more than 
 names of ``BUILTIN_MODULES`` are accepted: the module files of the pinned ansible-core that its
 ``plugin_routing`` neither redirects nor removes. A unit test keeps the list equal to the installed
 ansible-core. A ``freesecdev.linux_compliance`` name is accepted only when ``plugins/modules`` or
-``plugins/action`` holds its file and ``meta/runtime.yml`` neither redirects nor removes it; a
-``meta/runtime.yml`` that cannot be read refuses every such name.
+``plugins/action`` holds its file and ``meta/runtime.yml`` has no routing entry for it other
+than ``deprecation``; a ``meta/runtime.yml`` that cannot be read refuses every such name, and
+:mod:`tools.lint.repo_rules.remediate_routing` refuses routing there that this rule does not read.
 
 The allow list governs modules, so the role may not run another role's tasks: ``include_role`` and
 ``import_role`` are refused, and so is a dependency in ``meta/main.yml``. ``include_tasks`` and
@@ -38,7 +39,17 @@ root, such as ``vars/rules.yml`` or ``meta/argument_specs.yml``, is not a task l
 
 Ansible also loads role files that are not YAML, or that PyYAML cannot read, as tasks, handlers
 and metadata; :mod:`tools.lint.repo_rules.remediate_files` refuses every such file in the role, so
-every task and handler that the role can run is in a document that this rule reads.
+every task and handler file of the role is a document that this rule reads. ``delegate_to``,
+``delegate_facts``, ``local_action`` and ``connection`` are refused on every task and block, so the
+role never runs a task on the controller or on another host.
+
+The rule guards against mistakes and unreviewed additions; it is not a sandbox against a
+contributor who deliberately builds a bypass (ADR 0032, boundary of 2026-11-10). It does not read
+Jinja filter, test and lookup plugins of other collections, files that tasks of the role plant
+(``files/``, ``templates/``, a module written into one of Ansible's module paths), routing other
+than that of modules, action plugins and ``module_utils``, play, inventory and configuration
+settings outside the role, or a change to this rule and its tests. The independent review of every
+pull request (ADR 0033) covers those.
 
 ``BUILTIN_MODULES`` equals the module files of the pinned ansible-core, without exception, so it
 also holds ``async_wrapper``, which ansible-core runs on the host for an ``async`` task, and
@@ -84,6 +95,7 @@ from tools.lint.repo_rules.ansible_tasks import (
     task_mappings,
 )
 from tools.lint.repo_rules.common import REPO_ROOT, YAML_SUFFIXES, Violation
+from tools.lint.repo_rules.remediate_routing import as_mapping, is_routed, read_yaml
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping, Sequence
@@ -240,12 +252,11 @@ PIN_LINE: Final[re.Pattern[str]] = re.compile(
 GALAXY_FILE: Final[Path] = Path("galaxy.yml")
 REQUIREMENTS_FILE: Final[Path] = Path("extensions/molecule/requirements.yml")
 PINS_FILE: Final[Path] = Path("extensions/molecule/collections.pins")
-RUNTIME_FILE: Final[Path] = Path("meta/runtime.yml")
 OWN_PLUGIN_DIRECTORIES: Final[tuple[Path, ...]] = (Path("plugins/modules"), Path("plugins/action"))
 PLUGIN_SUFFIX: Final[str] = ".py"
-ROUTING_KEY: Final[str] = "plugin_routing"
-ROUTING_SECTIONS: Final[tuple[str, ...]] = ("modules", "action")
-ROUTING_CHANGES: Final[frozenset[str]] = frozenset({"redirect", "tombstone"})
+DELEGATION_KEYWORDS: Final[frozenset[str]] = frozenset(
+    {"delegate_to", "delegate_facts", "local_action", "connection"}
+)
 DEPENDENCIES_KEY: Final[str] = "dependencies"
 COLLECTIONS_KEY: Final[str] = "collections"
 NAME_KEY: Final[str] = "name"
@@ -276,8 +287,9 @@ OWN_MISSING_MESSAGE: Final[str] = (
     "no file {module}.py (ADR 0032 §1)"
 )
 OWN_ROUTED_MESSAGE: Final[str] = (
-    "module {name!r} is not allowed in roles/remediate: meta/runtime.yml redirects or removes it, "
-    "or cannot be read (ADR 0032 §1)"
+    "module {name!r} is not allowed in roles/remediate: meta/runtime.yml routes it with an entry "
+    "other than deprecation (redirect, tombstone, action_plugin), or cannot be read "
+    "(ADR 0032 §1)"
 )
 TEMPLATED_MESSAGE: Final[str] = (
     "templated module name {name!r} is not allowed in roles/remediate: the module must be known "
@@ -300,6 +312,11 @@ INCLUDE_TARGET_MESSAGE: Final[str] = (
     "{name} target {target!r} is not allowed in roles/remediate: use {{{{ role_path }}}}/tasks/ "
     "followed by a literal relative path, because Ansible looks for any other target in the "
     "playbook's directory too (ADR 0032 §1)"
+)
+DELEGATION_MESSAGE: Final[str] = (
+    "{keyword} is not allowed in roles/remediate: the role runs its tasks on the managed host "
+    "through the play's connection, so it never runs a task on the controller or another host "
+    "(ADR 0032 §1)"
 )
 DEPENDENCY_MESSAGE: Final[str] = (
     "role dependencies are not allowed in roles/remediate/meta/main.yml: their tasks are not "
@@ -365,30 +382,17 @@ def _action_shape_problems(task: yaml.MappingNode) -> Iterable[tuple[yaml.Node, 
             yield value, ACTION_SHAPE_MESSAGE.format(keyword=name)
 
 
-def _mapping(value: object) -> dict[object, object]:
-    """Return ``value`` when it is a mapping, else an empty mapping."""
-    return cast("dict[object, object]", value) if isinstance(value, dict) else {}
-
-
-def _read_yaml(path: Path) -> object:
-    """Return the YAML document of ``path``; raise ``ValueError`` when it cannot be read."""
-    try:
-        return yaml.safe_load(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, yaml.YAMLError) as error:
-        raise ValueError(str(path)) from error
-
-
 def _load_mapping(path: Path) -> dict[object, object]:
     """Return the YAML mapping of ``path``, or an empty one when it cannot be read or parsed."""
     try:
-        return _mapping(_read_yaml(path))
+        return as_mapping(read_yaml(path))
     except ValueError:
         return {}
 
 
 def _galaxy_versions(root: Path, collection: str) -> list[object]:
     """Return the versions that ``galaxy.yml`` ``dependencies`` gives ``collection``."""
-    dependencies = _mapping(_load_mapping(root / GALAXY_FILE).get(DEPENDENCIES_KEY))
+    dependencies = as_mapping(_load_mapping(root / GALAXY_FILE).get(DEPENDENCIES_KEY))
     return [dependencies[collection]] if collection in dependencies else []
 
 
@@ -397,7 +401,7 @@ def _requirements_versions(root: Path, collection: str) -> list[object]:
     entries = _load_mapping(root / REQUIREMENTS_FILE).get(COLLECTIONS_KEY)
     if not isinstance(entries, list):
         return []
-    mappings = [_mapping(entry) for entry in cast("list[object]", entries)]
+    mappings = [as_mapping(entry) for entry in cast("list[object]", entries)]
     return [entry.get(VERSION_KEY) for entry in mappings if entry.get(NAME_KEY) == collection]
 
 
@@ -437,31 +441,6 @@ def pinned_version(sources: Mapping[str, Sequence[object]]) -> str | None:
     if not isinstance(first, str) or EXACT_VERSION.fullmatch(first) is None:
         return None
     return first if all(version == first for version in versions) else None
-
-
-def is_routed(root: Path, module: str) -> bool:
-    """Return whether ``meta/runtime.yml`` below ``root`` may send ``module`` elsewhere.
-
-    A ``redirect`` or ``tombstone`` entry for the module or action plugin counts, and so does a
-    file that cannot be read or parsed or whose document is not a mapping, because Ansible's
-    routing is then unknown. A missing file routes nothing.
-    """
-    path = root / RUNTIME_FILE
-    if not path.exists():
-        return False
-    try:
-        loaded = _read_yaml(path)
-    except ValueError:
-        return True
-    if loaded is None:
-        return False
-    if not isinstance(loaded, dict):
-        return True
-    routing = _mapping(cast("dict[object, object]", loaded).get(ROUTING_KEY))
-    return any(
-        ROUTING_CHANGES & _mapping(_mapping(routing.get(section)).get(module)).keys()
-        for section in ROUTING_SECTIONS
-    )
 
 
 def _own_module_problem(name: str, module: str, root: Path) -> str | None:
@@ -534,11 +513,24 @@ def _include_problems(
                 yield target, INCLUDE_TARGET_MESSAGE.format(name=name, target=text)
 
 
+def _delegation_problems(task: yaml.MappingNode) -> Iterable[tuple[yaml.Node, str]]:
+    """Yield every keyword of ``task`` that runs it on another host or through another connection.
+
+    ``delegate_to``, ``delegate_facts``, ``local_action`` and ``connection`` let a task of the
+    role write on the controller, for example into a module path of Ansible, from which
+    ansible-core's own action plugins then load ``ansible.legacy`` modules.
+    """
+    for name, key, _ in scalar_items(task):
+        if name in DELEGATION_KEYWORDS:
+            yield key, DELEGATION_MESSAGE.format(keyword=name)
+
+
 def _task_problems(
     document: yaml.SequenceNode, allowed: frozenset[str], root: Path
 ) -> Iterable[tuple[yaml.Node, str]]:
-    """Yield every module, role include and task include of ``document`` that may not run."""
+    """Yield every module, include and delegation of ``document`` that may not run."""
     for task in task_mappings(document):
+        yield from _delegation_problems(task)
         yield from _action_shape_problems(task)
         for node, name, arguments in _module_names(task):
             problem = _name_problem(name, allowed, root)

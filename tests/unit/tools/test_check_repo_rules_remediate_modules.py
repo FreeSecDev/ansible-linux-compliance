@@ -24,6 +24,7 @@ import yaml
 from tools.lint import check_repo_rules as rules
 from tools.lint.repo_rules import remediate_files as role_files
 from tools.lint.repo_rules import remediate_modules as remediate
+from tools.lint.repo_rules import remediate_routing as routing
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 ADR = "(ADR 0032 §1)"
@@ -48,6 +49,9 @@ def documents(text: str) -> list[yaml.Node]:
         loader.dispose()
 
 
+DELEGATION = "the role runs its tasks on the managed host"
+
+
 def check(
     text: str,
     relative: str = TASK_FILE,
@@ -60,6 +64,10 @@ def check(
             Path(relative), Path(relative), documents(text), allowed=allowed, root=root
         )
     ]
+
+
+def module_messages(text: str) -> list[str]:
+    return [message for message in check(text) if DELEGATION not in message]
 
 
 def write_pins(
@@ -114,7 +122,7 @@ ACCEPTED = [
     ),
     pytest.param(
         "---\n- name: Action\n  action: ansible.builtin.debug msg=x\n"
-        "- name: Local\n  local_action:\n    module: freesecdev.linux_compliance.audit_control\n",
+        "- name: Mapping\n  action:\n    module: freesecdev.linux_compliance.audit_control\n",
         id="action",
     ),
     pytest.param(
@@ -473,12 +481,12 @@ def ansible_core_routing() -> dict[str, dict[str, dict[str, object]]]:
 
 
 def routed_builtin_names() -> set[str]:
-    routing = ansible_core_routing()
+    core = ansible_core_routing()
     return {
         name
-        for section in remediate.ROUTING_SECTIONS
-        for name, entry in routing[section].items()
-        if remediate.ROUTING_CHANGES & entry.keys()
+        for section in routing.ROUTING_SECTIONS
+        for name, entry in core[section].items()
+        if entry.keys() - routing.ROUTING_NOTES
     }
 
 
@@ -576,6 +584,14 @@ def test_own_module_with_its_file_and_no_routing_is_accepted(
             "        removal_version: 1.0.0\n",
             id="tombstone",
         ),
+        pytest.param(
+            "---\nplugin_routing:\n  modules:\n    example:\n      action_plugin: zz.evil.pwn\n",
+            id="action-plugin",
+        ),
+        pytest.param(
+            "---\nplugin_routing:\n  action:\n    example:\n      future_key: x\n",
+            id="unknown-routing-key",
+        ),
         pytest.param("---\nplugin_routing: [\n", id="invalid-yaml"),
         pytest.param("---\n- plugin_routing\n", id="not-a-mapping"),
         pytest.param(b"\xff\xfe", id="not-utf8"),
@@ -594,7 +610,7 @@ def test_own_module_that_meta_runtime_may_route_is_refused(
     for text in (f"---\n- name: Own\n  {OWN}: {{}}\n", f"---\n- name: Own\n  action: {OWN}\n"):
         messages = check(text, root=root)
         assert len(messages) == 1, messages
-        assert "meta/runtime.yml redirects or removes it" in messages[0]
+        assert "meta/runtime.yml routes it with an entry other than deprecation" in messages[0]
         assert OWN in messages[0]
 
 
@@ -608,7 +624,7 @@ def test_own_module_without_its_file_is_refused(tmp_path: Path) -> None:
 
 def test_the_collection_routes_none_of_its_modules() -> None:
     for path in sorted((REPOSITORY_ROOT / "plugins" / "modules").glob("*.py")):
-        assert not remediate.is_routed(REPOSITORY_ROOT, path.stem), path
+        assert not routing.is_routed(REPOSITORY_ROOT, path.stem), path
 
 
 ROLE_INCLUDE = "the tasks of another role are not checked"
@@ -647,7 +663,7 @@ def test_role_includes_are_refused(text: str) -> None:
     ],
 )
 def test_role_includes_in_action_are_refused(text: str) -> None:
-    messages = check(text)
+    messages = module_messages(text)
     assert len(messages) == 1, messages
     assert ROLE_INCLUDE in messages[0]
 
@@ -660,7 +676,7 @@ def test_role_includes_in_action_are_refused(text: str) -> None:
     ],
 )
 def test_task_includes_in_action_are_refused(text: str) -> None:
-    messages = check(text)
+    messages = module_messages(text)
     assert len(messages) == 1, messages
     assert INCLUDE_ACTION in messages[0]
 
@@ -1016,7 +1032,7 @@ def dispatching_forms(module: str) -> list[str]:
     ],
 )
 def test_builtins_that_choose_their_module_at_run_time_are_refused(text: str) -> None:
-    messages = check(text)
+    messages = module_messages(text)
     assert len(messages) == 1, messages
     assert DISPATCH in messages[0]
     assert NOT_ALLOWED in messages[0]
@@ -1109,6 +1125,14 @@ def test_the_drift_scan_finds_non_literal_module_names(source: str, expected: bo
 
 
 def test_dispatching_action_plugins_match_ansible_core() -> None:
+    """Keep the dispatching action plugins of ansible-core equal to the reviewed lists.
+
+    The scan sees only ``_execute_module`` calls whose module name is not a literal. A module
+    chosen through ``meta/runtime.yml`` routing (``action_plugin``, see
+    ``test_check_repo_rules_remediate_routing.py``) or through a variable that a play-level task
+    reads (``ansible_network_os`` for the play's fact gathering) is outside what it can see, so a
+    passing scan is not proof that no other dispatch exists (ADR 0032, boundary of 2026-11-10).
+    """
     directory = ansible_core_root() / "plugins" / "action"
     choosing = {
         path.stem
@@ -1225,3 +1249,92 @@ def test_role_files_with_load_marker_keys_are_refused(relative: str, text: str, 
     assert [violation.line for violation in found] == [line]
     assert "__ansible_" in found[0].message
     assert ADR in found[0].message
+
+
+DELEGATIONS = [
+    pytest.param(
+        "---\n- name: Plant\n  ansible.builtin.copy:\n    src: x\n    dest: /tmp/x\n"
+        "  delegate_to: localhost\n",
+        "delegate_to",
+        6,
+        id="delegate-to",
+    ),
+    pytest.param(
+        "---\n- name: Facts\n  ansible.builtin.setup:\n  delegate_facts: true\n",
+        "delegate_facts",
+        4,
+        id="delegate-facts",
+    ),
+    pytest.param(
+        "---\n- name: Local\n  local_action:\n"
+        "    module: freesecdev.linux_compliance.audit_control\n",
+        "local_action",
+        3,
+        id="local-action",
+    ),
+    pytest.param(
+        "---\n- name: Local\n  local_action: ansible.builtin.debug msg=x\n",
+        "local_action",
+        3,
+        id="local-action-string",
+    ),
+    pytest.param(
+        "---\n- name: Connection\n  connection: local\n  ansible.builtin.debug:\n    msg: x\n",
+        "connection",
+        3,
+        id="connection",
+    ),
+    pytest.param(
+        "---\n- name: Block\n  delegate_to: localhost\n  block:\n    - name: Inner\n"
+        "      ansible.builtin.debug:\n        msg: x\n",
+        "delegate_to",
+        3,
+        id="block",
+    ),
+    pytest.param(
+        "---\n- name: Block\n  block:\n    - name: Inner\n      connection: local\n"
+        "      ansible.builtin.debug:\n        msg: x\n",
+        "connection",
+        5,
+        id="nested",
+    ),
+    pytest.param(
+        "---\n- &base\n  delegate_to: localhost\n  name: Base\n- <<: *base\n"
+        "  ansible.builtin.debug:\n    msg: x\n",
+        "delegate_to",
+        3,
+        id="merge-key",
+    ),
+]
+
+
+@pytest.mark.parametrize(("text", "keyword", "line"), DELEGATIONS)
+def test_tasks_that_run_elsewhere_are_refused(text: str, keyword: str, line: int) -> None:
+    violations = remediate.check_remediate_modules(
+        Path(TASK_FILE), Path(TASK_FILE), documents(text)
+    )
+    delegations = [violation for violation in violations if DELEGATION in violation.message]
+    assert [violation.line for violation in delegations] == [line]
+    assert delegations[0].message.startswith(f"{keyword} {NOT_ALLOWED}")
+    assert ADR in delegations[0].message
+    assert all(DELEGATION in violation.message for violation in violations)
+
+
+def test_check_file_refuses_a_delegated_task_in_the_role(tmp_path: Path) -> None:
+    target = tmp_path / TASK_FILE
+    target.parent.mkdir(parents=True)
+    target.write_text(
+        "---\n- name: Plant\n  ansible.builtin.file:\n    path: /tmp/x\n  delegate_to: localhost\n",
+        encoding="utf-8",
+    )
+    messages = [violation.message for violation in rules.check_file(target, tmp_path)]
+    assert any(DELEGATION in message for message in messages), messages
+
+
+def test_delegation_keywords_are_task_keywords_of_ansible_core() -> None:
+    assert remediate.DELEGATION_KEYWORDS.issubset(remediate.TASK_KEYWORDS | {"local_action"})
+
+
+def test_the_same_keywords_outside_the_role_are_not_refused() -> None:
+    text = "---\n- name: Local\n  ansible.builtin.debug:\n    msg: x\n  delegate_to: localhost\n"
+    assert check(text, "roles/audit/tasks/main.yml") == []
