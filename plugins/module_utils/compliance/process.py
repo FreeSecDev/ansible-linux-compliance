@@ -69,7 +69,7 @@ import stat
 import subprocess
 import time
 from contextlib import suppress
-from dataclasses import dataclass
+from dataclasses import dataclass, fields, replace
 from pathlib import Path, PurePosixPath
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Final, NoReturn, Protocol, cast
@@ -94,6 +94,7 @@ MAX_ECHO_LENGTH: Final[int] = 64
 READ_CHUNK_BYTES: Final[int] = 65536
 WAIT_POLL_SECONDS: Final[float] = 0.01
 AUGENRULES_TERM_GRACE_SECONDS: Final[float] = 5
+MAX_TERM_GRACE_SECONDS: Final[float] = 30.0
 ROOT_UID: Final[int] = 0
 PATH_ARGUMENT: Final[str] = "<path>"
 FIXED_ENVIRONMENT_NAMES: Final[frozenset[str]] = frozenset({"TZ", "HOME"})
@@ -236,7 +237,8 @@ class ExecutablePolicy:
         term_grace_seconds: On a timeout, the process group first gets
             ``SIGTERM`` and this many seconds to exit, so that a script's trap
             can remove its temporary files, before ``SIGKILL``; 0 (the default)
-            sends ``SIGKILL`` at once.
+            sends ``SIGKILL`` at once. It must be a finite number from 0 to
+            :data:`MAX_TERM_GRACE_SECONDS`.
     """
 
     name: str
@@ -487,6 +489,20 @@ def _check_policy_environment(policy: ExecutablePolicy) -> None:
             _deny(f"environment variable may not be fixed by a policy: {_safe(name)}")
         if not _is_text(value) or _ENVIRONMENT_VALUE.fullmatch(value) is None:
             _deny(f"fixed environment value is invalid for {_safe(name)}")
+
+
+def _check_policy_grace(policy: ExecutablePolicy) -> None:
+    grace = cast("object", policy.term_grace_seconds)
+    if (
+        isinstance(grace, bool)
+        or not isinstance(grace, (int, float))
+        or not 0 <= grace <= MAX_TERM_GRACE_SECONDS
+    ):
+        shown = repr(grace) if isinstance(grace, float) else type(grace).__name__
+        _deny(
+            f"term_grace_seconds of {_safe(policy.name)} must be a number from 0 to "
+            f"{MAX_TERM_GRACE_SECONDS}: {_safe(shown)}"
+        )
 
 
 def _matching_prefix(args: tuple[str, ...], policy: ExecutablePolicy) -> tuple[str, ...]:
@@ -845,18 +861,21 @@ def _check_arguments(
 
 
 def _copy_policy(policy: ExecutablePolicy) -> ExecutablePolicy:
-    copied = ExecutablePolicy(
-        policy.name,
-        frozenset(policy.allowed_options),
-        tuple(tuple(prefix) for prefix in policy.command_prefixes),
-        tuple(tuple(command) for command in policy.standalone_commands),
-        policy.fixed_path,
-        tuple(tuple(form) for form in policy.argument_forms),
-        tuple((pair[0], pair[1]) for pair in policy.environment),
-        tuple((pair[0], pair[1]) for pair in policy.option_values),
-        tuple((pair[0], tuple(pair[1])) for pair in policy.option_prefixes),
+    plain = ExecutablePolicy(
+        **{field.name: getattr(policy, field.name) for field in fields(ExecutablePolicy)}
+    )
+    copied = replace(
+        plain,
+        allowed_options=frozenset(policy.allowed_options),
+        command_prefixes=tuple(tuple(prefix) for prefix in policy.command_prefixes),
+        standalone_commands=tuple(tuple(command) for command in policy.standalone_commands),
+        argument_forms=tuple(tuple(form) for form in policy.argument_forms),
+        environment=tuple((pair[0], pair[1]) for pair in policy.environment),
+        option_values=tuple((pair[0], pair[1]) for pair in policy.option_values),
+        option_prefixes=tuple((pair[0], tuple(pair[1])) for pair in policy.option_prefixes),
     )
     _check_policy_environment(copied)
+    _check_policy_grace(copied)
     return copied
 
 
@@ -954,6 +973,7 @@ def bind_policy(
         )
         policy = check_policy(spec, policies=policies)
         _check_policy_environment(policy)
+        _check_policy_grace(policy)
         if policy.fixed_path is None:
             executable = resolve_executable(
                 spec.executable,

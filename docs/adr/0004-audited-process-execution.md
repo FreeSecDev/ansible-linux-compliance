@@ -1102,7 +1102,9 @@ On a timeout the helper sends `SIGKILL` to the process group. `augenrules` keeps
 file, `mktemp /tmp/aurules.XXXXXXXX`, which only its trap on `HUP`, `INT`, `QUIT`, `PIPE` and `TERM` removes, so its
 policy names a grace (`ExecutablePolicy.term_grace_seconds`, five seconds): on a timeout the group first gets
 `SIGTERM`, and `SIGKILL` follows when the script has not exited by then. Every other policy keeps the grace of 0, an
-immediate `SIGKILL`.
+immediate `SIGKILL`. A grace must be a number from 0 to `MAX_TERM_GRACE_SECONDS` (30), not a bool; the helper refuses
+any other value when it binds the allow-list at import and before every run, and the bound copy keeps the grace
+(FREES-207).
 
 ## Amendment 2026-10-31: kmod's configuration reader (FREES-190)
 

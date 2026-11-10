@@ -1,0 +1,16 @@
+---
+bugfixes:
+  - >-
+    process helper - the allow-list that is bound at import now keeps every field of an executable's policy. Its copy
+    left out ``term_grace_seconds``, so ``augenrules`` got ``SIGKILL`` at its timeout instead of ``SIGTERM`` and five
+    seconds for its trap to remove its temporary file. The copy is rebuilt from every declared field of
+    ``ExecutablePolicy``, so a field added later is kept as well, and a subclass is bound as a plain policy without
+    its own fields (FREES-207).
+  - >-
+    process helper - a policy's ``term_grace_seconds`` must be a finite number from 0 to 30 seconds; any other value
+    is refused when the allow-list is bound and before a run. An infinite or NaN grace would have waited forever on a
+    process that ignores ``SIGTERM``, past the run's timeout (FREES-207).
+trivial:
+  - >-
+    Tests: the output cap test no longer races its timeout. It wrote nothing before a 0.5 second timeout on a busy
+    runner; it now writes 5000 bytes before an endless stream and has a 3 second timeout (FREES-210).

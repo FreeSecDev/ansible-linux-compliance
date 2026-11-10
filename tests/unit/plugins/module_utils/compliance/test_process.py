@@ -909,8 +909,8 @@ class TestRunLimits:
     """Output caps and timeouts."""
 
     def test_caps_unbounded_output_and_times_out(self) -> None:
-        spec = process.CommandSpec("yes", (), 0.5, max_output_bytes=1000)
-        result = execute(spec)
+        script = "head -c 5000 /dev/zero; exec cat /dev/zero"
+        result = execute(shell(script, timeout=3.0, max_output_bytes=1000))
         assert result.timed_out
         assert result.returncode == -9
         assert len(result.stdout) == 1000
@@ -1307,6 +1307,141 @@ class TestImportTimePolicy:
         policies["sh"] = SHELL
         with pytest.raises(process.ProcessPolicyError, match="not allow-listed"):
             run(process.CommandSpec("sh", ("-c", "echo hi"), FAST))
+
+    def test_the_bound_policy_keeps_every_field(self) -> None:
+        full = process.ExecutablePolicy(
+            "tool",
+            allowed_options=frozenset({"-x"}),
+            command_prefixes=(("run",),),
+            standalone_commands=(("--version",),),
+            fixed_path="/opt/tool/bin/tool",
+            argument_forms=(("--check",),),
+            environment=(("TZ", "UTC"),),
+            option_values=(("-o", "[a-z]+"),),
+            option_prefixes=(("-o", ("run",)),),
+            term_grace_seconds=FAST,
+        )
+        bare = process.ExecutablePolicy("tool")
+        fields = [field.name for field in dataclasses.fields(process.ExecutablePolicy)]
+        assert [
+            name for name in fields if name != "name" and getattr(full, name) == getattr(bare, name)
+        ] == []
+        none = frozenset[str]()
+        check = process.bind_policy(
+            {"tool": full}, ("/bin",), none, none, frozenset[tuple[str, ...]]()
+        )[0]
+        bound = check(process.CommandSpec("tool", ("--version",), FAST))
+        assert bound is not full
+        assert bound == full
+
+    def test_the_bound_augenrules_policy_keeps_its_grace(self) -> None:
+        bound = process.check_policy(process.CommandSpec("augenrules", ("--check",), FAST))
+        assert bound.term_grace_seconds == process.AUGENRULES_TERM_GRACE_SECONDS
+        assert bound.term_grace_seconds > 0
+
+    def test_a_bound_grace_lets_a_trap_clean_up_before_the_kill(self, tmp_path: Path) -> None:
+        marker = tmp_path / "cleaned"
+        graceful = {"sh": dataclasses.replace(SHELL, term_grace_seconds=FAST)}
+        none = frozenset[str]()
+        run = process.bind_policy(graceful, ("/bin",), none, none, frozenset[tuple[str, ...]]())[1]
+        script = "trap 'echo done > \"$1\"; exit 1' TERM; while :; do sleep 0.05; done"
+        result = run(shell(script, str(marker), timeout=2.0))
+        assert result.timed_out
+        assert marker.read_text(encoding="utf-8") == "done\n"
+
+    def test_every_collection_of_the_bound_policy_is_copied(self) -> None:
+        options = {"-x"}
+        prefixes = [["run"]]
+        standalone = [["--version"]]
+        forms = [["--check"]]
+        environment = [["TZ", "UTC"]]
+        values = [["-o", "[a-z]+"]]
+        option_prefixes = [["-o", ["run"]]]
+        loose = process.ExecutablePolicy(
+            "tool",
+            allowed_options=cast("frozenset[str]", options),
+            command_prefixes=cast("tuple[tuple[str, ...], ...]", prefixes),
+            standalone_commands=cast("tuple[tuple[str, ...], ...]", standalone),
+            argument_forms=cast("tuple[tuple[str, ...], ...]", forms),
+            environment=cast("tuple[tuple[str, str], ...]", environment),
+            option_values=cast("tuple[tuple[str, str], ...]", values),
+            option_prefixes=cast("tuple[tuple[str, tuple[str, ...]], ...]", option_prefixes),
+        )
+        none = frozenset[str]()
+        check = process.bind_policy(
+            {"tool": loose}, ("/bin",), none, none, frozenset[tuple[str, ...]]()
+        )[0]
+        options.add("--evil")
+        for collection in (prefixes, standalone, forms, environment, values, option_prefixes):
+            nested = cast("list[list[object]]", collection)
+            nested[0].append("--evil")
+            nested.append(["--evil"])
+        cast("list[str]", option_prefixes[0][1]).append("--evil")
+        bound = check(process.CommandSpec("tool", ("--version",), FAST))
+        assert bound.allowed_options == frozenset({"-x"})
+        assert bound.command_prefixes == (("run",),)
+        assert bound.standalone_commands == (("--version",),)
+        assert bound.argument_forms == (("--check",),)
+        assert bound.environment == (("TZ", "UTC"),)
+        assert bound.option_values == (("-o", "[a-z]+"),)
+        assert bound.option_prefixes == (("-o", ("run",)),)
+
+    def test_only_immutable_scalars_are_carried_over_without_a_copy(self) -> None:
+        copied = {
+            "allowed_options",
+            "command_prefixes",
+            "standalone_commands",
+            "argument_forms",
+            "environment",
+            "option_values",
+            "option_prefixes",
+        }
+        fields = {field.name for field in dataclasses.fields(process.ExecutablePolicy)}
+        assert fields - copied == {"name", "fixed_path", "term_grace_seconds"}
+
+    @pytest.mark.parametrize("grace", [math.nan, math.inf, -1.0, 30.5, 1e9, 10**400, True, "5"])
+    def test_an_invalid_grace_is_refused_when_bound(self, grace: object) -> None:
+        policy = process.ExecutablePolicy(
+            "sh", command_prefixes=(("-c",),), term_grace_seconds=cast("float", grace)
+        )
+        none = frozenset[str]()
+        with pytest.raises(process.ProcessPolicyError, match="term_grace_seconds"):
+            process.bind_policy({"sh": policy}, ("/bin",), none, none, frozenset[tuple[str, ...]]())
+
+    def test_an_invalid_grace_is_refused_before_a_run(self, tmp_path: Path) -> None:
+        marker = tmp_path / "ran"
+        policies = {"sh": dataclasses.replace(SHELL, term_grace_seconds=math.inf)}
+        with pytest.raises(process.ProcessPolicyError, match="term_grace_seconds"):
+            process.run(shell('touch "$1"', str(marker)), policies=policies)
+        assert not marker.exists()
+
+    @pytest.mark.parametrize("grace", [0, 0.5, 30.0])
+    def test_a_grace_within_the_bounds_is_bound(self, grace: float) -> None:
+        policy = process.ExecutablePolicy(
+            "tool", standalone_commands=(("--version",),), term_grace_seconds=grace
+        )
+        none = frozenset[str]()
+        check = process.bind_policy(
+            {"tool": policy}, ("/bin",), none, none, frozenset[tuple[str, ...]]()
+        )[0]
+        assert check(process.CommandSpec("tool", ("--version",), FAST)).term_grace_seconds == grace
+
+    def test_a_subclass_of_the_policy_is_bound_as_a_plain_policy(self) -> None:
+        @dataclasses.dataclass(frozen=True)
+        class Wider(process.ExecutablePolicy):
+            """A policy with a field that the helper does not know."""
+
+            extra: list[str] = dataclasses.field(default_factory=list[str])
+
+        wider = Wider("tool", standalone_commands=(("--version",),), extra=["--evil"])
+        none = frozenset[str]()
+        check = process.bind_policy(
+            {"tool": wider}, ("/bin",), none, none, frozenset[tuple[str, ...]]()
+        )[0]
+        bound = check(process.CommandSpec("tool", ("--version",), FAST))
+        assert not isinstance(bound, Wider)
+        assert not hasattr(bound, "extra")
+        assert bound.standalone_commands == (("--version",),)
 
     def test_the_bound_policy_values_are_deep_copies(self) -> None:
         mutable = {"-x"}
