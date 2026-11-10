@@ -404,8 +404,14 @@ rule could be reported `compliant` or `applied` while libpwquality, called by `p
 
 libpam opens a service name and every `include` and `substack` target with `fopen(path, "r")` in
 `_pam_open_config_file` of `libpam/pam_handlers.c` (linux-pam 1.5.1 and 1.5.3), which follows links. A name that
-`fopen` cannot open, such as a link to nothing, is looked up in the next directory. A directory opens, `getline`
-fails with `EISDIR`, and `_pam_assemble_line` takes that for the end of the file, so libpam reads no line from it.
+`fopen` cannot open, such as a link to nothing, a link to itself or a link through a regular file, is looked up in the
+next directory. A directory opens, and libpam reads no line from it: every read of a directory fails with `EISDIR`,
+whichever reader the version has (the `getline` one of 1.5.1 on Rocky Linux, the fixed-buffer one of 1.5.3 on Ubuntu),
+and libpam treats the directory as an empty file. It still takes that entry for the name: it does not look for the name
+in a lower directory, so a service named like the directory falls back to `other`, and an include of it adds nothing.
+This was observed with the real libpam of both Molecule images (a service `t3` that is a directory in `/etc/pam.d`
+next to a file `t3` in the lower directory runs `other`; a self-link and a link through `/etc/hostname` fall through
+to the lower file), and a read of a directory returns `EISDIR` in both.
 
 **Decision.**
 
@@ -416,15 +422,23 @@ fails with `EISDIR`, and `_pam_assemble_line` takes that for the end of the file
   (`plugins/module_utils/compliance/pam_files.py`) sorts the entries:
   - a regular file, or a link that resolves to one, is read with `ansible.builtin.slurp`, which follows the link,
     under its name in the PAM directory, the name that libpam opens and that a reason names;
-  - a directory, or a link to one, is left out, because libpam reads no line from it;
-  - a link to nothing, a link to anything else (a FIFO, a device, a socket), an entry that is none of a regular file,
-    a directory and a link, and an entry that `find` could not inspect refuse every rule of the family as
-    `overridden`, with the entry and what it is in the reason. libpam would skip a link to nothing, but the
-    collection cannot tell what such an entry would read when it resolves, so it refuses instead of guessing; this is
-    the status that an include the collection does not read already gives.
+  - a directory, or a link to one, is left out, because libpam reads no line from it. A regular file of the same name
+    in a lower PAM directory is still read, although libpam stops at the directory and never opens it; it can only
+    add a refusal, never hide an argument, and a reason may then name that file;
+  - a link to nothing, a link to anything else (a FIFO, a device, a socket), a link that `stat` cannot follow (a loop,
+    a path through something that is not a directory, or any other error of `stat`), an entry that is none of a
+    regular file, a directory and a link, and a PAM directory or an entry that `find` could not inspect refuse every
+    rule of the family as `overridden`, with the entry and what it is in the reason. libpam would skip a link to
+    nothing or a loop, but the collection cannot tell what such an entry would read when it resolves, so it refuses
+    instead of guessing; this is the status that an include the collection does not read already gives.
 - Nothing is read through an entry that is not a regular file once followed, so a link to `/dev/zero` or to a FIFO is
   never opened. The family puts no size limit on a PAM file; a link to a large regular file is read as a large
-  regular file is. A link loop makes the stat fail, which stops the run.
+  regular file is. `ansible.builtin.stat` returns `exists: false` only for `FileNotFoundError` and fails on any other
+  error, such as `ELOOP` or `ENOTDIR`, so the stat of the links runs with `failed_when: false`; a result without
+  `stat` is passed to the filter as an empty mapping and the link is the unreadable kind `unfollowed_link`, never read
+  and never dropped. The stat of the PAM directories runs the same way: a PAM directory that `stat` cannot inspect,
+  such as a link to itself, is the unreadable kind `uninspected_directory` and refuses every rule, instead of
+  stopping the run. A PAM directory that does not exist, or is not a directory, is left out, as libpam leaves it out.
 - The union of FREES-211 stays: every file read from every directory is searched together. A target read under two
   names, through a link and under its own name, is searched twice, which repeats a refusal but cannot change it.
 - The regression group `readers` adds, on both platforms: a service file `/etc/pam.d/freesecdev-readers-linked` that
@@ -432,5 +446,17 @@ fails with `EISDIR`, and `_pam_assemble_line` takes that for the end of the file
   `pam_pwquality.so minlen=8 enforcing=0` (both rules `overridden`, the reason naming the link); the vendor directory
   made a link to a directory that holds such a file (both rules `overridden`, the reason naming the file below
   `/usr/share/pam.d`), with the empty vendor directory of Rocky Linux put back afterwards; and a link to nothing next
-  to a link to `/dev/null` (both rules `overridden`, the reason naming both). Nothing is written in any of them.
+  to a link to `/dev/null` and a link to itself (both rules `overridden`, the reason naming all three); and the vendor
+  directory made a link to itself (both rules `overridden`, the reason naming `/usr/share/pam.d`). Nothing is written
+  in any of them.
 - The known gap of the FREES-211 amendment is closed.
+
+**Open points, for FREES-212.**
+
+- `pam_unread_includes` checks each physical line on its own. libpam joins a line that ends in a backslash with the
+  next one, so `password include \` followed by ` ../security/x` opens `/etc/security/x`, which the collection does not
+  read, and the rule is not refused for it. The function's docstring states this.
+- When none of `/etc/pam.d`, `/usr/lib/pam.d` and `/usr/share/pam.d` is a directory, libpam reads `/etc/pam.conf`
+  instead (observed on both Molecule images). The role does not read that file, so a `pam_pwquality` argument there is
+  missed on such a host and the rule is not refused. Both images ship `/usr/lib/pam.d/systemd-user`, so the case
+  needs a host whose PAM directories are all gone.

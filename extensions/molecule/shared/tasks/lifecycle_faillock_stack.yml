@@ -121,14 +121,21 @@
     - name: deny in a service file that is a link to a file outside the PAM directories, as authselect links them
       deny: ""
       service: "auth required pam_faillock.so preauth deny=3\n"
-      target: /etc/security/fsd-regression-faillock-authselect
+      target: "{{ stack_service_target }}"
       statuses:
         - overridden
         - applied
     - name: a service file that is a link to nothing refuses both rules
       deny: ""
-      dangling: /etc/security/fsd-regression-faillock-missing
+      source: /etc/security/fsd-regression-faillock-missing
       reason: /etc/pam.d/fsd-regression-faillock is a symbolic link that resolves to nothing
+      statuses:
+        - unreadable_stack
+        - unreadable_stack
+    - name: a service file that is a link to itself, which stat cannot follow, refuses both rules
+      deny: ""
+      source: fsd-regression-faillock
+      reason: /etc/pam.d/fsd-regression-faillock is a symbolic link that stat could not follow
       statuses:
         - unreadable_stack
         - unreadable_stack

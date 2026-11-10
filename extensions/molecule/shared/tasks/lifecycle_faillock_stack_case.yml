@@ -21,16 +21,16 @@
     group: root
   when: stack_case.service is defined
 
-- name: Faillock stack case | Make the service file of the case a symbolic link, to its file or to nothing
+- name: Faillock stack case | Make the service file of the case a symbolic link, to its file, to nothing or to itself
   ansible.builtin.file:
-    src: "{{ stack_case.target | default(stack_case.dangling) }}"
+    src: "{{ stack_case.target | default(stack_case.source) }}"
     dest: "{{ stack_service }}"
     state: link
     force: true
     follow: false
     owner: root
     group: root
-  when: stack_case.target is defined or stack_case.dangling is defined
+  when: stack_case.target is defined or stack_case.source is defined
 
 - name: Faillock stack case | Switch every rule of the topic on
   ansible.builtin.set_fact:

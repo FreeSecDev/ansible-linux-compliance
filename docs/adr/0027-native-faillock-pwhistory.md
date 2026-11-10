@@ -297,15 +297,32 @@ directory that is a link was read; only linked files were missed.
   `pwquality` family does ([ADR 0021](0021-native-banners-pwquality-and-profile-values.md), amendment of the same
   day). A regular file, or a link that resolves to one, is read through the link (`no_log`, as before) under its
   name in the PAM directory, so the order of the directories, the includes of a bare name and the reasons work on the
-  name that libpam opens. A directory, or a link to one, is left out: libpam opens it with `fopen`, `getline` fails
-  with `EISDIR`, and `_pam_assemble_line` takes that for the end of the file, so it reads no line from it.
-- A link to nothing, a link to anything else (a FIFO, a device, a socket), an entry that is none of a regular file, a
-  directory and a link, and an entry that `find` could not inspect are passed to `pam_conf_decision` as its fourth
-  argument and refuse every rule of the family as `unreadable_stack`, the status that a service file the collection
-  cannot read as libpam does already gives, with the entry and what it is in the reason. Nothing is read through
-  them, so a link to `/dev/zero` or to a FIFO is never opened; no size limit applied to service files before and
-  none applies now. A link loop makes the stat fail, which stops the run.
-- The faillock regression group `stack` adds two cases on both platforms: `deny=3` in a service file that is a link
+  name that libpam opens. A directory, or a link to one, is left out: libpam opens it with `fopen` and reads no line
+  from it, because every read of a directory fails with `EISDIR`, whichever reader the version has (the `getline` one
+  of 1.5.1 on Rocky Linux, the fixed-buffer one of 1.5.3 on Ubuntu, see above), and libpam treats it as an empty file.
+  libpam still takes the directory for the name and does not look in a lower directory, so the service falls back to
+  `other` and an include of it adds nothing (observed with the real libpam of both images). The family still reads a
+  regular file of the same name in a lower directory, which libpam never opens there; that can only add a refusal,
+  and a reason may then name that file.
+- A link to nothing, a link to anything else (a FIFO, a device, a socket), a link that `stat` cannot follow (a loop, a
+  path through something that is not a directory, or any other error of `stat`), an entry that is none of a regular
+  file, a directory and a link, and a PAM directory or an entry that `find` could not inspect are passed to
+  `pam_conf_decision` as its fourth argument and refuse every rule of the family as `unreadable_stack`, the status
+  that a service file the collection cannot read as libpam does already gives, with the entry and what it is in the
+  reason. A profile value that `pam_faillock` ignores or cannot store is still decided first, as
+  `unsupported_value`. Nothing is read through them, so a link to `/dev/zero` or to a FIFO is never opened; no size
+  limit applied to service files before and none applies now. `ansible.builtin.stat` fails on any error but
+  `FileNotFoundError`, so the stat of the links runs with `failed_when: false`, and a link whose result has no `stat`
+  is the unreadable kind `unfollowed_link` instead of stopping the run. The stat of the PAM directories also runs with
+  `failed_when: false`; a directory that `stat` cannot inspect, such as a link to itself, is `uninspected_directory`
+  and refuses every rule as `unreadable_stack` (unit-tested for `deny`, `remember` and `enforce_for_root`).
+- The faillock regression group `stack` adds three cases on both platforms: `deny=3` in a service file that is a link
   to a file in `/etc/security` (`deny` `overridden`, the reason naming the link, `unlock_time` applied and restored),
-  and a service file that is a link to nothing (both rules `unreadable_stack`, the reason naming the link). The
-  pwhistory family shares the task file and the filter, and its decision is unit-tested with the same input.
+  a service file that is a link to nothing and one that is a link to itself (both rules `unreadable_stack`, the reason
+  naming the link). The pwhistory family shares the task file and the filter, and its decision is unit-tested with the
+  same input: `test_pam_files.py` gives `remember` and `enforce_for_root`, with a file that would be `applied` and one
+  that is `compliant`, every kind of unreadable entry and expects `unreadable_stack` with `pam_pwhistory` in the
+  reason.
+- Open points, for FREES-212: when none of the three PAM directories is a directory, libpam reads `/etc/pam.conf`,
+  which the role does not read, so a `pam_faillock` or `pam_pwhistory` argument there is missed (ADR 0021, amendment
+  of FREES-213).

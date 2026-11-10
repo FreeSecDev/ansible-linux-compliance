@@ -100,6 +100,7 @@
   loop_control:
     loop_var: __linux_compliance_remediate_pwq_path
   register: __linux_compliance_remediate_pwq_pam_directories
+  failed_when: false
   when: __linux_compliance_remediate_family.apply | length > 0
   tags:
     - always
@@ -136,6 +137,7 @@
   loop_control:
     loop_var: __linux_compliance_remediate_pwq_link
   register: __linux_compliance_remediate_pwq_pam_links
+  failed_when: false
   tags:
     - always
 
@@ -147,8 +149,13 @@
              dict(__linux_compliance_remediate_pwq_pam_links.results | default([])
                   | map(attribute='__linux_compliance_remediate_pwq_link')
                   | zip(__linux_compliance_remediate_pwq_pam_links.results | default([])
-                        | map(attribute='stat'))),
-             __linux_compliance_remediate_pwq_pam_found.skipped_paths | default({})) }}
+                        | map(attribute='stat', default={}))),
+             __linux_compliance_remediate_pwq_pam_found.skipped_paths | default({}),
+             dict(__linux_compliance_remediate_pwq_pam_directories.results | default([])
+                  | selectattr('skipped', 'undefined')
+                  | map(attribute='__linux_compliance_remediate_pwq_path')
+                  | zip(__linux_compliance_remediate_pwq_pam_directories.results | default([])
+                        | selectattr('skipped', 'undefined') | map(attribute='stat', default={})))) }}
   tags:
     - always
 

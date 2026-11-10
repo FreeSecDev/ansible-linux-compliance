@@ -23,6 +23,7 @@
     preaders_linked_target: /etc/security/freesecdev-readers-authselect
     preaders_broken: /etc/pam.d/freesecdev-readers-broken
     preaders_device: /etc/pam.d/freesecdev-readers-device
+    preaders_loop: /etc/pam.d/freesecdev-readers-loop
     preaders_vendor_target: /usr/share/freesecdev-readers-vendor-target
     preaders_vendor_linked: /usr/share/pam.d/freesecdev-readers-vendor-linked
     preaders_cr: "\r"
@@ -436,6 +437,45 @@
     - "{{ preaders_vendor_directory }}"
     - "{{ preaders_vendor_target }}"
 
+- name: Pwquality reader regressions | Make the vendor PAM directory a symbolic link to itself, which stat cannot follow
+  ansible.builtin.file:
+    src: pam.d
+    dest: "{{ preaders_vendor_directory }}"
+    state: link
+    force: true
+    follow: false
+    owner: root
+    group: root
+
+- name: Pwquality reader regressions | Apply the rules with the PAM directory that loops
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+
+- name: Pwquality reader regressions | Read the main file after the apply refused by the looping PAM directory
+  ansible.builtin.slurp:
+    src: "{{ preaders_main }}"
+  register: preaders_vendor_loop_refused
+
+- name: Pwquality reader regressions | Check that the looping PAM directory refused both rules, and the run went on
+  ansible.builtin.assert:
+    that:
+      - lifecycle_results | map(attribute='status') | unique | list == ['overridden']
+      - >-
+        lifecycle_results | map(attribute='reason')
+        | select('search', preaders_vendor_directory ~ ' is a PAM directory that stat could not inspect')
+        | list | length == 2
+      - lifecycle_results | selectattr('changed') | list == []
+      - preaders_vendor_loop_refused.content == preaders_built.content
+    fail_msg: "{{ preaders_label }}, apply refused by the looping PAM directory: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Pwquality reader regressions | Remove the looping vendor PAM directory
+  ansible.builtin.file:
+    path: "{{ preaders_vendor_directory }}"
+    state: absent
+
 - name: Pwquality reader regressions | Give the vendor PAM directory back where the platform ships it
   ansible.builtin.file:
     path: "{{ preaders_vendor_directory }}"
@@ -445,7 +485,7 @@
     group: root
   when: preaders_vendor_link_stat.stat.exists
 
-- name: Pwquality reader regressions | Add a PAM service file that links to nothing and one that links to a device
+- name: Pwquality reader regressions | Add PAM service files that link to nothing, to a device and to themselves
   ansible.builtin.file:
     src: "{{ item.src }}"
     dest: "{{ item.dest }}"
@@ -459,6 +499,8 @@
       dest: "{{ preaders_broken }}"
     - src: /dev/null
       dest: "{{ preaders_device }}"
+    - src: freesecdev-readers-loop
+      dest: "{{ preaders_loop }}"
 
 - name: Pwquality reader regressions | Apply the rules with PAM service files that the collection cannot read
   ansible.builtin.include_tasks:
@@ -471,7 +513,7 @@
     src: "{{ preaders_main }}"
   register: preaders_broken_refused
 
-- name: Pwquality reader regressions | Check that the broken link and the link to a device refused both rules
+- name: Pwquality reader regressions | Check that the broken link, the device link and the loop link refused both rules
   ansible.builtin.assert:
     that:
       - lifecycle_results | map(attribute='status') | unique | list == ['overridden']
@@ -479,7 +521,9 @@
         lifecycle_results | map(attribute='reason')
         | select('search', preaders_broken ~ ' is a symbolic link that resolves to nothing; '
                            ~ preaders_device ~ ' is a symbolic link to something that is neither a regular file'
-                           ~ ' nor a directory, which libpam may open but the collection does not read')
+                           ~ ' nor a directory; ' ~ preaders_loop ~ ' is a symbolic link that stat could not follow'
+                           ~ ' [(]a loop, a path through something that is not a directory, or another error[)],'
+                           ~ ' which libpam may open but the collection does not read')
         | list | length == 2
       - lifecycle_results | selectattr('changed') | list == []
       - preaders_broken_refused.content == preaders_built.content
@@ -493,6 +537,7 @@
   loop:
     - "{{ preaders_broken }}"
     - "{{ preaders_device }}"
+    - "{{ preaders_loop }}"
 
 - name: Pwquality reader regressions | Switch the rules off after the regressions
   ansible.builtin.set_fact:

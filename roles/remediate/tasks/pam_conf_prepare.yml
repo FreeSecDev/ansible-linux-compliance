@@ -102,14 +102,16 @@
   loop_control:
     loop_var: __linux_compliance_remediate_sc_directory
   register: __linux_compliance_remediate_sc_directories
+  failed_when: false
   tags:
     - always
 
 - name: PAM configuration line | List every PAM service entry, links included, since any service can load the module
   ansible.builtin.find:
     paths: >-
-      {{ __linux_compliance_remediate_sc_directories.results | selectattr('stat.isdir', 'defined')
-         | selectattr('stat.isdir') | map(attribute='__linux_compliance_remediate_sc_directory') | list }}
+      {{ __linux_compliance_remediate_sc_directories.results | selectattr('stat', 'defined')
+         | selectattr('stat.isdir', 'defined') | selectattr('stat.isdir')
+         | map(attribute='__linux_compliance_remediate_sc_directory') | list }}
     file_type: any
     follow: false
     hidden: true
@@ -130,6 +132,7 @@
   loop_control:
     loop_var: __linux_compliance_remediate_sc_stack_link
   register: __linux_compliance_remediate_sc_stack_links
+  failed_when: false
   tags:
     - always
 
@@ -141,8 +144,12 @@
              dict(__linux_compliance_remediate_sc_stack_links.results | default([])
                   | map(attribute='__linux_compliance_remediate_sc_stack_link')
                   | zip(__linux_compliance_remediate_sc_stack_links.results | default([])
-                        | map(attribute='stat'))),
-             __linux_compliance_remediate_sc_stack_files.skipped_paths | default({})) }}
+                        | map(attribute='stat', default={}))),
+             __linux_compliance_remediate_sc_stack_files.skipped_paths | default({}),
+             dict(__linux_compliance_remediate_sc_directories.results | selectattr('skipped', 'undefined')
+                  | map(attribute='__linux_compliance_remediate_sc_directory')
+                  | zip(__linux_compliance_remediate_sc_directories.results | selectattr('skipped', 'undefined')
+                        | map(attribute='stat', default={})))) }}
   tags:
     - always
 

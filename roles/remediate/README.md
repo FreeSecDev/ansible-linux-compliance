@@ -14,7 +14,8 @@ mode, owner and group of `/etc/issue`, `/etc/issue.net` and `/etc/motd`), 14 rul
 setting in `/etc/security/pwquality.conf` on Ubuntu, one drop-in per setting on RHEL, where each content checks;
 a `pam_pwquality` argument in any regular file of `/etc/pam.d`, `/usr/lib/pam.d` or `/usr/share/pam.d`, or in a
 symbolic link there that resolves to one, read through the link, that sets another value makes the rule `overridden`,
-and so does a link there to nothing or to something that is neither a regular file nor a directory, FREES-213),
+and so does a link there to nothing, to something that is neither a regular file nor a directory or that `stat`
+cannot follow, or a PAM directory or entry that `find` or `stat` could not inspect, FREES-213),
 34 sshd keyword rules of `ssh` (one drop-in per rule, `/etc/ssh/sshd_config.d/00-freesecdev-<rule>.conf`, which
 sshd reads first, validated with `sshd -t` through the module `freesecdev.linux_compliance.sshd_validate` before it is
 written; a conflicting later line of `/etc/ssh/sshd_config` or `50-redhat.conf` is set to the rule's value in place and
@@ -25,8 +26,10 @@ of `login_defs` (one recorded line per setting in `/etc/login.defs`: `PASS_MAX_D
 `pwhistory` (one recorded line per setting in `/etc/security/faillock.conf` or `/etc/security/pwhistory.conf`,
 through the shared helpers `pam_conf_prepare.yml`, `pam_conf_apply.yml` and `pam_conf_cleanup.yml` and the filter
 `pam_conf_decision`, which reads the file and the service files of `/etc/pam.d`, `/usr/lib/pam.d` and
-`/usr/share/pam.d` as linux-pam does, a symbolic link through the link and a link to nothing or to a special file
-refused as `unreadable_stack` (FREES-213), and computes the exact text that `copy` writes, every other byte unchanged; the
+`/usr/share/pam.d` as linux-pam does, a symbolic link through the link, and a link to nothing, to a special file or
+that `stat` cannot follow, or a PAM directory or entry that `find` or `stat` could not inspect, refused as
+`unreadable_stack`
+(FREES-213), and computes the exact text that `copy` writes, every other byte unchanged; the
 cleanup writes the text of `pam_conf_restore` and proves the last restore of a file by its recorded SHA-256; the PAM
 stack is only read, a setting that a module line sets or redirects with `conf=` is `overridden`, and a line that pam
 reads but the collection would not edit is `hidden_setting`), the 21 rules of the kernel module topics
