@@ -36,11 +36,30 @@ described in [SECURITY.md](SECURITY.md), never in a public issue or pull request
 4. Keep the branch rebased on the latest `main`. The history is linear.
 5. Open a pull request into `main`. Never push to `main` directly. The title is a Conventional Commit and includes the
    Jira key, for example `feat: add OpenSCAP audit module (FREES-42)`. Fill in the pull request template.
+
+   The squash merge uses the pull request body as the commit message, so the last line of the body is the
+   `Refs: FREES-<number>` footer. Attribution lines come before it. A note such as "Generated with ..." goes in a
+   paragraph of its own; only trailer lines (`Key: value`, such as `Co-Authored-By:`) may share the footer's paragraph:
+
+   ```text
+   Generated with <tool>
+
+   Co-Authored-By: <name> <email>
+   Refs: FREES-22
+   ```
+
+   GitHub may add a `---------` line and `Co-authored-by:` lines for the co-authors of the branch's commits after
+   the body; those lines are GitHub's, and the footer stays the last line of the body. The `pr-body` workflow checks
+   the footer whenever the pull request is opened, edited or pushed to; run the same check locally with
+   `gh pr view <number> --json body -q .body > build/pr-body.md` and `make lint-pr-body PR_BODY_FILE=build/pr-body.md`.
+   Dependabot pull requests are exempt: Dependabot writes its own body and has no Jira key (FREES-81).
 6. An independent reviewer, an agent or a human that did not write the change, reviews the current head and posts the
    verdict on the pull request, ending with the marker
    `<!-- freesecdev-verdict: <verdict> head=<sha> reviewer=<id> -->`. A pull request merges only with an `approve` or
-   `approve-with-follow-ups` verdict for its current head. All review threads must be resolved and `ci-gate` must
-   pass. GitHub does not require an approving review
+   `approve-with-follow-ups` verdict for its current head. When a push after the verdict only brings in `main`, a
+   re-review of that update is enough: a range-diff check for a rebase, and the merge re-review for a merge of `main`
+   ([ADR 0033](docs/adr/0033-review-policy-independent-verdict-without-required-approval.md), amendment of
+   2026-11-10). All review threads must be resolved and `ci-gate` must pass. GitHub does not require an approving review
    ([ADR 0033](docs/adr/0033-review-policy-independent-verdict-without-required-approval.md)). The repository has no
    `CODEOWNERS` file on purpose: code-owner rules would automatically request the maintainer's review, and the project
    owner decided not to be asked for reviews.

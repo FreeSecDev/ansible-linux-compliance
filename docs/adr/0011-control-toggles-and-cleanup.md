@@ -777,7 +777,7 @@ init system. The libvirt scenarios of ADR 0009 answer it ([libvirt guide](../mol
 
 Each native topic adds four to nine Docker lifecycle legs, plus libvirt legs where a cycle requires a virtual machine.
 With five topics a run already has about 60 jobs (31 Docker lifecycle legs and 7 libvirt legs among them), the
-organisation runs at most 60 jobs at a time, and the merge queue gives a check 30 minutes. Converting the 1163
+organisation runs at most 60 jobs at a time, and the merge queue gives a check 30 minutes (90 since 2026-11-10). Converting the 1163
 `audit_only` rules into native topics cannot run the full matrix on every pull request and merge group. These
 refinements apply ([Molecule guide](../molecule.md#affected-legs-on-pull-requests)).
 
@@ -846,7 +846,7 @@ The FREES-189 mapping planned the full matrix for every topic pull request, beca
 lists of native topics that `converge.yml`, `verify.yml`, their libvirt counterparts and `shared/vars/target.yml`
 switch off, the golden test list of the `Makefile`, and the generated toggles of `make catalogue toggles` (the role
 defaults and argument specs, and a registry that gains a family). With the auditd stack that was 85 Docker lifecycle
-legs and 23 libvirt legs per run, against 60 concurrent jobs and the 30 minutes of the merge queue, and about 1100
+legs and 23 libvirt legs per run, against 60 concurrent jobs and the 30 minutes of the merge queue (90 since 2026-11-10), and about 1100
 `audit_only` rules remain to be converted. These refinements apply
 ([Molecule guide](../molecule.md#adding-a-topic-without-touching-shared-files)).
 

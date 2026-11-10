@@ -75,6 +75,7 @@ overriding them.
 | `lint-actions` | implemented | actionlint |
 | `lint-repo` | implemented | `tools/lint/check_repo_rules.py` on every tracked and new file, including symbolic links and files without a suffix; it refuses compiled module files (`.so`, `.pyd`, `.pyc`, `.pyo`, `.fwork`, any case) and code outside `plugins/` in a location from which Ansible loads code (FREES-156), and anything that would use the scanner's remediation: Python outside `tests/unit/`, `docs/` and `changelogs/` that names XCCDF `fix` elements, committed ComplianceAsCode or OpenSCAP remediation content, and invocations of the scanner's remediation or of scripts it provides ([ADR 0025](adr/0025-own-ansible-remediation-only.md), FREES-188) |
 | `lint-skills` | implemented | `tools/skills/validate_skills.py` |
+| `lint-pr-body` | implemented | `tools/lint/check_pr_body.py` on the pull request body in `PR_BODY_FILE`: the last line is `Refs: FREES-<n>` in a paragraph of trailer lines only, and lists the key of a `<type>/FREES-<n>-<slug>` branch in `PR_HEAD_REF`; a `PR_AUTHOR` of `dependabot[bot]` is exempt (FREES-81). Standard library only, run with `uv run --no-project`; not part of `lint`, because it needs the body |
 | `security` | implemented | Bandit (`tools`, `plugins`), Checkov on `infra/`, gitleaks history scan, zizmor (pedantic persona) |
 | `aws-bootstrap` | implemented | Renders and runs the one-time interactive AWS account bootstrap ([docs/aws/bootstrap.md](aws/bootstrap.md)); never run by CI |
 | `typecheck` | implemented | mypy strict, Pyright strict |
@@ -426,6 +427,15 @@ Configuration relaxations, each with its reason:
 are stable, so the required check name `ci-gate` does not change. Runs for pull requests cancel superseded
 runs; runs on `main` and merge groups are never cancelled. `docs` is part of `make ci` locally and is
 added as a job together with the documentation pipeline (FREES-80).
+
+`.github/workflows/pr-body.yml` runs the job `refs-footer` for every pull request to `main` when it is opened, edited,
+reopened or pushed to: `make lint-pr-body` on the body, author and head branch of the event. They reach the step
+through environment variables, and the body through a file; none is interpolated into the script. The squash commit message is the pull request body, so
+this keeps the `Refs: FREES-<n>` footer of AGENTS.md on the commit on `main`
+([ADR 0033](adr/0033-review-policy-independent-verdict-without-required-approval.md#the-pull-request-body-ends-with-the-jira-footer)).
+It has `contents: read` only and is not part of `ci-gate`: `ci.yml` does not run when only the body is edited, and the
+ruleset does not require the check, so the `code-review` skill has the reviewer confirm it passed. Requiring it would
+also need a `merge_group` trigger, because the merge queue waits for every required check.
 
 `.github/workflows/scc-release-watch.yml` runs the job `scc-release-watch` daily at 05:43 UTC and on manual dispatch,
 on `main` only: `make scc-release-watch SCC_RELEASE_WATCH_ISSUES=true` with `GH_TOKEN` set to the job token. It is the

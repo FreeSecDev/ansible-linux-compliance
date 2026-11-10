@@ -4,7 +4,7 @@ description: Plans and tracks work in Jira Cloud project FREES on vidlunnia.atla
 license: Apache-2.0
 metadata:
   owner: lead-architect
-  version: "1.0.0"
+  version: "1.0.1"
 ---
 
 # Jira management
@@ -52,7 +52,7 @@ Site `https://vidlunnia.atlassian.net`, project key `FREES`.
 - Every issue has parent or epic, all three label families, an estimate and a responsible skill.
 - Transitions used exist in the project's discovered workflow for that issue.
 - Comments cite verifiable evidence: a SHA, URL or test output that exists.
-- The issue key appears in the branch name, pull request title and commit footer.
+- The issue key appears in the branch name, pull request title and commit footer, and as the `Refs: FREES-<n>` last line of the pull request body, which becomes the squash commit message (Dependabot pull requests excepted, FREES-81).
 
 ## Common failures
 

@@ -2,6 +2,8 @@
 
 - **Status:** accepted
 - **Date:** 2026-11-09
+- **Amended:** 2026-11-10 (re-review after an update from `main`, pull request body footer, merge queue timeout;
+  FREES-204)
 - **Deciders:** project owner (decision of 2026-11-09: the owner's account may merge its own pull requests, and the
   agent reviews, accepts and merges)
 - **Jira:** FREES-204
@@ -56,6 +58,8 @@ in the same session.
    A push after the verdict needs a new verdict for the new head. When the push only brings in `main`, a re-review
    of that update is enough. That is either a rebase whose range-diff against the reviewed head is empty, or a merge
    of `main` whose tree equals an automatic merge apart from the conflicts it resolved.
+   The [amendment of 2026-11-10](#amendment-2026-11-10-re-review-after-an-update-from-main-frees-204) replaces this
+   exception.
 5. The release gate of ADR 0012 checks the marker instead of an approval (ADR 0012, amendment of 2026-11-09).
 
 ## Alternatives evaluated
@@ -99,3 +103,56 @@ in the same session.
   verdict-based merge condition.
 - `docs/dependency-management.md` and ADR 0012 state it too.
 - `.github/rulesets/main.json` matches the live ruleset.
+
+## Amendment 2026-11-10: re-review after an update from `main` (FREES-204)
+
+**Context.** The independent re-review of this ADR asked to drop "a merge of `main`" from the re-review exception of
+§4, because AGENTS.md asks for a rebase. On 2026-11-10 several pull requests (#78, #79, #86, #89) brought in `main`
+with a merge instead. Those merges needed real conflict resolution, and the reviews around them and CI found semantic
+conflicts that Git did not report: a count of natively remediated rules that merged silently to a stale value, a list
+in a test that lost two families, two families that used the same internal variable prefix, and a playbook floor of
+more than 1000 `audit_only` rules that the merged catalogue no longer met. Each merge got an independent re-review
+that compared the merged tree with `git merge-tree` and looked for semantic conflicts. A clean rebase can hide the
+same semantic conflicts.
+
+**Decision.** Rebasing stays the rule. The last paragraph of §4 is replaced by:
+
+A push after the verdict needs a new verdict for the new head. When the push only brings in `main`, a re-review of
+that update replaces the full review. It is done by a reviewer independent of the author and of whoever resolved the
+conflicts, and its verdict names the new head. Anything else in the push needs a full re-review.
+
+- **Rebase.** `git range-diff` between the branch's commits before and after the rebase shows every commit as
+  unchanged. A commit shown as changed, added or removed is reviewed as a conflict resolution (as in c. below) or
+  gets a full re-review. Checks d. to f. below apply as well.
+- **Merge of `main`.** Always a merge re-review with these checks, also when Git reported no conflict:
+  - a. **Parents:** the merge commit has exactly two parents, the reviewed head and a commit on `main`.
+  - b. **Diff against the automatic merge:** every difference between the merge commit's tree and the tree of
+    `git merge-tree --write-tree <reviewed head> <main commit>` is either the resolution of a conflict that command
+    reports or the fix of a semantic conflict found in d. to f., and the review names each one.
+  - c. **Resolutions:** every resolved hunk keeps the intent of both sides; no line of either side is lost, and no
+    line comes from neither side.
+  - d. **Values both sides changed:** in every file both sides changed, conflicted or not, counts, totals, floors and
+    thresholds, lists that hold the union of both sides, names and prefixes both sides introduce, and numbering are
+    recomputed from their source.
+  - e. **Generated files:** every generated file either side touched equals its generator's output for the merged
+    sources.
+  - f. **Tests:** the tests both sides added or changed pass on the merge commit, and `ci-gate` is green on it.
+
+The review states the kind of update, the reviewed and new heads, and the result of each check. The steps and
+commands are in `.agents/skills/code-review/references/re-review-after-main.md`.
+
+### The pull request body ends with the Jira footer
+
+The repository squash merges with the pull request body as the commit message (`squash_merge_commit_message:
+PR_BODY`), so the commit on `main` ends with whatever ends the body. Several commits on `main`, among them b623e7b
+(this ADR), end with attribution lines instead of the `Refs: FREES-<n>` footer that AGENTS.md asks for. The last line
+of the body is therefore `Refs: FREES-<n>`, with attribution lines before it, and the acceptance check of the
+`code-review` skill includes it. The `pr-body` workflow (`make lint-pr-body`) checks it on every pull request; it is
+not a required status check. GitHub may still add a `---------` line and `Co-authored-by:` lines for the co-authors of
+the branch's commits after the body. Dependabot pull requests are exempt, because Dependabot writes its own body and
+has no Jira key (FREES-81).
+
+### Merge queue check timeout
+
+On 2026-11-10 the merge queue's check timeout (`check_response_timeout_minutes`) in the live ruleset was raised from
+30 to 90 minutes. `.github/rulesets/main.json` follows, so it still matches the live ruleset.

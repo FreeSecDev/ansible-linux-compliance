@@ -1000,7 +1000,7 @@ in job 124055287121 building the Rocky Linux instance image alone took 9 minutes
 Since FREES-182 the images are built once per run and every leg loads them
 ([built once per run](#images-and-collections-built-once-per-run)). A leg that
 approaches 20 minutes should be split further, for example per pre-state, rather than given a longer limit, so that
-no required job comes near the merge queue's 30 minutes. The `test` job, 21 minutes at 6628b92, was split the same way: `test` keeps
+no required job comes near the merge queue's check timeout (30 minutes until 2026-11-10, 90 since). The `test` job, 21 minutes at 6628b92, was split the same way: `test` keeps
 the coverage, audit-exception, golden-content and browser tests, and `test-playbooks` runs the check-mode playbooks
 (`test-evidence`, `test-remediate-check`, `test-role-guards`, `test-verify`).
 
