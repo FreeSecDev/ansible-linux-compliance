@@ -21,7 +21,8 @@ toggle modes of every topic, and one leg per regression group that a topic decla
 mode ``regressions-<group>`` (FREES-175), so that regressions do not lengthen the cycle legs.
 ``--driver libvirt`` prints, for KVM runners, a fixed base leg per platform (``libvirt-<platform>``:
 the real scan, remediation, idempotence and cleanup of the reference rule), the lifecycle legs of
-the cycles that require libvirt, and the ``libvirt-selftest`` leg. The output is one line of
+the cycles that require libvirt, one leg per regression group that requires libvirt (FREES-107),
+and the ``libvirt-selftest`` leg. The output is one line of
 JSON, ``{"include": [...]}``, for ``fromJSON`` in the workflow.
 """
 
@@ -73,11 +74,7 @@ def legs(root: Path, driver: str = "docker") -> list[dict[str, str]]:
         )
         raise GenerationError(message)
     cycles = check_lifecycle_topics.cycle_platforms(root)
-    regressions = (
-        check_lifecycle_topics.regression_platforms(root)
-        if driver == check_lifecycle_topics.REGRESSION_DRIVER
-        else {}
-    )
+    regressions = check_lifecycle_topics.regression_platforms(root, driver)
     known = sorted(check_lifecycle_topics.platforms(root))
     found: list[dict[str, str]] = []
     for platform in known:

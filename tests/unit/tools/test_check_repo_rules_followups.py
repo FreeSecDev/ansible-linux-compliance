@@ -52,6 +52,7 @@ FREES_145_KEYWORDS = frozenset({"assume_utc", "holds_executable"})
 FREES_161_KEYWORDS = frozenset({"marked", "off_platform"})
 FREES_165_KEYWORDS = frozenset({"tags"})
 FREES_170_KEYWORDS = frozenset({"controlled", "with_control"})
+FREES_107_KEYWORDS = frozenset({"wildcard"})
 FREES_191_KEYWORDS = frozenset({"on_position", "on_markup"})
 FREES_186_KEYWORDS = frozenset({"checked", "exact", "flag"})
 FREES_200_KEYWORDS = frozenset({"client", "dropin", "effective"})
@@ -63,6 +64,7 @@ PRODUCTION_KEYWORDS = (
     | FREES_161_KEYWORDS
     | FREES_165_KEYWORDS
     | FREES_170_KEYWORDS
+    | FREES_107_KEYWORDS
     | FREES_191_KEYWORDS
     | FREES_186_KEYWORDS
     | FREES_200_KEYWORDS
@@ -201,6 +203,7 @@ def test_the_banned_keywords_are_pinned() -> None:
         "limits",
         "registry",
         "install_root",
+        "proc_root",
     }
 
 
@@ -273,6 +276,7 @@ def test_the_test_seams_of_the_plugins_are_banned_keywords() -> None:
         "plugins/module_utils/compliance/ledger.py": {"state_dir", "owner_uid", "lock_timeout"},
         "plugins/module_utils/compliance/openscap.py": {"runner", "clock", "limits"},
         "plugins/module_utils/compliance/audit.py": {"owner_uid", "registry", "clock"},
+        "plugins/module_utils/compliance/sysctl.py": {"proc_root"},
     }
     for name, expected in seams.items():
         parameters = _keyword_only_parameters(rules.REPO_ROOT / name)

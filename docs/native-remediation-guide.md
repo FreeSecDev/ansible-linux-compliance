@@ -8,11 +8,13 @@ lifecycle in Molecule. Audience: family authors and reviewers. Jira: FREES-53 (n
 [ADR 0023](adr/0023-native-ssh-server-configuration.md) (SSH server),
 [ADR 0025](adr/0025-own-ansible-remediation-only.md) (our own Ansible only),
 [ADR 0027](adr/0027-native-faillock-pwhistory.md) (account lock-out and password reuse),
+[ADR 0029](adr/0029-native-kernel-parameters.md) (kernel parameters) and
 [ADR 0030](adr/0030-native-auditd-settings-and-audit-rules.md) (auditd settings and audit rules).
 The contract of a family file is in [remediation.md](remediation.md#family-file-contract); this guide is the
 procedure. `file_permissions`, `banners`, `pwquality`, `ssh`, `sudo`
 ([ADR 0022](adr/0022-native-sudo-drop-ins.md)), `login_defs` ([ADR 0024](adr/0024-native-login-defs.md)),
-`faillock` and `pwhistory` are the worked examples.
+`faillock`, `pwhistory` and the kernel parameter topics `sysctl`, `ipv4_parameters` and `ipv6_parameters` are the
+worked examples.
 
 ## The rule: our own Ansible, never theirs
 
@@ -154,7 +156,10 @@ Add `extensions/molecule/shared/vars/topics/<family>.yml` ([Molecule guide](mole
 - `audit.applied_outcomes` adds `notapplicable` with the reason when the content's platform excludes containers;
 - regressions that the cycles cannot show (a change of method, a change by hand, a refusal) go into task files of
   `shared/tasks`, included by the static dispatch `shared/tasks/lifecycle_regressions.yml`, and are declared as named
-  groups under `regressions`; each group gets its own CI leg, so the cycle legs stay short;
+  groups under `regressions`; each group gets its own CI leg, so the cycle legs stay short; a group that needs what
+  only a virtual machine has (a running value changed by hand) names `requires: [libvirt]`;
+- what a container cannot prove (a running kernel parameter, an ownership change) goes into a pre-state that
+  `requires: [libvirt]`, next to the container pre-state that proves the files (the kernel parameter topics);
 - a disruptive topic needs `disruptive: true` and a `containment` note that says what it can break and why the harness
   still reaches the container.
 
@@ -199,3 +204,4 @@ role README and add a changelog fragment.
 | `login_defs` | `PASS_MAX_DAYS`, `PASS_MIN_DAYS`, `PASS_WARN_AGE`, `PASS_MIN_LEN`, `UMASK`, `FAIL_DELAY`, `CREATE_HOME` in `/etc/login.defs` | `recorded_value`: one line per setting, the prior line (or `null`) and the line written | A new family whose rules came from three others, which keep their toggles as subsystem tags; the strict form that both the check and shadow-utils read decides `compliant`, a stricter value is kept, and `duplicate_setting`, `overridden` (a libeconf drop-in) and symbolic links refuse; a pre-state sets an administrator's `lines` |
 | `faillock`, `pwhistory` | `deny`, `unlock_time`, `fail_interval`, `root_unlock_time`, `even_deny_root`, `audit`, `silent` in `/etc/security/faillock.conf`; `remember`, `enforce_for_root` in `/etc/security/pwhistory.conf` | `recorded_value`: one line per setting in place or appended, the exact new text written with `copy` after a SHA-256 re-check, the prior line and the file's SHA-256 before the first write recorded | Two families share the helpers `pam_conf_*.yml`; values from the profile and a stricter value kept; two rules that share one line (`remember`) record the same prior state; the decision is the filter `pam_conf_decision`, which reads the file and the service files of the three PAM directories as linux-pam does, and the cleanup text the filter `pam_conf_restore`, whose last restore of a file must give back the recorded SHA-256 and is pinned to the real readers by a verdict table (`make pam-reader-verdicts`); a module argument or `conf=` on any PAM service file makes the rule `overridden` (`stack_checked`, pinned by a golden test against the OVAL); the stack is only read, and the rules that enable the modules in it stay `audit_only` until FREES-181 (ADR 0027) |
 | `filesystem_modules`, `protocol_modules`, `wireless_modules` | 21 `kernel_module_<module>_disabled` rules, usb-storage included | `recorded_value`: one drop-in per rule, `/etc/modprobe.d/freesecdev-<module>.conf`, with the `install <module> /bin/false` and `blacklist <module>` lines that both contents require ([ADR 0028](adr/0028-native-kernel-module-drop-ins.md)) | Three families share the umbrella's helpers (`kernel_modules_*.yml`); the family reads every file that `modprobe` reads in its order, so a site file that already disables the module is `compliant` and one read first that lets it load is `overridden`; no module is unloaded and no initramfs rebuilt; the lifecycle runs them with the profiles that select them (`profiles` in the declaration) |
+| `sysctl`, `ipv4_parameters`, `ipv6_parameters` | 65 kernel parameter rules (`kernel.dmesg_restrict`, `fs.protected_*`, `net.ipv4.conf.*.rp_filter`, `net.ipv4.ip_forward`, `net.ipv6.conf.*.accept_ra` and the others) | `recorded_value`: one drop-in per rule, `/etc/sysctl.d/999-freesecdev-<rule>.conf`, sorting after the distributions' files; the running value through the collection's `sysctl_runtime` module where the check needs it, with the value before (and every interface's forwarding flag) recorded; on Ubuntu the one conflicting line of a procps vendor file set in place | One helper for three topics; both contents read every `sysctl.conf` and `sysctl.d` file and the running value (golden test); values from the profile or the check, never from a fix; `overridden` and `conflicting_setting` for an administrator's file after or before the drop-in; `runtime_unavailable` where `/proc/sys` is read-only, and `linux_compliance_remediate_sysctl_runtime: false` for files only, as in the containers; the running half is proven in the libvirt cycles and a libvirt regression group; 11 rules `audit_only` with the reasons in ADR 0029 |

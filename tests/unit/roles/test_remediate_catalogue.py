@@ -12,6 +12,7 @@ from ansible_collections.freesecdev.linux_compliance.plugins.filter import (
     remediation_plan as plan_filter,
 )
 from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance import (
+    sysctl_config,
     toggles,
 )
 from tests.unit import yaml_cache
@@ -71,12 +72,25 @@ FAMILY_PARAMETERS: dict[str, list[set[str]]] = {
     "protocol_modules": [KERNEL_MODULE_PARAMETERS],
     "wireless_modules": [KERNEL_MODULE_PARAMETERS],
 }
+SYSCTL_PARAMETERS: list[set[str]] = [
+    {"key", "path", "datatype", "value", "accepted"},
+    {"key", "path", "datatype", "value", "accepted", "empty_value"},
+    {"key", "path", "datatype", "value", "accepted", "absent_accepted"},
+    {"key", "path", "datatype", "value", "accepted_pattern"},
+    {"key", "path", "datatype", "value", "accepted_vector"},
+    {"key", "path", "datatype"} | PROFILE_VALUE_PARAMETERS,
+]
+for _family in ("sysctl", "ipv4_parameters", "ipv6_parameters"):
+    FAMILY_PARAMETERS[_family] = SYSCTL_PARAMETERS
 KERNEL_MODULE_FAMILIES = ["filesystem_modules", "protocol_modules", "wireless_modules"]
 NATIVE_FAMILIES = [
     "file_permissions",
+    "sysctl",
     "banners",
     "auditd_rules_time",
     "auditd_conf",
+    "ipv4_parameters",
+    "ipv6_parameters",
     *KERNEL_MODULE_FAMILIES,
     "ssh",
     "pwquality",
@@ -88,6 +102,8 @@ NATIVE_FAMILIES = [
 DISRUPTIVE_NATIVE_FAMILIES = [
     "auditd_rules_time",
     "auditd_conf",
+    "ipv4_parameters",
+    "ipv6_parameters",
     *KERNEL_MODULE_FAMILIES,
     "ssh",
     "pwquality",
@@ -379,6 +395,77 @@ def test_native_faillock_and_pwhistory_rules_set_one_known_line_with_the_profile
     )
 
 
+def test_native_kernel_parameter_rules_write_one_drop_in_each_with_a_value_the_check_accepts() -> (
+    None
+):
+    kernel = [
+        rule
+        for rule in native()
+        if rule["family"] in {"sysctl", "ipv4_parameters", "ipv6_parameters"}
+    ]
+    assert len(kernel) == 65
+    role_vars = load(ROLE / "vars" / "main.yml")
+    dropin = re.compile(str(role_vars["__linux_compliance_remediate_sysctl_dropin_pattern"]))
+    key = re.compile(str(role_vars["__linux_compliance_remediate_sysctl_key_pattern"]))
+    value = re.compile(str(role_vars["__linux_compliance_remediate_sysctl_value_pattern"]))
+    checked = cast("dict[str, object]", role_vars["__linux_compliance_remediate_sysctl_checked"])
+    for rule in kernel:
+        parameters = cast("dict[str, object]", rule["parameters"])
+        assert rule["revert_strategy"] == "recorded_value"
+        assert dropin.fullmatch(str(parameters["path"])), rule["rule_id"]
+        assert key.fullmatch(str(parameters["key"])), rule["rule_id"]
+        assert parameters["datatype"] in {"int", "string", "int_vector"}
+        written = (
+            [
+                "".join(cast("list[str]", entry["value"]))
+                for entry in cast("list[dict[str, object]]", parameters["profile_values"])
+            ]
+            if "value_id" in parameters
+            else [str(parameters["value"])]
+        )
+        for text in written:
+            assert value.fullmatch(text), (rule["rule_id"], text)
+            assert text or parameters.get("empty_value"), rule["rule_id"]
+            if parameters["datatype"] == "int":
+                assert re.fullmatch(r"-?[0-9]{1,19}", text), (rule["rule_id"], text)
+        if "accepted" in parameters:
+            accepted = cast("dict[str, list[str]]", parameters["accepted"])
+            assert set(accepted) <= set(checked), rule["rule_id"]
+            assert all(parameters["value"] in values for values in accepted.values())
+        if "accepted_pattern" in parameters:
+            assert re.search(str(parameters["accepted_pattern"]), str(parameters["value"]))
+        assert ("accepted_vector" in parameters) is (parameters["datatype"] == "int_vector")
+        if "accepted_vector" in parameters:
+            vector = cast("list[int]", parameters["accepted_vector"])
+            assert vector, rule["rule_id"]
+            assert sysctl_config.kernel_vector(str(parameters["value"]), len(vector)) == vector
+    paths = [str(cast("dict[str, object]", rule["parameters"])["path"]) for rule in kernel]
+    assert len(paths) == len(set(paths))
+
+
+def test_a_refusing_companion_is_planned_before_the_rule_that_it_can_refuse() -> None:
+    role_vars = load(ROLE / "vars" / "main.yml")
+    companions = cast(
+        "dict[str, dict[str, object]]",
+        role_vars["__linux_compliance_remediate_sysctl_refusing_companions"],
+    )
+    assert companions
+    by_key = {
+        str(cast("dict[str, object]", rule["parameters"])["key"]): rule
+        for rule in native()
+        if rule["family"] in {"sysctl", "ipv4_parameters", "ipv6_parameters"}
+    }
+    for key, blocker in companions.items():
+        rule = by_key[key]
+        companion = by_key[str(blocker["key"])]
+        assert companion["family"] == rule["family"], key
+        assert str(companion["rule_id"]) < str(rule["rule_id"]), key
+        refused = cast("list[int]", blocker["refused"])
+        assert all(isinstance(value, int) for value in refused), key
+        written = str(cast("dict[str, object]", companion["parameters"])["value"])
+        assert int(written) not in refused, key
+
+
 def test_the_task_files_are_only_family_files_and_their_helpers() -> None:
     families = {str(family["name"]) for family in registry()}
     umbrellas = {str(family["umbrella"]) for family in registry() if "umbrella" in family}
@@ -512,11 +599,13 @@ def test_with_the_opt_in_only_the_native_rules_are_applied_and_the_rest_not_impl
     assert summary["not_implemented"] == len(rules()) - len(native())
     assert [family["name"] for family in cast("list[dict[str, object]]", result["families"])] == [
         "file_permissions",
+        "sysctl",
         "banners",
     ]
     kernel = plan(allow_disruptive=["kernel_modules"])
     assert [family["name"] for family in cast("list[dict[str, object]]", kernel["families"])] == [
         "file_permissions",
+        "sysctl",
         "banners",
         *KERNEL_MODULE_FAMILIES,
     ]

@@ -17,6 +17,7 @@
   vars:
     linux_compliance_remediate_enabled: true
     linux_compliance_remediate_allow_disruptive: "{{ lifecycle_allow_disruptive }}"
+    linux_compliance_remediate_sysctl_runtime: "{{ lifecycle_sysctl_runtime | bool }}"
 
 - name: Lifecycle remediate | Give the verified profile back for the audits and the next topic
   ansible.builtin.set_fact:
