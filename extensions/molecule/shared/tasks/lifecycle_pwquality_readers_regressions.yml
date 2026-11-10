@@ -26,6 +26,10 @@
     preaders_loop: /etc/pam.d/freesecdev-readers-loop
     preaders_vendor_target: /usr/share/freesecdev-readers-vendor-target
     preaders_vendor_linked: /usr/share/pam.d/freesecdev-readers-vendor-linked
+    preaders_included: /etc/security/freesecdev-readers-included
+    preaders_included_source: ../security/freesecdev-readers-included
+    preaders_environ: /etc/pam.d/freesecdev-readers-environ
+    preaders_loose: password requisite pam_pwquality.so minlen=8 enforcing=0
     preaders_cr: "\r"
     preaders_newline: "\n"
 
@@ -464,7 +468,8 @@
       - lifecycle_results | map(attribute='status') | unique | list == ['overridden']
       - >-
         lifecycle_results | map(attribute='reason')
-        | select('search', preaders_vendor_directory ~ ' is a PAM directory that stat could not inspect')
+        | select('search', preaders_vendor_directory ~ ' is a PAM directory that stat could not inspect'
+                           ~ ' [(][^)]*[)]: Too many levels of symbolic links')
         | list | length == 2
       - lifecycle_results | selectattr('changed') | list == []
       - preaders_vendor_loop_refused.content == preaders_built.content
@@ -522,8 +527,9 @@
         | select('search', preaders_broken ~ ' is a symbolic link that resolves to nothing; '
                            ~ preaders_device ~ ' is a symbolic link to something that is neither a regular file'
                            ~ ' nor a directory; ' ~ preaders_loop ~ ' is a symbolic link that stat could not follow'
-                           ~ ' [(]a loop, a path through something that is not a directory, or another error[)],'
-                           ~ ' which libpam may open but the collection does not read')
+                           ~ ' [(]a loop, a path through something that is not a directory, or another error[)]:'
+                           ~ ' Too many levels of symbolic links, which libpam may open but the collection does not'
+                           ~ ' read')
         | list | length == 2
       - lifecycle_results | selectattr('changed') | list == []
       - preaders_broken_refused.content == preaders_built.content
@@ -538,6 +544,164 @@
     - "{{ preaders_broken }}"
     - "{{ preaders_device }}"
     - "{{ preaders_loop }}"
+
+- name: Pwquality reader regressions | Add a live pam_pwquality line after a comment line that ends with a backslash
+  ansible.builtin.copy:
+    content: "# a comment that ends in a backslash \\{{ preaders_newline }}{{ preaders_loose }}{{ preaders_newline }}"
+    dest: "{{ preaders_pam }}"
+    mode: "0644"
+    owner: root
+    group: root
+
+- name: Pwquality reader regressions | Apply the rules with the line that libpam runs after the comment
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+
+- name: Pwquality reader regressions | Read the main file after the apply refused by the line after the comment
+  ansible.builtin.slurp:
+    src: "{{ preaders_main }}"
+  register: preaders_comment_refused
+
+- name: Pwquality reader regressions | Check that the line after the comment, which libpam runs, refused both rules
+  ansible.builtin.assert:
+    that:
+      - lifecycle_results | map(attribute='status') | unique | list == ['overridden']
+      - >-
+        lifecycle_results | selectattr('rule_id', 'equalto', preaders_minlen) | map(attribute='reason')
+        | select('search', 'pam_pwquality arguments override the file: ' ~ preaders_pam ~ ': minlen=8')
+        | list | length == 1
+      - >-
+        lifecycle_results | selectattr('rule_id', 'equalto', preaders_root) | map(attribute='reason')
+        | select('search', 'enforcing is 0 in ' ~ preaders_pam ~ ': enforcing=0') | list | length == 1
+      - lifecycle_results | selectattr('changed') | list == []
+      - preaders_comment_refused.content == preaders_built.content
+    fail_msg: "{{ preaders_label }}, apply refused by the line after a backslash comment: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Pwquality reader regressions | Write a file outside the PAM directories whose pam_pwquality loosens both rules
+  ansible.builtin.copy:
+    content: "{{ preaders_loose }}{{ preaders_newline }}"
+    dest: "{{ preaders_included }}"
+    mode: "0644"
+    owner: root
+    group: root
+
+- name: Pwquality reader regressions | Include it from a PAM file whose target is on a continued line
+  ansible.builtin.copy:
+    content: "password include \\{{ preaders_newline }}  {{ preaders_included_source }}{{ preaders_newline }}"
+    dest: "{{ preaders_pam }}"
+    mode: "0644"
+    owner: root
+    group: root
+
+- name: Pwquality reader regressions | Apply the rules with the include on a continued line
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+
+- name: Pwquality reader regressions | Read the main file after the apply refused by the continued include
+  ansible.builtin.slurp:
+    src: "{{ preaders_main }}"
+  register: preaders_include_refused
+
+- name: Pwquality reader regressions | Check that the include on a continued line, which libpam opens, refused both
+  ansible.builtin.assert:
+    that:
+      - lifecycle_results | map(attribute='status') | unique | list == ['overridden']
+      - >-
+        lifecycle_results | map(attribute='reason')
+        | select('search', preaders_pam ~ ' includes ' ~ preaders_included_source ~ ', which the collection does not'
+                           ~ ' read')
+        | list | length == 2
+      - lifecycle_results | selectattr('changed') | list == []
+      - preaders_include_refused.content == preaders_built.content
+    fail_msg: "{{ preaders_label }}, apply refused by the continued include: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Pwquality reader regressions | Add a comment line of 1023 bytes that the fixed-buffer reader of Ubuntu splits
+  ansible.builtin.copy:
+    content: "{{ '#' ~ ('x' * 1022) ~ preaders_loose ~ preaders_newline }}"
+    dest: "{{ preaders_pam }}"
+    mode: "0644"
+    owner: root
+    group: root
+
+- name: Pwquality reader regressions | Apply the rules with the comment line of 1023 bytes
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+
+- name: Pwquality reader regressions | Read the main file after the apply refused by the long comment line
+  ansible.builtin.slurp:
+    src: "{{ preaders_main }}"
+  register: preaders_long_refused
+
+- name: Pwquality reader regressions | Check that the long comment line, which libpam 1.5.3 splits, refused both rules
+  ansible.builtin.assert:
+    that:
+      - lifecycle_results | map(attribute='status') | unique | list == ['overridden']
+      - >-
+        lifecycle_results | map(attribute='reason')
+        | select('search', preaders_pam ~ ' has a NUL byte or a line of 1023 bytes or more, which libpam does not'
+                           ~ ' read as one line')
+        | list | length == 2
+      - lifecycle_results | selectattr('changed') | list == []
+      - preaders_long_refused.content == preaders_built.content
+    fail_msg: "{{ preaders_label }}, apply refused by the comment line of 1023 bytes: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Pwquality reader regressions | Remove the PAM file and the file that it included
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "{{ preaders_pam }}"
+    - "{{ preaders_included }}"
+
+- name: Pwquality reader regressions | Add a PAM service file that links to /proc/self/environ, a per-process file
+  ansible.builtin.file:
+    src: /proc/self/environ
+    dest: "{{ preaders_environ }}"
+    state: link
+    force: true
+    follow: false
+    owner: root
+    group: root
+
+- name: Pwquality reader regressions | Apply the rules with the PAM service file that links below /proc
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+
+- name: Pwquality reader regressions | Read the main file after the apply refused by the link below /proc
+  ansible.builtin.slurp:
+    src: "{{ preaders_main }}"
+  register: preaders_environ_refused
+
+- name: Pwquality reader regressions | Check that the link below /proc, never read, refused both rules
+  ansible.builtin.assert:
+    that:
+      - lifecycle_results | map(attribute='status') | unique | list == ['overridden']
+      - >-
+        lifecycle_results | map(attribute='reason')
+        | select('search', preaders_environ ~ ' resolves to a path below /proc, /sys or /dev, which can read'
+                           ~ " differently in the process that calls libpam than in the collection's:"
+                           ~ ' /proc/[0-9]+/environ')
+        | list | length == 2
+      - lifecycle_results | selectattr('changed') | list == []
+      - preaders_environ_refused.content == preaders_built.content
+    fail_msg: "{{ preaders_label }}, apply refused by the link below /proc: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Pwquality reader regressions | Remove the PAM service file that links below /proc
+  ansible.builtin.file:
+    path: "{{ preaders_environ }}"
+    state: absent
 
 - name: Pwquality reader regressions | Switch the rules off after the regressions
   ansible.builtin.set_fact:

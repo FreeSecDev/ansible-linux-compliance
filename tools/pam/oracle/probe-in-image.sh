@@ -78,12 +78,74 @@ if grep -q 'struct line_buffer' "${src}/libpam/pam_handlers.c"; then
 fi
 gcc "${flags[@]}" "${stack_flags[@]}" -o "${work}/probe_stack" "${ORACLE}/probe_stack.c" \
   "${src}/libpam/pam_misc.c" "${ORACLE}/stubs.c" -Wl,--unresolved-symbols=ignore-all
+gcc -std=gnu11 -O0 -w "-I${src}/libpam/include" -o "${work}/probe_libpam" "${ORACLE}/probe_libpam.c" \
+  -l:libpam.so.0
+gcc -std=gnu11 -O0 -w -shared -fPIC "-I${src}/libpam/include" -o "${work}/pam_pwquality.so" \
+  "${ORACLE}/fake_pwquality.c"
+module_dir=""
+while IFS= read -r found; do
+  module_dir="$(dirname "${found}")"
+  break
+done < <(find /usr -name pam_unix.so -path '*/security/*' 2>/dev/null)
+if [[ -z "${module_dir}" ]]; then
+  printf 'error: no PAM module directory\n' >&2
+  exit 1
+fi
+cp "${work}/pam_pwquality.so" "${module_dir}/pam_pwquality.so"
+
+readonly SNAPSHOT_PATHS=(/etc/pam.d /usr/lib/pam.d /usr/share/pam.d /etc/pam.conf)
+
+run_libpam_case() {
+  local case_dir="$1"
+  local snapshot log path calls reading environment
+  snapshot="$(mktemp -d)"
+  log="$(mktemp)"
+  for path in "${SNAPSHOT_PATHS[@]}"; do
+    if [[ -e "${path}" || -L "${path}" ]]; then
+      cp -a --parents "${path}" "${snapshot}/"
+    fi
+  done
+  while IFS= read -r path || [[ -n "${path}" ]]; do
+    [[ -n "${path}" ]] && rm -rf -- "${path}"
+  done <"${case_dir}away"
+  cp -R -P "${case_dir}root/." /
+  environment="$(cat "${case_dir}environment")"
+  reading="$(FREESECDEV_PAM_PROBE_LOG="${log}" FREESECDEV_PAM_PROBE_LINE="${environment}" \
+    "${work}/probe_libpam" "$(cat "${case_dir}service")" 2>/dev/null)"
+  calls="[$(paste -sd, "${log}")]"
+  while IFS= read -r path; do
+    rm -f -- "/${path}"
+  done < <(cd "${case_dir}root" && find . -mindepth 1 ! -type d -printf '%P\n')
+  for path in "${SNAPSHOT_PATHS[@]}"; do
+    rm -rf -- "${path}"
+    if [[ -e "${snapshot}${path}" || -L "${snapshot}${path}" ]]; then
+      cp -a "${snapshot}${path}" "${path}"
+    fi
+  done
+  while IFS= read -r path; do
+    rmdir --ignore-fail-on-non-empty -- "/${path}" 2>/dev/null || true
+  done < <(cd "${case_dir}root" && find . -mindepth 1 -type d -printf '%P\n' | sort -r)
+  rm -rf -- "${snapshot}" "${log}"
+  printf '{"start": %s, "chauthtok": %s, "calls": %s}' \
+    "$(sed -E 's/.*"start": (-?[0-9]+).*/\1/' <<<"${reading}")" \
+    "$(sed -E 's/.*"chauthtok": (-?[0-9]+).*/\1/' <<<"${reading}")" "${calls}"
+}
 
 output="${OUT}/${platform}.jsonl"
 printf '{"platform": "%s", "installed": "%s", "source": "%s"}\n' "${platform}" "${installed}" "${source_version}" >"${output}"
 for case_dir in "${CASES}"/*/; do
   id="$(basename "${case_dir}")"
   reader="$(cat "${case_dir}/reader")"
+  if [[ "${reader}" == libpam ]]; then
+    reading="$(run_libpam_case "${case_dir}")"
+    if [[ -f "${case_dir}stack" ]]; then
+      stack="$("${work}/probe_stack" "${case_dir}stack" 2>/dev/null)"
+      printf '{"id": "%s", "reading": %s, "stack": %s}\n' "${id}" "${reading}" "${stack}" >>"${output}"
+    else
+      printf '{"id": "%s", "reading": %s}\n' "${id}" "${reading}" >>"${output}"
+    fi
+    continue
+  fi
   args=()
   while IFS= read -r arg || [[ -n "${arg}" ]]; do
     args+=("${arg//@conf/${case_dir}conf}")

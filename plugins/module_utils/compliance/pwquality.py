@@ -24,6 +24,10 @@ import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Final
 
+from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance import (
+    pam_reader,
+)
+
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
@@ -92,15 +96,12 @@ UNRECORDABLE: Final[str] = (
     r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f\u202a-\u202e\u2066-\u2069\ud800-\udfff]"
 )
 SURROGATE: Final[str] = r"[\ud800-\udfff]"
-PAM_MODULE: Final[bytes] = b"pam_pwquality"
-PAM_SEPARATORS: Final[str] = r"[ \t\n\v\f\r\[\]]+"
+PAM_MODULE_TEXT: Final[str] = "pam_pwquality"
 NEWLINE: Final[str] = "\n"
 DROPIN_SUFFIX: Final[str] = ".conf"
 FILE: Final[str] = "file"
 DIRECTORY: Final[str] = "directory"
 MISSING: Final[str] = "missing"
-COMMENT_TEXT: Final[str] = "#"
-INCLUDE_TARGET: Final[int] = 2
 
 
 @dataclass(frozen=True)
@@ -316,42 +317,88 @@ def option_override(argument: bytes, setting: str, required: int) -> bool:
     return found is None or found[1] != required
 
 
-def pam_arguments(files: Sequence[tuple[str, str]]) -> list[tuple[str, str]]:
-    """Return the file and the word of every word on a PAM line that names ``pam_pwquality``.
+@dataclass(frozen=True)
+class PamReading:
+    """What libpam passes to ``pam_pwquality``, as both of its line readers read the PAM files.
 
-    Every line of every PAM file that names ``pam_pwquality`` and is not a comment line is read,
-    with lines continued by a trailing backslash joined, and its words are split at white space
-    and brackets, so that more is found than PAM passes to the module and never less.
+    Attributes:
+        arguments: ``(file, argument)`` for every argument of every line that loads a module
+            whose path names ``pam_pwquality``, of any type.
+        includes: ``<file> includes <target>`` for every ``include``, ``substack`` and
+            ``@include`` (in any case, with or without a leading ``-``) of a target with a ``/``.
+        problems: Every file that the collection cannot read as libpam does, and why.
     """
-    found: list[tuple[str, str]] = []
+
+    arguments: tuple[tuple[str, str], ...]
+    includes: tuple[str, ...]
+    problems: tuple[str, ...]
+
+
+def _pwquality_or_include(line: pam_reader.ModuleLine) -> bool:
+    """Return whether a module line loads ``pam_pwquality`` or includes a file."""
+    return line.include is not None or (line.module is not None and PAM_MODULE_TEXT in line.module)
+
+
+def read_pam(files: Sequence[tuple[str, str]]) -> PamReading:
+    """Return what libpam passes to ``pam_pwquality`` from ``files``, or why it cannot be told.
+
+    Every file is read as both line readers of libpam read it (:mod:`pam_reader`, the reader of
+    the ``faillock`` and ``pwhistory`` families): the fixed-buffer reader of the Ubuntu 1.5.3
+    package and the line-buffer reader of 1.5.1 on Rocky Linux 9. A continued line is joined, a
+    comment line ends where libpam ends it (also when it ends with a backslash), each logical line
+    is split with ``_pam_StrTok``, the type is compared without case and with one leading ``-``
+    dropped, and ``@include`` is taken in any case and with a leading ``-`` on both platforms,
+    although only the Ubuntu libpam accepts it (Rocky Linux's refuses the line as an illegal type):
+    reading it as an include can only add a refusal. Every line of every file is read, also of
+    a file that libpam does not open, which can only add a refusal too.
+
+    A file with a NUL byte or a line of 1023 bytes or more is a problem: the Ubuntu reader splits
+    such a line into two and runs the second part, also after a comment. So is a file whose lines
+    that load ``pam_pwquality`` or include a file differ between the two readers, for example a
+    continued line with a blank or comment line inside it, because the collection cannot tell
+    which reader the host's libpam has.
+    """
+    arguments: list[tuple[str, str]] = []
+    includes: list[str] = []
+    problems: list[str] = []
     for path, text in files:
-        logical: list[bytes] = []
-        pending = b""
-        for line in text_bytes(text).split(b"\n"):
-            joined = pending + line
-            if _strip(joined).endswith(b"\\"):
-                pending = _strip(joined)[:-1] + b" "
-                continue
-            pending = b""
-            logical.append(joined)
-        logical.append(pending)
-        for line in logical:
-            if PAM_MODULE not in line or _strip(line).startswith(b"#"):
-                continue
-            words = re.split(PAM_SEPARATORS, line.decode("utf-8", "replace"))
-            found.extend((path, word) for word in words if word)
-    return found
+        if pam_reader.unassembled(text):
+            problems.append(
+                f"{path} has a NUL byte or a line of {pam_reader.PAM_LINE_LIMIT} bytes or more, "
+                "which libpam does not read as one line"
+            )
+            continue
+        readings = {
+            tuple(
+                line
+                for line in pam_reader.module_lines(text, variant)
+                if _pwquality_or_include(line)
+            )
+            for variant in pam_reader.ASSEMBLY_VARIANTS
+        }
+        if len(readings) > 1:
+            problems.append(
+                f"{path} has lines that load pam_pwquality or include a file, which the line "
+                "readers of libpam 1.5.1 and 1.5.3 assemble differently"
+            )
+            continue
+        for line in readings.pop():
+            if line.include is None:
+                arguments.extend((path, argument) for argument in line.arguments)
+            elif "/" in line.include:
+                includes.append(f"{path} includes {line.include}")
+    return PamReading(tuple(arguments), tuple(includes), tuple(problems))
 
 
 def pam_overrides(files: Sequence[tuple[str, str]], setting: str, required: int) -> list[str]:
     """Return ``<file>: <argument>`` for each ``pam_pwquality`` argument overriding ``setting``.
 
-    The arguments are those of :func:`pam_arguments`.
+    The arguments are those of :func:`read_pam`.
     """
     return [
-        f"{path}: {word}"
-        for path, word in pam_arguments(files)
-        if option_override(text_bytes(word), setting, required)
+        f"{path}: {argument}"
+        for path, argument in read_pam(files).arguments
+        if option_override(text_bytes(argument), setting, required)
     ]
 
 
@@ -362,9 +409,9 @@ def pam_enforcing_off(files: Sequence[tuple[str, str]]) -> list[str]:
     ``ENFORCING=+00``, ``enforcing=-0`` and ``enforcing=000`` are all 0.
     """
     return [
-        f"{path}: {word}"
-        for path, word in pam_arguments(files)
-        if option_value(text_bytes(word)) == ("enforcing", 0)
+        f"{path}: {argument}"
+        for path, argument in read_pam(files).arguments
+        if option_value(text_bytes(argument)) == ("enforcing", 0)
     ]
 
 
@@ -452,42 +499,6 @@ def why_not_effective(reading: Reading, rule: Rule, path: str, line: int | None)
     )
 
 
-def pam_unread_includes(files: Sequence[tuple[str, str]]) -> list[str]:
-    """Return ``<file> includes <path>`` for every PAM line that includes a path with a ``/``.
-
-    libpam (``_pam_open_config_file`` of linux-pam 1.5.1 and 1.5.3) opens an include target as it
-    opens a service: an absolute path wherever it is, and any other name in the first of
-    ``/etc/pam.d``, ``/usr/lib/pam.d`` and, where libpam is built with a vendor directory (Rocky
-    Linux 9), ``/usr/share/pam.d`` that has it. ``../security/x`` therefore opens a file outside
-    the PAM directories, and ``site/x`` one below them that the collection does not list. A
-    ``pam_pwquality`` line in such a file is not among the files that the collection reads; a bare
-    name is, because the collection reads every regular file of the three directories and every
-    symbolic link there that resolves to a regular file (FREES-211, FREES-213), and refuses the rule
-    on an entry that it cannot read.
-
-    Each physical line is checked on its own: the type and ``include`` or ``substack`` and the
-    target, or ``@include`` and the target, must be on one line. libpam joins a line that ends in a
-    backslash with the next one before it splits the words, so an include whose target is on a
-    continued line is not found here, and the rule is not refused for it. That is an open gap,
-    tracked as FREES-212.
-    """
-    found: list[str] = []
-    for path, text in files:
-        for line in text.split(NEWLINE):
-            words = line.split()
-            if not words or words[0].startswith(COMMENT_TEXT):
-                continue
-            if words[0] == "@include" and len(words) > 1 and "/" in words[1]:
-                found.append(f"{path} includes {words[1]}")
-            elif (
-                len(words) > INCLUDE_TARGET
-                and words[1].lower() in ("include", "substack")
-                and "/" in words[2]
-            ):
-                found.append(f"{path} includes {words[2]}")
-    return found
-
-
 def loosening(
     reading: Reading, pam: Sequence[tuple[str, str]], rule: Rule
 ) -> tuple[str | None, str | None]:
@@ -508,7 +519,8 @@ def loosening(
                 f" password, and {rule.setting} does not take effect"
             )
     local = reading.value("local_users_only") == 1 or any(
-        "local_users_only" in text for _path, text in pam if PAM_MODULE.decode("ascii") in text
+        option_value(text_bytes(argument)) == ("local_users_only", 1)
+        for _path, argument in read_pam(pam).arguments
     )
     note = (
         f"local_users_only is set, so {rule.setting} applies to local users only" if local else None
@@ -559,11 +571,19 @@ def decide(
 def unreadable_refusal(rule: Rule, unreadable: Sequence[str]) -> dict[str, object] | None:
     """Return the decision that refuses the rule on PAM entries that the collection cannot read.
 
-    ``unreadable`` describes every entry of the PAM directories that libpam may open but the
-    collection does not read: a symbolic link that resolves to nothing, a link to something that
-    is neither a regular file nor a directory, or an entry that is none of those (FREES-213). A
-    ``pam_pwquality`` argument there could override the file, so the rule is ``overridden``, as
-    for an include that the collection does not read. Returns ``None`` when there is none.
+    ``unreadable`` holds the description (``pam_files.describe``) of every entry that libpam may
+    read but the collection does not, one for each kind of ``pam_files.KINDS``: a symbolic link
+    that resolves to nothing (``broken_link``), a link to something that is neither a regular
+    file nor a directory (``link``), a link that ``stat`` could not follow (``unfollowed_link``),
+    an entry that is none of a regular file, a directory and a link (``special``), an entry or a
+    PAM directory that ``find`` could not inspect (``unlisted``), a PAM directory that ``stat``
+    could not inspect (``uninspected_directory``) (all FREES-213), a link or a PAM directory that
+    resolves below ``/proc``, ``/sys`` or ``/dev`` (``virtual_file``), and ``/etc/pam.conf`` when
+    libpam reads it instead of the PAM directories (``pam_conf_fallback``) (both FREES-212). The
+    error message of a failed ``stat`` and the path below ``/proc``, ``/sys`` or ``/dev`` follow
+    the description. A ``pam_pwquality`` argument in any of them could override the file, so the
+    rule is ``overridden``, as for an include that the collection does not read. Returns ``None``
+    when there is none.
     """
     if not unreadable:
         return None
@@ -594,12 +614,18 @@ def _refusal(
             "status": "unreadable_file",
             "reason": f"{rule.main} is not UTF-8 text, so it cannot be rewritten exactly",
         }
-    unread = pam_unread_includes(pam)
-    if unread:
+    read = read_pam(pam)
+    if read.problems:
         return {
             "status": "overridden",
-            "reason": "; ".join(unread) + ", which the collection does not read, so a pam_pwquality"
-            " argument there could override the file",
+            "reason": "; ".join(read.problems) + ", so the collection cannot tell which"
+            " pam_pwquality arguments libpam passes, and an argument there could override the file",
+        }
+    if read.includes:
+        return {
+            "status": "overridden",
+            "reason": "; ".join(read.includes) + ", which the collection does not read, so a"
+            " pam_pwquality argument there could override the file",
         }
     overrides = pam_overrides(pam, rule.setting, rule.required)
     if overrides:

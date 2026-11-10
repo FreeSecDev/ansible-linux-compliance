@@ -19,6 +19,11 @@
     stack_conf: /etc/security/faillock.conf
     stack_service: /etc/pam.d/fsd-regression-faillock
     stack_service_target: /etc/security/fsd-regression-faillock-authselect
+    stack_vendor_directory: /usr/share/pam.d
+    stack_items: >-
+      {{ lifecycle_items | combine({'files': lifecycle_items.files
+           + [{'path': '/usr/share/pam.d', 'rewritten': true}]}) }}
+    stack_rewritten: "{{ lifecycle_rewritten + ['/usr/share/pam.d'] }}"
     stack_files: >-
       {{ {'ubuntu': ['/etc/pam.d/common-auth', '/etc/pam.d/common-account'],
           'rhel_compatible': ['/etc/pam.d/system-auth', '/etc/pam.d/password-auth']}[lifecycle_platform] }}
@@ -63,6 +68,9 @@
 - name: Faillock stack | Take the state of the whole instance before the stack regressions
   ansible.builtin.include_tasks:
     file: lifecycle_broad.yml
+  vars:
+    lifecycle_items: "{{ stack_items }}"
+    lifecycle_rewritten: "{{ stack_rewritten }}"
 
 - name: Faillock stack | Remember the state of the whole instance before the stack regressions
   ansible.builtin.set_fact:
@@ -135,7 +143,27 @@
     - name: a service file that is a link to itself, which stat cannot follow, refuses both rules
       deny: ""
       source: fsd-regression-faillock
-      reason: /etc/pam.d/fsd-regression-faillock is a symbolic link that stat could not follow
+      reason: >-
+        /etc/pam.d/fsd-regression-faillock is a symbolic link that stat could not follow [(][^)]*[)]: Too many
+        levels of symbolic links
+      statuses:
+        - unreadable_stack
+        - unreadable_stack
+    - name: a service file that is a link to /proc/self/environ, a per-process file, refuses both rules
+      deny: ""
+      source: /proc/self/environ
+      reason: >-
+        /etc/pam.d/fsd-regression-faillock resolves to a path below /proc, /sys or /dev, which can read differently
+        in the process that calls libpam than in the collection's: /proc/[0-9]+/environ
+      statuses:
+        - unreadable_stack
+        - unreadable_stack
+    - name: a PAM directory that is a link to itself, which stat cannot inspect, refuses both rules
+      deny: ""
+      directory_loop: true
+      reason: >-
+        /usr/share/pam.d is a PAM directory that stat could not inspect [(][^)]*[)]: Too many levels of symbolic
+        links
       statuses:
         - unreadable_stack
         - unreadable_stack
@@ -174,6 +202,8 @@
     lifecycle_label: faillock stack regressions
     lifecycle_broad_step: the stack regressions
     lifecycle_broad_reference: "{{ stack_broad_before }}"
+    lifecycle_items: "{{ stack_items }}"
+    lifecycle_rewritten: "{{ stack_rewritten }}"
 
 - name: Faillock stack | Record that this regression file ran to its end
   ansible.builtin.set_fact:

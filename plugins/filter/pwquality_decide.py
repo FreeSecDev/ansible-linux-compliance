@@ -27,6 +27,12 @@ description:
   - A rule is C(compliant) or C(applied) only when the library, reading the files as they are or as
     they will be, takes the profile's value from the line or the drop-in that the rule writes, and
     no C(pam_pwquality) argument sets the setting to another value (FREES-200).
+  - The PAM files are read with the reader of the C(faillock) and C(pwhistory) families
+    (C(pam_reader)), as both line readers of libpam 1.5.1 and 1.5.3 assemble and split them. A PAM
+    file with a NUL byte or a line of 1023 bytes or more, a file whose lines that load
+    C(pam_pwquality) or include a file the two readers assemble differently, and an include,
+    substack or C(@include) of a path in any form that libpam accepts make the rule C(overridden)
+    (FREES-212).
   - For the main file method it also returns the new text of the main file, with the setting's line
     replaced in place or appended, and every other byte unchanged.
 author:
@@ -65,6 +71,9 @@ options:
         Any such entry makes the rule C(overridden) before anything else is decided, because
         libpam may open it and a C(pam_pwquality) argument there could override the file
         (FREES-213).
+      - So do a link or a PAM directory that resolves below C(/proc), C(/sys) or C(/dev), and
+        C(/etc/pam.conf) when libpam reads it instead of the PAM directories, with the C(detail)
+        of the entry in the reason (FREES-212).
     type: list
     elements: dict
     required: true

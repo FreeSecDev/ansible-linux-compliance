@@ -221,7 +221,7 @@ def test_an_enforcing_argument_that_is_not_0_leaves_the_other_rules(argument: st
 )
 def test_a_pam_include_of_a_path_with_a_slash_is_refused(line: str, target: str) -> None:
     pam = [("/etc/pam.d/common-password", line + "\n")]
-    assert pwquality.pam_unread_includes(pam) == [f"/etc/pam.d/common-password includes {target}"]
+    assert pwquality.read_pam(pam).includes == (f"/etc/pam.d/common-password includes {target}",)
     decision = pwquality.decide(rule(), [], "minlen = 14\n", pam)
     assert decision["status"] == "overridden"
     assert str(decision["reason"]).startswith(f"/etc/pam.d/common-password includes {target}")
@@ -232,7 +232,7 @@ def test_a_pam_include_of_a_path_with_a_slash_is_refused(line: str, target: str)
     ["@include common-password", "password include system-auth", "# @include ../x", "@include"],
 )
 def test_a_pam_include_of_a_name_in_the_pam_directory_is_read(line: str) -> None:
-    assert pwquality.pam_unread_includes([("/etc/pam.d/sshd", line + "\n")]) == []
+    assert pwquality.read_pam([("/etc/pam.d/sshd", line + "\n")]).includes == ()
 
 
 @pytest.mark.parametrize(
@@ -261,3 +261,142 @@ def test_an_argument_in_any_file_of_the_vendor_directory_refuses_the_rule(
     decision = pwquality.decide(rule(), [], "minlen = 14\n", pam)
     assert decision["status"] == "overridden"
     assert str(decision["reason"]).startswith(reason)
+
+
+PWQ = "password requisite pam_pwquality.so"
+SERVICE = "/etc/pam.d/common-password"
+
+
+@pytest.mark.parametrize(
+    ("text", "arguments"),
+    [
+        (f"# a comment that ends in a backslash \\\n{PWQ} minlen=1\n", ("minlen=1",)),
+        (f"{PWQ} \\\n  minlen=8 [enforce_for_root]\n", ("minlen=8", "enforce_for_root")),
+        ("PASSWORD [success=ok default=die]pam_pwquality.so minlen=1\n", ("minlen=1",)),
+        (f"-{PWQ} minlen=1\r\n", ("minlen=1\r",)),
+        ("auth required /usr/lib64/security/pam_pwquality.so minlen=1 # x\n", ("minlen=1",)),
+        (f"{PWQ} minlen=1 \\", ("minlen=1",)),
+        ("password requisite\npassword\nfoo requisite pam_pwquality.so minlen=1\n", ()),
+        (f"password requisite pam_unix.so minlen=1\n{PWQ}\n", ()),
+    ],
+)
+def test_pam_pwquality_arguments_are_read_as_libpam_assembles_and_splits_the_lines(
+    text: str, arguments: tuple[str, ...]
+) -> None:
+    reading = pwquality.read_pam([(SERVICE, text)])
+    assert reading == pwquality.PamReading(
+        tuple((SERVICE, argument) for argument in arguments), (), ()
+    )
+
+
+def test_a_live_line_after_a_comment_that_ends_with_a_backslash_overrides_the_file() -> None:
+    pam = [(SERVICE, f"# site \\\n{PWQ} minlen=1 enforcing=0\n")]
+    decision = pwquality.decide(rule(), [], "minlen = 14\n", pam)
+    assert decision["status"] == "overridden"
+    assert decision["reason"] == (f"pam_pwquality arguments override the file: {SERVICE}: minlen=1")
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "#" + "x" * 1022 + f"{PWQ} minlen=1\n",
+        "# " + "é" * 511 + "\n",
+        f"{PWQ} minlen=14\0 minlen=1\n",
+        "\0",
+    ],
+)
+def test_a_pam_file_that_libpam_does_not_read_as_one_line_refuses_the_rule(text: str) -> None:
+    pam = [(SERVICE, text), ("/etc/pam.d/login", f"{PWQ} minlen=1\n")]
+    reading = pwquality.read_pam(pam)
+    assert reading.problems == (
+        (
+            f"{SERVICE} has a NUL byte or a line of 1023 bytes or more, which libpam does not "
+            "read as one line"
+        ),
+    )
+    decision = pwquality.decide(rule(), [], "minlen = 14\n", pam)
+    assert (decision["status"], decision["text"]) == ("overridden", None)
+    assert str(decision["reason"]).startswith(f"{SERVICE} has a NUL byte")
+    assert str(decision["reason"]).endswith(
+        "so the collection cannot tell which pam_pwquality arguments libpam passes, and an "
+        "argument there could override the file"
+    )
+
+
+def test_a_line_of_1022_bytes_is_read_as_one_line() -> None:
+    text = "#" + "x" * 1021 + f"\n{PWQ} minlen=14\n"
+    assert pwquality.read_pam([(SERVICE, text)]).arguments == ((SERVICE, "minlen=14"),)
+    assert pwquality.decide(rule(), [], "minlen = 14\n", [(SERVICE, text)])["status"] == (
+        "compliant"
+    )
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        f"{PWQ} minlen=14 \\\n\n  minlen=1\n",
+        f"{PWQ} minlen=14 \\\n# site\n  enforcing=0\n",
+        "password include \\\n\n  common-auth\n",
+    ],
+)
+def test_lines_that_the_two_libpam_readers_assemble_differently_refuse_the_rule(text: str) -> None:
+    reading = pwquality.read_pam([(SERVICE, text)])
+    assert reading.problems == (
+        (
+            f"{SERVICE} has lines that load pam_pwquality or include a file, which the line "
+            "readers of libpam 1.5.1 and 1.5.3 assemble differently"
+        ),
+    )
+    assert reading.arguments == ()
+    decision = pwquality.decide(rule(), [], "minlen = 14\n", [(SERVICE, text)])
+    assert decision["status"] == "overridden"
+
+
+def test_lines_that_only_other_modules_assemble_differently_do_not_refuse() -> None:
+    text = f"password requisite pam_unix.so \\\n\n  sha512\n{PWQ} minlen=14\n"
+    assert pwquality.read_pam([(SERVICE, text)]) == pwquality.PamReading(
+        ((SERVICE, "minlen=14"),), (), ()
+    )
+
+
+@pytest.mark.parametrize(
+    ("text", "target"),
+    [
+        ("@INCLUDE /etc/site/password\n", "/etc/site/password"),
+        ("-@include /etc/site/password\n", "/etc/site/password"),
+        ("password include \\\n  ../security/password\n", "../security/password"),
+        ("password \\\n  include /etc/site/password\n", "/etc/site/password"),
+        ("@include \\\n  /etc/site/password\n", "/etc/site/password"),
+        ("PASSWORD SUBSTACK /etc/site/password\n", "/etc/site/password"),
+        ("-password include /etc/site/password\n", "/etc/site/password"),
+        ("# x \\\n@include /etc/site/password\n", "/etc/site/password"),
+    ],
+)
+def test_every_include_form_that_libpam_accepts_on_either_image_is_refused(
+    text: str, target: str
+) -> None:
+    assert pwquality.read_pam([(SERVICE, text)]).includes == (f"{SERVICE} includes {target}",)
+    decision = pwquality.decide(rule(), [], "minlen = 14\n", [(SERVICE, text)])
+    assert decision["status"] == "overridden"
+    assert decision["reason"] == (
+        f"{SERVICE} includes {target}, which the collection does not read, so a pam_pwquality "
+        "argument there could override the file"
+    )
+
+
+@pytest.mark.parametrize(
+    ("argument", "note"),
+    [
+        ("local_users_only", True),
+        ("LOCAL_USERS_ONLY", True),
+        ("local_users_only=0", True),
+        ("nolocal_users_only", False),
+    ],
+)
+def test_local_users_only_is_noted_from_a_pam_pwquality_argument(
+    argument: str, *, note: bool
+) -> None:
+    pam = [(SERVICE, f"{PWQ} minlen=14 {argument}\n")]
+    decision = pwquality.decide(rule(), [], "minlen = 14\n", pam)
+    assert decision["status"] == "compliant"
+    assert (decision["note"] is not None) is note

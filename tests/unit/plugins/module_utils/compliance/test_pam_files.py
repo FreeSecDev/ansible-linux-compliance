@@ -54,23 +54,44 @@ ENFORCE: dict[str, object] = {
     "stack_checked": False,
 }
 BROKEN = {"path": "/etc/pam.d/system-auth", "kind": "broken_link"}
+LOOP = "Too many levels of symbolic links"
+NOT_DIR = "Not a directory"
 FILE_STAT = {"exists": True, "isreg": True, "isdir": False}
 DIRECTORY_STAT = {"exists": True, "isreg": False, "isdir": True}
 FIFO_STAT = {"exists": True, "isreg": False, "isdir": False}
 NOTHING: dict[str, object] = {}
 NO_ENTRIES: list[object] = []
-WRONG_SHAPES: list[tuple[tuple[object, object, object, object], str]] = [
-    (("files", NOTHING, NOTHING, NOTHING), "the PAM directory entries must be a list"),
-    ((NO_ENTRIES, NO_ENTRIES, NOTHING, NOTHING), "the stats of the links must be a mapping"),
-    ((NO_ENTRIES, NOTHING, ["/etc/pam.d/x"], NOTHING), "the skipped paths must be a mapping"),
-    ((NO_ENTRIES, NOTHING, None, NOTHING), "the skipped paths must be a mapping"),
-    ((["entry"], NOTHING, NOTHING, NOTHING), "every PAM directory entry must be a mapping"),
+NOT_A_LINK: dict[str, object] = {"exists": True, "islnk": False}
+DIRECTORIES: dict[str, object] = {"/etc/pam.d": DIRECTORY_STAT}
+RESOLVED: dict[str, object] = {"/etc/pam.d": NOT_A_LINK}
+WRONG_SHAPES: list[tuple[tuple[object, object, object, object, object], str]] = [
+    (("files", NOTHING, NOTHING, NOTHING, NOTHING), "the PAM directory entries must be a list"),
     (
-        ([{"path": "x", "isreg": True}], NOTHING, NOTHING, NOTHING),
+        (NO_ENTRIES, NO_ENTRIES, NOTHING, NOTHING, NOTHING),
+        "the stats of the links must be a mapping",
+    ),
+    (
+        (NO_ENTRIES, NOTHING, ["/etc/pam.d/x"], NOTHING, NOTHING),
+        "the skipped paths must be a mapping",
+    ),
+    ((NO_ENTRIES, NOTHING, None, NOTHING, NOTHING), "the skipped paths must be a mapping"),
+    (
+        (["entry"], NOTHING, NOTHING, NOTHING, NOTHING),
+        "every PAM directory entry must be a mapping",
+    ),
+    (
+        ([{"path": "x", "isreg": True}], NOTHING, NOTHING, NOTHING, NOTHING),
         "needs an absolute path, got 'x'",
     ),
-    (([{"path": "/etc/pam.d/x"}], NOTHING, NOTHING, NOTHING), "needs a boolean isreg"),
-    (([{"path": "/etc/pam.d/x", 1: True}], NOTHING, NOTHING, NOTHING), "must be a mapping"),
+    (([{"path": "/etc/pam.d/x"}], NOTHING, NOTHING, NOTHING, NOTHING), "needs a boolean isreg"),
+    (
+        ([{"path": "/etc/pam.d/x", 1: True}], NOTHING, NOTHING, NOTHING, NOTHING),
+        "must be a mapping",
+    ),
+    (
+        (NO_ENTRIES, NOTHING, NOTHING, NOTHING, []),
+        "the resolutions of the PAM directories and links must be a mapping",
+    ),
 ]
 
 
@@ -93,16 +114,28 @@ def followed_stat(path: Path) -> dict[str, object]:
     """Return what the role passes for ``path`` from ``ansible.builtin.stat`` with ``follow: true``.
 
     The module returns ``exists: false`` on ``FileNotFoundError`` and fails on any other
-    ``OSError``; the task runs with ``failed_when: false`` and passes an empty mapping for a
-    result that has no ``stat``.
+    ``OSError`` with its ``strerror`` as ``msg``; the task runs with ``failed_when: false`` and
+    passes a mapping with only that ``msg`` for a result that has no ``stat``.
     """
     try:
         mode = path.stat().st_mode
     except FileNotFoundError:
         return {"exists": False}
-    except OSError:
-        return {}
+    except OSError as error:
+        return {"msg": error.strerror}
     return {"exists": True, "isreg": stat.S_ISREG(mode), "isdir": stat.S_ISDIR(mode)}
+
+
+def resolution(path: Path) -> dict[str, object]:
+    """Return what the role passes for ``path`` from ``ansible.builtin.stat``, ``follow: false``."""
+    mode = os.lstat(path).st_mode
+    if not stat.S_ISLNK(mode):
+        return NOT_A_LINK
+    return {"exists": True, "islnk": True, "lnk_source": os.path.realpath(path)}
+
+
+def link_to(target: str) -> dict[str, object]:
+    return {"exists": True, "islnk": True, "lnk_source": target}
 
 
 def test_a_directory_laid_out_as_authselect_does_is_sorted_as_libpam_opens_it(
@@ -128,19 +161,22 @@ def test_a_directory_laid_out_as_authselect_does_is_sorted_as_libpam_opens_it(
     os.mkfifo(tmp_path / "pipe")
     os.mkfifo(pam / "pipe")
     entries = [lstat_entry(path) for path in sorted(pam.iterdir())]
-    targets = {
-        str(path): followed_stat(path) for path in sorted(pam.iterdir()) if path.is_symlink()
+    links = [path for path in sorted(pam.iterdir()) if path.is_symlink()]
+    targets = {str(path): followed_stat(path) for path in links}
+    directories = {**DIRECTORIES, str(pam): followed_stat(pam)}
+    resolved = {**RESOLVED, str(pam): resolution(pam)} | {
+        str(path): resolution(path) for path in links
     }
-    sorted_entries = pam_files.sort_entries(entries, targets, [], {})
+    sorted_entries = pam_files.sort_entries(entries, targets, [], directories, resolved)
     assert sorted_entries == {
         "read": [str(pam / ".hidden"), str(pam / "passwd"), str(pam / "system-auth")],
         "unreadable": [
             {"path": str(pam / "broken"), "kind": "broken_link"},
-            {"path": str(pam / "cycle-a"), "kind": "unfollowed_link"},
-            {"path": str(pam / "cycle-b"), "kind": "unfollowed_link"},
+            {"path": str(pam / "cycle-a"), "kind": "unfollowed_link", "detail": LOOP},
+            {"path": str(pam / "cycle-b"), "kind": "unfollowed_link", "detail": LOOP},
             {"path": str(pam / "fifo"), "kind": "link"},
-            {"path": str(pam / "loop"), "kind": "unfollowed_link"},
-            {"path": str(pam / "not-a-directory"), "kind": "unfollowed_link"},
+            {"path": str(pam / "loop"), "kind": "unfollowed_link", "detail": LOOP},
+            {"path": str(pam / "not-a-directory"), "kind": "unfollowed_link", "detail": NOT_DIR},
             {"path": str(pam / "pipe"), "kind": "special"},
         ],
     }
@@ -150,33 +186,38 @@ def test_a_directory_laid_out_as_authselect_does_is_sorted_as_libpam_opens_it(
     )
     assert pam_files.describe(sorted_entries["unreadable"]) == [
         f"{pam}/broken is a symbolic link that resolves to nothing",
-        f"{pam}/cycle-a {unfollowed}",
-        f"{pam}/cycle-b {unfollowed}",
+        f"{pam}/cycle-a {unfollowed}: {LOOP}",
+        f"{pam}/cycle-b {unfollowed}: {LOOP}",
         f"{pam}/fifo {pam_files.KINDS['link']}",
-        f"{pam}/loop {unfollowed}",
-        f"{pam}/not-a-directory {unfollowed}",
+        f"{pam}/loop {unfollowed}: {LOOP}",
+        f"{pam}/not-a-directory {unfollowed}: {NOT_DIR}",
         f"{pam}/pipe is neither a regular file, a directory nor a symbolic link",
     ]
 
 
 def test_an_entry_that_find_skipped_is_unreadable_even_when_it_was_listed() -> None:
     entries = [entry("/etc/pam.d/login", isreg=True), entry("/etc/pam.d/sshd", isreg=True)]
-    result = pam_service_files.pam_service_files(entries, {}, {"/etc/pam.d/sshd": "EACCES"}, {})
+    result = pam_service_files.pam_service_files(
+        entries, {}, {"/etc/pam.d/sshd": "EACCES"}, DIRECTORIES, RESOLVED
+    )
     assert result == {
         "read": ["/etc/pam.d/login"],
         "unreadable": [{"path": "/etc/pam.d/sshd", "kind": "unlisted"}],
     }
-    assert pam_service_files.pam_service_files(entries, {}, {}, {}) == {
+    assert pam_service_files.pam_service_files(entries, {}, {}, DIRECTORIES, RESOLVED) == {
         "read": ["/etc/pam.d/login", "/etc/pam.d/sshd"],
         "unreadable": [],
     }
-    assert pam_service_files.pam_service_files([], {}, {"/etc/pam.d": "EACCES"}, {}) == {
+    skipped_directory = {"/etc/pam.d": "EACCES"}
+    assert pam_service_files.pam_service_files(
+        [], {}, skipped_directory, DIRECTORIES, RESOLVED
+    ) == {
         "read": [],
         "unreadable": [{"path": "/etc/pam.d", "kind": "unlisted"}],
     }
 
 
-@pytest.mark.parametrize("name", ["skipped", "directories"])
+@pytest.mark.parametrize("name", ["skipped", "directories", "resolved"])
 def test_the_skipped_paths_and_the_directory_stats_cannot_be_left_out(name: str) -> None:
     parameter = inspect.signature(pam_service_files.pam_service_files).parameters[name]
     assert parameter.default is inspect.Parameter.empty
@@ -193,7 +234,8 @@ def test_a_link_is_sorted_by_what_it_resolves_to() -> None:
         "/etc/pam.d/c": FIFO_STAT,
         "/etc/pam.d/d": {"exists": False},
     }
-    assert pam_service_files.pam_service_files(links, targets, {}, {}) == {
+    resolved = RESOLVED | {"/etc/pam.d/a": link_to("/etc/security/a")}
+    assert pam_service_files.pam_service_files(links, targets, {}, DIRECTORIES, resolved) == {
         "read": ["/etc/pam.d/a"],
         "unreadable": [
             {"path": "/etc/pam.d/c", "kind": "link"},
@@ -211,45 +253,76 @@ def test_a_link_whose_stat_failed_or_is_missing_is_unreadable_and_never_read() -
         {"link": "/etc/pam.d/failed", "failed": False, "msg": "Too many levels of symbolic links"},
         {"link": "/etc/pam.d/file", "failed": False, "stat": FILE_STAT},
     ]
-    targets = {str(result["link"]): result.get("stat", {}) for result in results}
-    assert pam_service_files.pam_service_files(links, targets, {}, {}) == {
+    targets = {
+        str(result["link"]): result["stat"] if "stat" in result else {"msg": result["msg"]}
+        for result in results
+    }
+    resolved = RESOLVED | {"/etc/pam.d/file": link_to("/etc/authselect/file")}
+    assert pam_service_files.pam_service_files(links, targets, {}, DIRECTORIES, resolved) == {
         "read": ["/etc/pam.d/file"],
         "unreadable": [
-            {"path": "/etc/pam.d/failed", "kind": "unfollowed_link"},
+            {"path": "/etc/pam.d/failed", "kind": "unfollowed_link", "detail": LOOP},
             {"path": "/etc/pam.d/missing", "kind": "unfollowed_link"},
         ],
     }
     skipped = pam_service_files.pam_service_files(
-        links, targets, {"/etc/pam.d/failed": "ELOOP"}, {}
+        links, targets, {"/etc/pam.d/failed": "ELOOP"}, DIRECTORIES, resolved
     )
     assert skipped["read"] == ["/etc/pam.d/file"]
     assert {"path": "/etc/pam.d/missing", "kind": "unfollowed_link"} in skipped["unreadable"]
 
 
-LINK_SHAPES: list[tuple[tuple[object, object, object, object], str]] = [
+LINK = [entry("/etc/pam.d/x", islnk=True)]
+LINK_SHAPES: list[tuple[tuple[object, object, object, object, object], str]] = [
     (
-        ([entry("/etc/pam.d/x", islnk=True)], {"/etc/pam.d/x": "stat"}, NOTHING, NOTHING),
+        (LINK, {"/etc/pam.d/x": "stat"}, NOTHING, DIRECTORIES, RESOLVED),
         "the stat of the link /etc/pam.d/x must be a mapping",
     ),
     (
-        (
-            [entry("/etc/pam.d/x", islnk=True)],
-            {"/etc/pam.d/x": {"exists": "yes"}},
-            NOTHING,
-            NOTHING,
-        ),
+        (LINK, {"/etc/pam.d/x": {"exists": "yes"}}, NOTHING, DIRECTORIES, RESOLVED),
         "needs a boolean exists",
     ),
-    ((NO_ENTRIES, NOTHING, {"pam.d/x": "EACCES"}, NOTHING), "a skipped PAM path must be absolute"),
-    ((NO_ENTRIES, NOTHING, NOTHING, []), "the stats of the PAM directories must be a mapping"),
     (
-        (NO_ENTRIES, NOTHING, NOTHING, {"/etc/pam.d": "stat"}),
+        (NO_ENTRIES, NOTHING, {"pam.d/x": "EACCES"}, NOTHING, NOTHING),
+        "a skipped PAM path must be absolute",
+    ),
+    (
+        (NO_ENTRIES, NOTHING, NOTHING, [], NOTHING),
+        "the stats of the PAM directories must be a mapping",
+    ),
+    (
+        (NO_ENTRIES, NOTHING, NOTHING, {"/etc/pam.d": "stat"}, NOTHING),
         "the stat of the PAM directory /etc/pam.d must be a mapping",
     ),
-    ((NO_ENTRIES, NOTHING, NOTHING, {"pam.d": {}}), "every PAM directory needs an absolute path"),
     (
-        (NO_ENTRIES, NOTHING, NOTHING, {"/etc/pam.d": {"exists": "yes"}}),
+        (NO_ENTRIES, NOTHING, NOTHING, {"pam.d": {}}, NOTHING),
+        "every PAM directory needs an absolute path",
+    ),
+    (
+        (NO_ENTRIES, NOTHING, NOTHING, {"/etc/pam.d": {"exists": "yes"}}, NOTHING),
         "needs a boolean exists",
+    ),
+    (
+        (NO_ENTRIES, NOTHING, NOTHING, DIRECTORIES, {"/etc/pam.d": "stat"}),
+        "the resolution of /etc/pam.d must be a mapping",
+    ),
+    (
+        (NO_ENTRIES, NOTHING, NOTHING, DIRECTORIES, {"/etc/pam.d": {"exists": True}}),
+        "the resolution of /etc/pam.d needs a boolean islnk",
+    ),
+    (
+        (
+            NO_ENTRIES,
+            NOTHING,
+            NOTHING,
+            DIRECTORIES,
+            {"/etc/pam.d": {"exists": True, "islnk": True}},
+        ),
+        "needs the absolute lnk_source of a symbolic link, got None",
+    ),
+    (
+        (LINK, {"/etc/pam.d/x": FILE_STAT}, NOTHING, DIRECTORIES, RESOLVED | {"/etc/pam.d/x": 1}),
+        "the resolution of /etc/pam.d/x must be a mapping",
     ),
 ]
 
@@ -263,12 +336,15 @@ def test_a_pam_directory_that_stat_could_not_inspect_is_unreadable(tmp_path: Pat
     real = tmp_path / "real.d"
     real.mkdir()
     (real / "login").write_text("")
-    directories = {str(path): followed_stat(path) for path in (loop, missing, plain, real)}
-    assert directories[str(loop)] == {}
+    directories = DIRECTORIES | {
+        str(path): followed_stat(path) for path in (loop, missing, plain, real)
+    }
+    assert directories[str(loop)] == {"msg": LOOP}
     entries = [lstat_entry(real / "login")]
-    assert pam_service_files.pam_service_files(entries, {}, {}, directories) == {
+    resolved = RESOLVED | {str(real): resolution(real)}
+    assert pam_service_files.pam_service_files(entries, {}, {}, directories, resolved) == {
         "read": [str(real / "login")],
-        "unreadable": [{"path": str(loop), "kind": "uninspected_directory"}],
+        "unreadable": [{"path": str(loop), "kind": "uninspected_directory", "detail": LOOP}],
     }
     assert pam_files.describe([{"path": str(loop), "kind": "uninspected_directory"}]) == [
         (
@@ -279,7 +355,9 @@ def test_a_pam_directory_that_stat_could_not_inspect_is_unreadable(tmp_path: Pat
 
 
 def test_a_pam_directory_that_stat_could_not_inspect_refuses_every_family() -> None:
-    entries = pam_service_files.pam_service_files([], {}, {}, {"/etc/pam.d": {}})["unreadable"]
+    directories = {"/etc/pam.d": {}, "/usr/lib/pam.d": DIRECTORY_STAT}
+    resolved = {"/usr/lib/pam.d": NOT_A_LINK}
+    entries = pam_service_files.pam_service_files([], {}, {}, directories, resolved)["unreadable"]
     pam: list[object] = [
         {"path": "/usr/lib/pam.d/login", "content": "password requisite pam_pwquality.so\n"},
         *entries,
@@ -298,7 +376,7 @@ def test_a_pam_directory_that_stat_could_not_inspect_refuses_every_family() -> N
 
 @pytest.mark.parametrize(("arguments", "message"), WRONG_SHAPES + LINK_SHAPES)
 def test_input_of_the_wrong_shape_is_refused(
-    arguments: tuple[object, object, object, object], message: str
+    arguments: tuple[object, object, object, object, object], message: str
 ) -> None:
     with pytest.raises(pam_files.PamEntryError, match=message):
         pam_service_files.pam_service_files(*arguments)
@@ -311,6 +389,7 @@ def test_input_of_the_wrong_shape_is_refused(
         (["broken"], "every unreadable PAM entry must be a mapping"),
         ([{"kind": "broken_link"}], "needs an absolute path"),
         ([{"path": "/etc/pam.d/x", "kind": "fifo"}], "needs a kind of"),
+        ([{"path": "/etc/pam.d/x", "kind": "link", "detail": 1}], "needs a text detail, got 1"),
     ],
 )
 def test_an_unreadable_entry_of_the_wrong_shape_is_refused(
@@ -405,3 +484,149 @@ def test_an_unreadable_pam_entry_refuses_a_faillock_or_pwhistory_rule_whatever_t
             f"(/etc/pam.d/system-auth {pam_files.KINDS[str(unreadable['kind'])]}), so it cannot "
             f"tell whether a {module} line overrides the file; nothing is written"
         )
+
+
+def test_a_link_that_resolves_below_proc_sys_or_dev_is_unreadable_and_never_read() -> None:
+    names = ("environ", "kernel", "shm", "dev", "site")
+    links = [entry(f"/etc/pam.d/{name}", islnk=True) for name in names]
+    targets = {f"/etc/pam.d/{name}": FILE_STAT for name in names}
+    sources = {
+        "environ": "/proc/4242/environ",
+        "kernel": "/sys/kernel/x",
+        "shm": "/dev/disk/by-label/password",
+        "dev": "/dev",
+        "site": "/etc/security/site",
+    }
+    resolved = RESOLVED | {f"/etc/pam.d/{name}": link_to(sources[name]) for name in names}
+    result = pam_service_files.pam_service_files(links, targets, {}, DIRECTORIES, resolved)
+    assert result == {
+        "read": ["/etc/pam.d/site"],
+        "unreadable": [
+            {"path": f"/etc/pam.d/{name}", "kind": "virtual_file", "detail": sources[name]}
+            for name in ("dev", "environ", "kernel", "shm")
+        ],
+    }
+    assert pam_files.describe(result["unreadable"])[1] == (
+        "/etc/pam.d/environ resolves to a path below /proc, /sys or /dev, which can read "
+        "differently in the process that calls libpam than in the collection's: /proc/4242/environ"
+    )
+    assert not pam_files.is_virtual("/procfs/x")
+    assert not pam_files.is_virtual("/device")
+
+
+def test_a_link_whose_resolution_is_missing_or_failed_is_never_read() -> None:
+    names = ("unresolved", "failed", "gone")
+    links = [entry(f"/etc/pam.d/{name}", islnk=True) for name in names]
+    targets = {f"/etc/pam.d/{name}": FILE_STAT for name in names}
+    resolved = RESOLVED | {
+        "/etc/pam.d/failed": {"msg": "Permission denied"},
+        "/etc/pam.d/gone": {},
+    }
+    assert pam_service_files.pam_service_files(links, targets, {}, DIRECTORIES, resolved) == {
+        "read": [],
+        "unreadable": [
+            {"path": "/etc/pam.d/failed", "kind": "unfollowed_link", "detail": "Permission denied"},
+            {
+                "path": "/etc/pam.d/gone",
+                "kind": "unfollowed_link",
+                "detail": "it could not be resolved",
+            },
+            {
+                "path": "/etc/pam.d/unresolved",
+                "kind": "unfollowed_link",
+                "detail": "it was not resolved",
+            },
+        ],
+    }
+
+
+def test_a_regular_file_that_resolution_finds_is_no_longer_a_link_is_read() -> None:
+    links = [entry("/etc/pam.d/swapped", islnk=True)]
+    targets = {"/etc/pam.d/swapped": FILE_STAT}
+    resolved = RESOLVED | {"/etc/pam.d/swapped": NOT_A_LINK}
+    assert pam_service_files.pam_service_files(links, targets, {}, DIRECTORIES, resolved) == {
+        "read": ["/etc/pam.d/swapped"],
+        "unreadable": [],
+    }
+
+
+def test_a_pam_directory_that_resolves_below_proc_is_unreadable_and_nothing_in_it_is_read() -> None:
+    entries = [
+        entry("/usr/share/pam.d/environ", isreg=True),
+        entry("/etc/pam.d/login", isreg=True),
+    ]
+    directories = DIRECTORIES | {"/usr/share/pam.d": DIRECTORY_STAT, "/usr/lib/pam.d": {}}
+    resolved = RESOLVED | {"/usr/share/pam.d": link_to("/proc/self")}
+    assert pam_service_files.pam_service_files(entries, {}, {}, directories, resolved) == {
+        "read": ["/etc/pam.d/login"],
+        "unreadable": [
+            {"path": "/usr/lib/pam.d", "kind": "uninspected_directory"},
+            {"path": "/usr/share/pam.d", "kind": "virtual_file", "detail": "/proc/self"},
+        ],
+    }
+    unresolved = pam_service_files.pam_service_files(
+        entries, {}, {}, directories | {"/usr/lib/pam.d": DIRECTORY_STAT}, RESOLVED
+    )
+    assert unresolved["unreadable"] == [
+        {
+            "path": "/usr/lib/pam.d",
+            "kind": "uninspected_directory",
+            "detail": "it was not resolved",
+        },
+        {
+            "path": "/usr/share/pam.d",
+            "kind": "uninspected_directory",
+            "detail": "it was not resolved",
+        },
+    ]
+    assert unresolved["read"] == ["/etc/pam.d/login"]
+
+
+@pytest.mark.parametrize(
+    ("directories", "fallback"),
+    [
+        ({}, True),
+        ({"/etc/pam.d": {"exists": False}, "/usr/lib/pam.d": {"exists": False}}, True),
+        ({"/etc/pam.d": FILE_STAT, "/usr/lib/pam.d": {"exists": False}}, True),
+        ({"/etc/pam.d": {"msg": LOOP}, "/usr/lib/pam.d": {"exists": False}}, True),
+        ({"/usr/share/pam.d": DIRECTORY_STAT, "/etc/pam.d": {"exists": False}}, True),
+        ({"/etc/pam.d": DIRECTORY_STAT}, False),
+        ({"/etc/pam.d": {"exists": False}, "/usr/lib/pam.d": DIRECTORY_STAT}, False),
+    ],
+)
+def test_etc_pam_conf_is_unreadable_when_libpam_would_read_it_instead_of_the_directories(
+    directories: dict[str, object], *, fallback: bool
+) -> None:
+    resolved = dict.fromkeys(directories, NOT_A_LINK)
+    unreadable = pam_service_files.pam_service_files([], {}, {}, directories, resolved)[
+        "unreadable"
+    ]
+    entry_of_pam_conf = {"path": "/etc/pam.conf", "kind": "pam_conf_fallback"}
+    assert (entry_of_pam_conf in unreadable) is fallback
+
+
+@pytest.mark.parametrize(
+    "unreadable",
+    [
+        {"path": "/etc/pam.conf", "kind": "pam_conf_fallback"},
+        {"path": "/etc/pam.d/environ", "kind": "virtual_file", "detail": "/proc/4242/environ"},
+        {"path": "/etc/pam.d/loop", "kind": "unfollowed_link", "detail": LOOP},
+    ],
+)
+def test_the_pam_conf_fallback_and_a_virtual_file_refuse_every_family_with_the_detail(
+    unreadable: dict[str, object],
+) -> None:
+    described = pam_files.describe([unreadable])[0]
+    assert str(unreadable.get("detail", "")) in described
+    pam: list[object] = [
+        {"path": "/etc/pam.d/login", "content": "password requisite pam_pwquality.so\n"},
+        unreadable,
+    ]
+    pwq = pwquality_decide.pwquality_decide(MINLEN, [], "minlen = 14\n", pam)
+    assert (pwq["status"], pwq["text"]) == ("overridden", None)
+    assert str(pwq["reason"]).startswith(described + ", which libpam may open")
+    stack = {"/etc/pam.d/login": "auth required pam_unix.so\n"}
+    for rule in (DENY, REMEMBER, ENFORCE):
+        decision = pam_conf.pam_conf_decision("", rule, stack, [unreadable])
+        assert (decision["status"], decision["new_text"]) == ("unreadable_stack", None)
+        assert f"({described})" in str(decision["reason"])

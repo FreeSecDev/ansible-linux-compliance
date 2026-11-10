@@ -141,21 +141,58 @@
   tags:
     - always
 
+- name: Password quality | Resolve every PAM directory and every PAM entry that is a symbolic link, without following it
+  ansible.builtin.stat:
+    path: "{{ __linux_compliance_remediate_pwq_link }}"
+    follow: false
+    get_checksum: false
+    get_mime: false
+    get_attributes: false
+  loop: >-
+    {{ (__linux_compliance_remediate_pwq_pam_directories.results | default([]) | selectattr('stat', 'defined')
+        | selectattr('stat.isdir', 'defined') | selectattr('stat.isdir')
+        | map(attribute='__linux_compliance_remediate_pwq_path') | list)
+       + (__linux_compliance_remediate_pwq_pam_found.files | default([]) | selectattr('islnk')
+          | map(attribute='path') | sort | list) }}
+  loop_control:
+    loop_var: __linux_compliance_remediate_pwq_link
+  register: __linux_compliance_remediate_pwq_pam_resolved
+  failed_when: false
+  tags:
+    - always
+
 - name: Password quality | Sort the PAM entries into the files to read and those that the collection cannot read
+  vars:
+    __linux_compliance_remediate_pwq_link_stats: >-
+      {%- set found = {} -%}
+      {%- for result in __linux_compliance_remediate_pwq_pam_links.results | default([]) -%}
+      {%- set _ = found.update({result.__linux_compliance_remediate_pwq_link:
+            result.stat if result.stat is defined else {'msg': result.msg | default('')}}) -%}
+      {%- endfor -%}
+      {{ found }}
+    __linux_compliance_remediate_pwq_directory_stats: >-
+      {%- set found = {} -%}
+      {%- for result in __linux_compliance_remediate_pwq_pam_directories.results | default([])
+            | selectattr('skipped', 'undefined') -%}
+      {%- set _ = found.update({result.__linux_compliance_remediate_pwq_path:
+            result.stat if result.stat is defined else {'msg': result.msg | default('')}}) -%}
+      {%- endfor -%}
+      {{ found }}
+    __linux_compliance_remediate_pwq_resolutions: >-
+      {%- set found = {} -%}
+      {%- for result in __linux_compliance_remediate_pwq_pam_resolved.results | default([]) -%}
+      {%- set _ = found.update({result.__linux_compliance_remediate_pwq_link:
+            result.stat if result.stat is defined else {'msg': result.msg | default('')}}) -%}
+      {%- endfor -%}
+      {{ found }}
   ansible.builtin.set_fact:
     __linux_compliance_remediate_pwq_pam_entries: >-
       {{ __linux_compliance_remediate_pwq_pam_found.files | default([])
          | freesecdev.linux_compliance.pam_service_files(
-             dict(__linux_compliance_remediate_pwq_pam_links.results | default([])
-                  | map(attribute='__linux_compliance_remediate_pwq_link')
-                  | zip(__linux_compliance_remediate_pwq_pam_links.results | default([])
-                        | map(attribute='stat', default={}))),
+             __linux_compliance_remediate_pwq_link_stats,
              __linux_compliance_remediate_pwq_pam_found.skipped_paths | default({}),
-             dict(__linux_compliance_remediate_pwq_pam_directories.results | default([])
-                  | selectattr('skipped', 'undefined')
-                  | map(attribute='__linux_compliance_remediate_pwq_path')
-                  | zip(__linux_compliance_remediate_pwq_pam_directories.results | default([])
-                        | selectattr('skipped', 'undefined') | map(attribute='stat', default={})))) }}
+             __linux_compliance_remediate_pwq_directory_stats,
+             __linux_compliance_remediate_pwq_resolutions) }}
   tags:
     - always
 
@@ -166,6 +203,7 @@
   loop_control:
     loop_var: __linux_compliance_remediate_pwq_source
   register: __linux_compliance_remediate_pwq_pam_read
+  no_log: true
   tags:
     - always
 

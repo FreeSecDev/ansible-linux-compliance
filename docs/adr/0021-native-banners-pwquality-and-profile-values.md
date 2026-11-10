@@ -460,3 +460,103 @@ to the lower file), and a read of a directory returns `EISDIR` in both.
   instead (observed on both Molecule images). The role does not read that file, so a `pam_pwquality` argument there is
   missed on such a host and the rule is not refused. Both images ship `/usr/lib/pam.d/systemd-user`, so the case
   needs a host whose PAM directories are all gone.
+
+## Amendment of 2026-11-10: PAM text read as libpam reads it, links below /proc, and /etc/pam.conf (FREES-212)
+
+**Context.** Since FREES-200 the family parsed PAM text itself (`pam_arguments`, `pam_enforcing_off` and
+`pam_unread_includes` in `plugins/module_utils/compliance/pwquality.py`), while the `faillock` and `pwhistory`
+families read it with the reader of `plugins/filter/pam_conf.py`, which is checked against libpam's own line assembly
+([ADR 0027](0027-native-faillock-pwhistory.md)). The own parser differed from libpam, fail-open, in these ways, each
+reproduced with the real libpam of both Molecule images (linux-pam 1.5.1-28.el9 on Rocky Linux 9, 1.5.3-5ubuntu5.7 on
+Ubuntu 24.04) during the review of FREES-213 and again by the probe below:
+
+- It joined a line that ends with a backslash with the next one before it checked for `#`, so a live
+  `pam_pwquality minlen=1 enforcing=0` line after `# comment \` was skipped; libpam ends a whole-line comment there
+  and runs the line (both images).
+- It read a comment line of 1023 bytes or more as one comment; the fixed-buffer reader of Ubuntu's libpam reads 1023
+  bytes, skips them as a comment and runs the rest of the line (Ubuntu).
+- It ignored NUL bytes, and found `@include` and `<type> include|substack` only on one physical line and only in lower
+  case: libpam also takes `@INCLUDE` and `-@include` (Ubuntu, whose libpam compares `@include` with `strcasecmp`
+  after it drops one leading `-`) and an include whose control or target is on a continued line (both).
+- A PAM entry that links to `/proc/self/environ` was read in the module's process; libpam reads the environment of
+  the process that calls it, which can hold a `pam_pwquality` line (both).
+- When none of the PAM directories is a directory, libpam reads `/etc/pam.conf` instead, which the role did not read.
+  `_pam_init_handlers` of `libpam/pam_handlers.c` tests `stat(path) == 0 && S_ISDIR` on `/etc/pam.d`,
+  `/usr/lib/pam.d` and, only where libpam is built with a vendor directory (Rocky Linux 9), `/usr/share/pam.d`;
+  `stat` follows links, so a linked directory counts and a looping one does not. Neither image is built with
+  `--enable-read-both-confs`: with the directories present, a service without a file falls back to `other`, never
+  to `/etc/pam.conf` (observed on both images with `pam_echo`).
+
+The amendment of FREES-213 listed the continued include and the `/etc/pam.conf` fallback as its open points.
+
+**Decision.**
+
+- The line assembly, the token split, the module and include lines and `effective_stack` move unchanged from the
+  filter `pam_conf.py` to `plugins/module_utils/compliance/pam_reader.py`; `pam_conf_decision` imports them and
+  behaves byte for byte as before (its tests and the existing rows of the verdict table pass unchanged).
+- `pwquality.read_pam` reads every PAM file the role passes with `pam_reader`, in both assembly variants, and returns
+  the arguments of every line whose module path names `pam_pwquality` (any type), the includes of a target with a
+  `/` and the problems. Every rule is `overridden` with the reason, before anything else is decided, when a file has a
+  NUL byte or a line of 1023 bytes or more (`pam_reader.unassembled`, the test that `effective_stack` already makes),
+  when the lines of a file that load `pam_pwquality` or include a file differ between the two variants (a continued
+  line with a blank or comment line inside it: the collection cannot tell which reader the host's libpam has), or
+  when an `include`, `substack` or `@include` of any form that libpam accepts on either image names a path with a
+  `/`. `overridden` is the status that an include the collection does not read already gave, so no status is added.
+  The `pam_pwquality` arguments, `enforcing=0` and `local_users_only` come from the same lines.
+- `@include` is read as an include on both platforms, in any case and with a leading `-`. Ubuntu's libpam takes it;
+  Rocky Linux's refuses the line as an illegal type and installs it as a handler that fails in the `auth` stack.
+  Reading it as an include on Rocky Linux too can only add a refusal.
+- The fallback to `/etc/pam.conf` is refused, not read, for all three PAM families: reading it properly needs its own
+  format (the service name first on every line, `other` lines, includes resolved from it), which is not small. The
+  filter `pam_service_files` returns `/etc/pam.conf` as the unreadable kind `pam_conf_fallback` whenever neither
+  `/etc/pam.d` nor `/usr/lib/pam.d` is a directory by its followed `stat`. That holds whenever either libpam reads the
+  file; on Rocky Linux with only `/usr/share/pam.d` left it refuses although libpam reads the vendor directory, which
+  is an over-refusal on a host that has lost both of its PAM directories.
+- A link in a PAM directory that resolves to a regular file, and a PAM directory itself, is resolved with
+  `ansible.builtin.stat` and `follow: false`, whose `lnk_source` is the path `os.path.realpath` gives; one that
+  resolves below `/proc`, `/sys` or `/dev` is the unreadable kind `virtual_file`, with that path in the reason, and
+  nothing below such a directory is read. The resolution is the fifth argument of `pam_service_files`, required, and a
+  link or a directory missing from it, or whose `stat` failed, is unreadable too. A parent of a PAM directory that is
+  a link (`/usr` itself, for example) is not resolved.
+- The `msg` of a `stat` that failed on a link or a PAM directory is passed to the filter and named in the reason
+  (`unfollowed_link` and `uninspected_directory`, for example `Too many levels of symbolic links`), and the docstring
+  of `unreadable_refusal` names every kind.
+- The slurp of the PAM files runs with `no_log`, as the faillock and pwhistory families do, because a link can point
+  anywhere.
+- Evidence: `make pam-reader-verdicts` now also installs 29 layouts of PAM files (`LIBPAM_CASES` of
+  `tools/pam/reader_corpus.py`) in throwaway containers of both images, with `pam_pwquality.so` replaced by a module
+  that records the arguments that libpam passes to it (`tools/pam/oracle/fake_pwquality.c`), runs `pam_chauthtok` of
+  the real libpam (`tools/pam/oracle/probe_libpam.c`) and records the calls under `libpam_cases` of
+  `tests/fixtures/pam_conf/reader_verdicts.json` (schema 3). The generator ran without AppArmor changes. What libpam
+  passed (U Ubuntu, R Rocky Linux):
+
+  | Case | libpam passes `minlen=1`/`enforcing=0` | Decision |
+  |---|---|---|
+  | live line after `# comment \` | U, R | `overridden` by the arguments |
+  | comment line of 1023 bytes, then the line | U only (R: nothing) | `overridden`, long line |
+  | comment line of 1022 bytes, then `minlen=14` | neither | `compliant` |
+  | NUL after `minlen=14` on the line | neither (both cut the line at the NUL) | `overridden`, NUL |
+  | `@INCLUDE`, `-@include`, `@include \` + target | U only (R: illegal line) | `overridden`, include |
+  | `password include \` + `../security/x`, `password \` + `include x`, `PASSWORD SUBSTACK x`, `-password include x` | U, R | `overridden`, include |
+  | continued line with a blank or comment line inside | U only | `overridden`, assembled differently |
+  | continued line at the end of the file | neither (`pam_start` fails with `PAM_ABORT` on both) | `overridden` by the arguments |
+  | `[minlen=1]`, `[default=die]pam_pwquality.so`, `PASSWORD`, `-password`, `minlen=1\r` | U, R | `overridden` by the arguments |
+  | link to `/proc/self/environ` with a `pam_pwquality` line in the environment | U, R | `overridden`, below `/proc` |
+  | no PAM directory, the line in `/etc/pam.conf`; `/etc/pam.d` a regular file | U, R | `overridden`, `/etc/pam.conf` |
+  | only `/usr/share/pam.d` left | U (`/etc/pam.conf`), R reads the vendor file | `overridden`, `/etc/pam.conf` |
+  | directories present, the line in `/etc/pam.conf` | neither | `compliant` |
+
+  `tests/unit/tools/test_pam_libpam_verdicts.py` rebuilds, for every case and image, what the role passes to
+  `pwquality_decide` and requires the decision above, that no decision is `compliant` or `applied` while libpam
+  passes a looser argument on either image, that every argument libpam passes is one the family reads whenever it
+  reads the files, and that `pam_reader` assembles the service file as libpam does wherever the family relies on it.
+- The regression group `readers` adds, on both platforms: a live `pam_pwquality.so minlen=8 enforcing=0` line after a
+  comment line that ends with a backslash (both rules `overridden` by the arguments); `password include \` with
+  `../security/freesecdev-readers-included` on the next line (both rules `overridden`, the include named); a comment
+  line of exactly 1023 bytes followed by that line (both rules `overridden`, the long line named; fail-open on Ubuntu
+  only, refused on both); and a service file that links to `/proc/self/environ` (both rules `overridden`, the
+  resolved path named). The cases of FREES-213 with a link to itself and a looping vendor directory now also check
+  the `stat` message in the reason.
+
+**The open points of the FREES-213 amendment are closed:** an include whose target or control is on a continued
+line is read as libpam reads it and refused, and the `/etc/pam.conf` fallback is refused.
