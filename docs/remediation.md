@@ -798,6 +798,27 @@ The role publishes `linux_compliance_remediated`:
 | `orphaned` | Ledger entries for rules that the catalogue no longer contains; nothing is done to them |
 | `notices` | Operator messages |
 
+### Ledger versions and the deviation register
+
+The state ledger has two schema versions ([ADR 0011, FREES-203
+amendment](adr/0011-control-toggles-and-cleanup.md#amendment-2026-11-10-ledger-version-2-and-the-deviation-register-frees-203)).
+Version 1 is written while no entry records a value and the deviation register is empty, so an existing ledger
+keeps its bytes and older collection versions can still read it. Version 2 adds:
+
+- an optional `value` record per entry (`value_id`, `value_source` `profile` or `override`, `profile_value`,
+  `target`). `control_state` returns `value_source` for every entry; an entry without a record reads as `profile`;
+- the deviation register, `deviations`: the rules whose value in force is looser than the profile's, each with
+  `value_id`, `profile_value`, `effective_value`, `recorded_at` and `collection_version`. A deviation is recorded
+  whether or not the rule wrote anything, so a looser value that the host already had is remembered without a revert
+  entry. `control_state` `record_deviation` and `remove_deviation` maintain it and `list` returns it.
+
+The role does not record values or deviations yet: that starts with `linux_compliance_remediate_value_overrides`
+([ADR 0032](adr/0032-operator-control-community-modules-and-value-overrides.md)). Until then every ledger stays version 1.
+A collection version from before FREES-203 refuses a version 2 ledger as `corrupt`, because its reader does not know
+the `deviations` key, and changes nothing. The file is not damaged: do not delete it, since it holds the revert record
+of every applied rule. Going back to such a version needs a ledger without value records and deviations, or a backup
+from before.
+
 ### A lost ledger cannot be detected
 
 `control_state` `list` returns the same empty list for a ledger that never existed and for one that was deleted, and
