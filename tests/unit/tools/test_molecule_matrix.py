@@ -10,6 +10,7 @@ from typing import cast
 import pytest
 import yaml
 
+from tests.unit import yaml_cache
 from tools.roles import check_lifecycle_topics, generate_toggles
 from tools.roles import molecule_matrix as matrix
 
@@ -50,7 +51,7 @@ def make_root(
     catalogue.parent.mkdir(parents=True)
     data = cast(
         "dict[str, object]",
-        yaml.safe_load((REPOSITORY_ROOT / generate_toggles.CATALOGUE).read_text(encoding="utf-8")),
+        yaml_cache.load(REPOSITORY_ROOT / generate_toggles.CATALOGUE),
     )
     if not native:
         rules = cast("list[dict[str, object]]", data[generate_toggles.RULES_KEY])
@@ -185,7 +186,8 @@ def test_the_docker_matrix_holds_every_topic_with_a_docker_cycle(tmp_path: Path)
     root = make_root(tmp_path)
     topics = native_topics(root)
     running = check_lifecycle_topics.cycle_platforms(root)
-    cycles = [leg for leg in matrix.legs(root) if leg["mode"] in matrix.MODES]
+    docker = matrix.legs(root)
+    cycles = [leg for leg in docker if leg["mode"] in matrix.MODES]
     assert cycles == [
         {
             "platform": platform,
@@ -198,7 +200,7 @@ def test_the_docker_matrix_holds_every_topic_with_a_docker_cycle(tmp_path: Path)
         if platform in running[topic]["docker"]
         for mode in matrix.MODES
     ]
-    assert all(leg["topic"] for leg in matrix.legs(root))
+    assert all(leg["topic"] for leg in docker)
 
 
 def test_regression_groups_get_docker_legs_only(tmp_path: Path) -> None:

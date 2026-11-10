@@ -11,6 +11,7 @@ from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compli
     toggles,
     xmlsafe,
 )
+from tests.unit import yaml_cache
 from tests.unit.tools.test_content_golden import CONTENT_DIRECTORY, REQUIRE_CONTENT
 from tests.unit.tools.test_profile_values import (
     PINNED_TIMEOUT_RULE,
@@ -86,7 +87,7 @@ def pinned_benchmarks() -> list[tuple[str, str, str]]:
 def native_parameters() -> dict[str, dict[str, object]]:
     data = cast(
         "dict[str, object]",
-        yaml.safe_load((REPOSITORY_ROOT / generate_toggles.CATALOGUE).read_text(encoding="utf-8")),
+        yaml_cache.load(REPOSITORY_ROOT / generate_toggles.CATALOGUE),
     )
     rules = cast("list[dict[str, object]]", data[generate_toggles.RULES_KEY])
     return {str(rule["rule_id"]): cast("dict[str, object]", rule["parameters"]) for rule in rules}
