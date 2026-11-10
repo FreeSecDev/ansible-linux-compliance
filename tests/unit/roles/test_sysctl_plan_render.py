@@ -329,9 +329,10 @@ def scenario_vars(scenario: Scenario, by_key: dict[str, Rule]) -> dict[str, obje
 
 def on_disk(host: Host, changes: dict[str, str | None]) -> dict[str, str]:
     """Return the regular files of ``host`` and their text after ``changes`` (``None``: gone)."""
+    merged: dict[str, object] = {**host.texts, **changes}
     return {
-        path: text
-        for path, text in {**host.texts, **changes}.items()
+        path: str(text)
+        for path, text in merged.items()
         if text is not None
         and cast("dict[str, object]", host.entries.get(path, {})).get("readable", True)
     }
@@ -653,8 +654,8 @@ SCENARIOS = [
 ]
 
 
-def render(tmp: Path) -> dict[str, dict[str, object]]:
-    """Run every scenario and return the plan and cleanup plan of each, by scenario name."""
+def scenario_plays() -> list[dict[str, object]]:
+    """Return one play per scenario: the role's tasks and a task that shows the plans."""
     by_key = rules_by_key()
     tasks = role_tasks()
     show: dict[str, object] = {
@@ -667,7 +668,7 @@ def render(tmp: Path) -> dict[str, dict[str, object]]:
             )
         },
     }
-    plays = [
+    return [
         {
             "name": scenario.name,
             "hosts": f"scenario{number}",
@@ -678,15 +679,12 @@ def render(tmp: Path) -> dict[str, dict[str, object]]:
         }
         for number, scenario in enumerate(SCENARIOS)
     ]
-    playbooks: list[tuple[Path, list[str]]] = []
-    for real in (False, True):
-        chosen = [
-            play for play, scenario in zip(plays, SCENARIOS, strict=True) if scenario.real is real
-        ]
-        if chosen:
-            playbook = tmp / ("real.yml" if real else "check.yml")
-            playbook.write_text("---\n" + yaml.safe_dump(chosen, sort_keys=False), encoding="utf-8")
-            playbooks.append((playbook, [] if real else ["--check"]))
+
+
+def render(tmp: Path) -> dict[str, dict[str, object]]:
+    """Run every scenario and return the plan and cleanup plan of each, by scenario name."""
+    plays = scenario_plays()
+    playbooks = write_playbooks(tmp, plays)
     inventory = tmp / "inventory.ini"
     inventory.write_text(
         "[all]\n"
@@ -698,7 +696,22 @@ def render(tmp: Path) -> dict[str, dict[str, object]]:
         encoding="utf-8",
     )
     tree = tmp / "tree"
-    environment = {
+    environment = playbook_environment(tmp, tree)
+    for playbook, mode in playbooks:
+        completed = run_playbook(
+            [str(PLAYBOOK), "-i", str(inventory), *mode, str(playbook)], environment
+        )
+        assert completed.returncode == 0, completed.stdout[-4000:] + completed.stderr[-4000:]
+    results: dict[str, dict[str, object]] = {}
+    for number, scenario in enumerate(SCENARIOS):
+        found = cast("dict[str, object]", json.loads((tree / f"scenario{number}").read_text()))
+        results[scenario.name] = cast("dict[str, object]", found["msg"])
+    return results
+
+
+def playbook_environment(tmp: Path, tree: Path) -> dict[str, str]:
+    """Return the ``ansible-playbook`` environment, the tree callback in ``tree``."""
+    return {
         "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
         "HOME": str(tmp),
         "LC_ALL": "C.UTF-8",
@@ -710,16 +723,23 @@ def render(tmp: Path) -> dict[str, dict[str, object]]:
         "ANSIBLE_LOCALHOST_WARNING": "false",
         "ANSIBLE_NOCOLOR": "true",
     }
-    for playbook, mode in playbooks:
-        completed = run_playbook(
-            [str(PLAYBOOK), "-i", str(inventory), *mode, str(playbook)], environment
-        )
-        assert completed.returncode == 0, completed.stdout[-4000:] + completed.stderr[-4000:]
-    results: dict[str, dict[str, object]] = {}
-    for number, scenario in enumerate(SCENARIOS):
-        found = cast("dict[str, object]", json.loads((tree / f"scenario{number}").read_text()))
-        results[scenario.name] = cast("dict[str, object]", found["msg"])
-    return results
+
+
+def write_playbooks(tmp: Path, plays: list[dict[str, object]]) -> list[tuple[Path, list[str]]]:
+    """Write the check-mode plays and the real-mode plays to playbooks of their own.
+
+    Returns each playbook with the options of its run: ``--check`` for the check-mode plays.
+    """
+    playbooks: list[tuple[Path, list[str]]] = []
+    for real in (False, True):
+        chosen = [
+            play for play, scenario in zip(plays, SCENARIOS, strict=True) if scenario.real is real
+        ]
+        if chosen:
+            playbook = tmp / ("real.yml" if real else "check.yml")
+            playbook.write_text("---\n" + yaml.safe_dump(chosen, sort_keys=False), encoding="utf-8")
+            playbooks.append((playbook, [] if real else ["--check"]))
+    return playbooks
 
 
 def run_playbook(
