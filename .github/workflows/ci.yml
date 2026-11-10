@@ -14,7 +14,9 @@ on:
 permissions: {}
 
 concurrency:
-  group: ci-${{ github.event.pull_request.number || github.ref }}
+  group: >-
+    ci-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number)
+    || format('run-{0}', github.run_id) }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -120,8 +122,27 @@ jobs:
         with:
           version: 0.13.1
           enable-cache: false
-      - name: Run test-remediate-check
-        run: make test-remediate-check
+      - name: Run test-remediate-check-role
+        run: make test-remediate-check-role
+
+  test-playbooks-native:
+    name: test-playbooks-native
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884  # v10.3.0
+        with:
+          version: 0.13.1
+          enable-cache: false
+      - name: Run test-remediate-check-native
+        run: make test-remediate-check-native
 
   test-playbooks-evidence:
     name: test-playbooks-evidence
@@ -539,9 +560,13 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
           HEAD_SHA: ${{ github.event.merge_group.head_sha }}
           BASE_REF: ${{ github.event.merge_group.base_ref }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           if [[ "$EVENT_NAME" == merge_group ]]; then
             BASE_SHA="$(git merge-base HEAD "refs/remotes/origin/${BASE_REF#refs/heads/}" 2>/dev/null)" || BASE_SHA=""
+          elif [[ "$EVENT_NAME" == pull_request && "$PR_HEAD_SHA" =~ ^[0-9a-f]{40}$ ]] \
+            && [[ "$(git rev-parse --verify --quiet 'HEAD^2^{commit}')" == "$PR_HEAD_SHA" ]]; then
+            BASE_SHA="$(git rev-parse --verify 'HEAD^1^{commit}')"
           fi
           docker="$RUNNER_TEMP/docker.json"
           libvirt="$RUNNER_TEMP/libvirt.json"
@@ -718,6 +743,7 @@ jobs:
       - test
       - test-suites
       - test-playbooks-remediate
+      - test-playbooks-native
       - test-playbooks-evidence
       - oscap-integration
       - scc-changes

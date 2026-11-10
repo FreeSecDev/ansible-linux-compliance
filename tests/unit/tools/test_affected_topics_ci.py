@@ -8,7 +8,9 @@ matrices and that keeps every leg without a topic; anything else, any other even
 revision without the planner run the full matrices. ``ci-gate`` accepts a skipped
 ``molecule-lifecycle`` only for a pull request or a merge group whose plan has the scope
 ``affected`` and exactly zero lifecycle legs, and accepts the scope ``affected`` only for those
-events.
+events. For a pull request the base revision is the first parent of the merge commit that GitHub
+checks out when its second parent is the pull request's head, because the event's base SHA can
+lag behind the merge commit's base (FREES-214); otherwise it is the event's base SHA.
 
 The tests run the script and the step scripts of ``ci.yml`` with bash, git and jq in a scratch
 Git repository, with a fake ``make`` that records what it was asked to run.
@@ -286,7 +288,9 @@ def fake_base_planner(output: str, status: int = 0) -> str:
     return f"#!/usr/bin/env bash\ncat <<'PLAN'\n{output}\nPLAN\nexit {status}\n"
 
 
-def run_step(scratch: Scratch, event: str, base: str, head: str = "") -> dict[str, str]:
+def run_step(
+    scratch: Scratch, event: str, base: str, head: str = "", pr_head: str = ""
+) -> dict[str, str]:
     runner = scratch.home / "runner"
     runner.mkdir(exist_ok=True)
     write_matrices(runner)
@@ -299,6 +303,7 @@ def run_step(scratch: Scratch, event: str, base: str, head: str = "") -> dict[st
             "BASE_SHA": base,
             "HEAD_SHA": head,
             "BASE_REF": "refs/heads/main" if event == "merge_group" else "",
+            "PR_HEAD_SHA": pr_head,
             "RUNNER_TEMP": str(runner),
             "GITHUB_OUTPUT": str(output),
         },
@@ -350,6 +355,35 @@ def test_the_queue_decides_with_the_planner_and_diff_of_the_target_branch(scratc
     assert_full(run_step(scratch, "merge_group", earlier, head))
     scratch.git("update-ref", "refs/remotes/origin/main", earlier)
     found = run_step(scratch, "merge_group", main, head)
+    assert found["scope"] == "affected"
+
+
+def merge_pull_request(scratch: Scratch, stale: str, main: str) -> tuple[str, str]:
+    scratch.git("checkout", "--quiet", "-b", "topic", stale)
+    scratch.write("topic.txt", "topic\n")
+    topic = scratch.commit("the pull request")
+    scratch.git("checkout", "--quiet", "--detach", main)
+    scratch.git("-c", "commit.gpgsign=false", "merge", "--quiet", "--no-ff", "-m", "merge", topic)
+    return topic, scratch.git("rev-parse", "HEAD")
+
+
+def test_a_pull_request_decides_against_the_base_of_the_merge_commit(scratch: Scratch) -> None:
+    stale = commit_base_planner(scratch, full_plan())
+    main = commit_base_planner(scratch, affected_plan([SUDO_TOPIC], [UBUNTU_BASE, SELFTEST]))
+    topic, merge = merge_pull_request(scratch, stale, main)
+    assert scratch.git("rev-parse", "HEAD^1") == main
+    found = run_step(scratch, "pull_request", stale, pr_head=topic)
+    assert found["scope"] == "affected"
+    assert json.loads(found["matrix"]) == {"include": [SUDO_TOPIC]}
+    for pr_head in ("", merge, main, stale, "not-a-sha", topic.upper()):
+        assert_full(run_step(scratch, "pull_request", stale, pr_head=pr_head))
+    assert_full(run_step(scratch, "push", stale, pr_head=topic))
+
+
+def test_a_pull_request_head_that_is_no_merge_keeps_the_event_s_base(scratch: Scratch) -> None:
+    base = commit_base_planner(scratch, affected_plan([SUDO_TOPIC], [UBUNTU_BASE, SELFTEST]))
+    head = scratch.commit("head")
+    found = run_step(scratch, "pull_request", base, pr_head=head)
     assert found["scope"] == "affected"
 
 

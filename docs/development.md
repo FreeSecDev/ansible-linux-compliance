@@ -100,7 +100,9 @@ overriding them.
 | `collection-tree` | implemented | Copies the collection files into `build/collection/ansible_collections/freesecdev/linux_compliance` |
 | `collection-link` | implemented | Links `plugins/` and `roles/` into `build/collections` for pytest, the type checkers, ansible-lint and `test-remediate-check` |
 | `ansible-home` | implemented | Creates `ANSIBLE_HOME` and `ANSIBLE_TEST_HOME` ([per-checkout Ansible home](#per-checkout-ansible-home)); a prerequisite of `collection-link` and `collection-tree` |
-| `test-remediate-check` | implemented | Runs `tests/playbooks/remediate-check-mode.yml` against localhost with `--check --diff` and again with `--skip-tags file_permissions`, then `tests/playbooks/remediate-skip-always.yml` with `--skip-tags always`, all without `become`; the toggle plays also run the audit role's toggle resolution ([remediation guide](remediation.md#testing)). Runs `test-remediate-disruptive` first |
+| `test-remediate-check` | implemented | Runs `test-remediate-check-role` and `test-remediate-check-native`, which CI runs in two jobs alongside each other (FREES-214) |
+| `test-remediate-check-role` | implemented | Runs `test-remediate-disruptive` first, then `tests/playbooks/remediate-check-mode.yml` against localhost with `--check --diff` and again with `--skip-tags file_permissions`, then `tests/playbooks/remediate-skip-always.yml` with `--skip-tags always`, all without `become`; the toggle plays also run the audit role's toggle resolution ([remediation guide](remediation.md#testing)) |
+| `test-remediate-check-native` | implemented | Runs `tests/playbooks/remediate-native-check.yml`, `remediate-login-defs-check.yml` and `remediate-pam-conf-check.yml` against localhost with `--check --diff`, without `become`: the check-mode plays of the native topics ([remediation guide](remediation.md#testing)) |
 | `test-remediate-disruptive` | implemented | Copies the collection into `build/test-remediate-disruptive`, promotes the `ssh` rule `sshd_disable_root_login` to a native rule there with `tools/roles/promote_native_rule.py`, and runs `tests/playbooks/remediate-disruptive.yml` against the copy in check mode: the rule is skipped as `disruptive_not_allowed` without the allow-list and planned for apply, failing closed, with it (FREES-153) |
 | `docs` | implemented | markdownlint-cli2 and the relative link checker |
 | `clean` | implemented | Removes caches, coverage output and `build/`, including the per-checkout Ansible home |
@@ -409,7 +411,8 @@ Configuration relaxations, each with its reason:
 | `typecheck` | `make typecheck` |
 | `test` | `make test-coverage` (on the four workers of the hosted runner) |
 | `test-suites` | `make test-audit-exceptions`, `make test-content-golden`, `make test-browser`, alongside `test` |
-| `test-playbooks-remediate` | `make test-remediate-check` (with `test-remediate-disruptive`) |
+| `test-playbooks-remediate` | `make test-remediate-check-role` (with `test-remediate-disruptive`): the role plays of `make test-remediate-check` |
+| `test-playbooks-native` | `make test-remediate-check-native`: the native topic plays of `make test-remediate-check`, alongside `test-playbooks-remediate` |
 | `test-playbooks-evidence` | `make test-evidence`, `make test-role-guards`, `make test-verify` |
 | `name-sets` | matrix over the pinned Python releases 3.9.25, 3.10.21, 3.11.16, 3.12.14, 3.13.15 and 3.14.6: `uv python install`, then `make test-name-sets` |
 | `security` | `make security` |
@@ -423,9 +426,16 @@ Configuration relaxations, each with its reason:
 | `ci-gate` | none; fails unless every needed job succeeded |
 
 `ci-gate` needs every job above, runs with `if: always()` and is the only check that branch protection should require. It accepts a skipped `scc-smoke` only for a `pull_request` or `merge_group` whose `scc-changes` output is exactly `scc=false` or exactly `expiry=expired`, and it compares the event name and the outputs exactly, not as substrings; on `push` to `main` and the daily `schedule` the smoke test always runs. A skip for `expiry=expired` is named in the warning annotation "SCC not built or run": once the pinned SCC is past its hard stop and no newer pin exists, pull requests and merge groups keep flowing, SCC is neither built nor run, and `main` stays red until the pin is bumped ([ADR 0019](adr/0019-scc-scanner-backend-and-ci-image.md#amendment-2026-10-30-release-watch-and-expiry-fallback-frees-176)). It accepts the `molecule-plan` scope `affected` only for a `pull_request` or `merge_group`, and a skipped `molecule-lifecycle` only when that plan has exactly zero lifecycle legs ([ADR 0011](adr/0011-control-toggles-and-cleanup.md#amendment-2026-10-30-only-the-affected-lifecycle-legs-on-pull-requests-frees-189)). Job names
-are stable, so the required check name `ci-gate` does not change. Runs for pull requests cancel superseded
-runs; runs on `main` and merge groups are never cancelled. `docs` is part of `make ci` locally and is
-added as a job together with the documentation pipeline (FREES-80).
+are stable, so the required check name `ci-gate` does not change. A run for a pull request is in the concurrency group
+`ci-pr-<number>` with `cancel-in-progress`, so a new push to the pull request cancels the superseded run; its `ci-gate`
+still runs and reports the old head as failed. Every other run (`merge_group`, `push`, `schedule`, `workflow_dispatch`)
+has a group of its own, `ci-run-<run id>`, so it is never cancelled and never waits for another run. Until FREES-214
+they shared `ci-<ref>`, and GitHub runs one run per group at a time and keeps one pending run, which it cancels when a
+newer one queues. On 2026-11-10 the push run 42830405093 waited eight minutes for the previous push run on `main`, the
+scheduled run 42825660883 waited half an hour behind a push and was cancelled without running a job when the next push
+queued, and the merge group run 42728448939 waited for an earlier run of the same queue branch
+([Molecule](molecule.md#load-of-a-run-and-the-merge-queue)). `docs` is part of `make ci` locally and is added as a job
+together with the documentation pipeline (FREES-80).
 
 `.github/workflows/scc-release-watch.yml` runs the job `scc-release-watch` daily at 05:43 UTC and on manual dispatch,
 on `main` only: `make scc-release-watch SCC_RELEASE_WATCH_ISSUES=true` with `GH_TOKEN` set to the job token. It is the
