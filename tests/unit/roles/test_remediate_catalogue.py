@@ -387,6 +387,29 @@ def test_native_kernel_parameter_rules_write_one_drop_in_each_with_a_value_the_c
     assert len(paths) == len(set(paths))
 
 
+def test_a_refusing_companion_is_planned_before_the_rule_that_it_can_refuse() -> None:
+    role_vars = load(ROLE / "vars" / "main.yml")
+    companions = cast(
+        "dict[str, dict[str, object]]",
+        role_vars["__linux_compliance_remediate_sysctl_refusing_companions"],
+    )
+    assert companions
+    by_key = {
+        str(cast("dict[str, object]", rule["parameters"])["key"]): rule
+        for rule in native()
+        if rule["family"] in {"sysctl", "ipv4_parameters", "ipv6_parameters"}
+    }
+    for key, blocker in companions.items():
+        rule = by_key[key]
+        companion = by_key[str(blocker["key"])]
+        assert companion["family"] == rule["family"], key
+        assert str(companion["rule_id"]) < str(rule["rule_id"]), key
+        refused = cast("list[int]", blocker["refused"])
+        assert all(isinstance(value, int) for value in refused), key
+        written = str(cast("dict[str, object]", companion["parameters"])["value"])
+        assert int(written) not in refused, key
+
+
 def test_the_task_files_are_only_family_files_and_their_helpers() -> None:
     families = {str(family["name"]) for family in registry()}
     umbrellas = {str(family["umbrella"]) for family in registry() if "umbrella" in family}

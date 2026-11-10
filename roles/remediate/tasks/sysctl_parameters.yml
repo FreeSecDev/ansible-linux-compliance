@@ -724,24 +724,29 @@
       {%- set planned_readers = planned_entries | freesecdev.linux_compliance.sysctl_effective(key) -%}
       {%- set current_readers = boot_entries | freesecdev.linux_compliance.sysctl_effective(key) -%}
       {%- set blocker = __linux_compliance_remediate_sysctl_refusing_companions[key] | default(none) -%}
-      {%- if blocker is not none and __linux_compliance_remediate_family.apply
-            | selectattr('parameters.key', 'equalto', blocker.key) | list | length == 0 -%}
-      {%- for entries_of, planned in [[planned_entries, true], [boot_entries, false]] -%}
-      {%- set companion = entries_of | freesecdev.linux_compliance.sysctl_effective(blocker.key) -%}
-      {%- for reader in ['systemd', 'procps'] -%}
-      {%- set setting = companion[reader] -%}
-      {%- if setting.value is not none
-            and (setting.value | freesecdev.linux_compliance.sysctl_integer) not in [none] + blocker.refused -%}
-      {%- elif setting.value is not none and planned -%}
+      {%- if blocker is not none -%}
+      {%- set companion_rule = __linux_compliance_remediate_family.apply
+            | selectattr('parameters.key', 'equalto', blocker.key) | first | default(none) -%}
+      {%- set companion_input = none if companion_rule is none else {
+            'plan': plan[companion_rule.rule_id] | default(none),
+            'path': companion_rule.parameters.path,
+            'content': __linux_compliance_remediate_sc_contents[companion_rule.rule_id]} -%}
+      {%- set companion = planned_entries
+            | freesecdev.linux_compliance.sysctl_companion(boot_entries, key, blocker, companion_input) -%}
+      {%- if companion.undecided -%}
+      {%- set ns.later = ns.later + ['the rule of ' ~ blocker.key ~ ' is decided after the rule of ' ~ key
+            ~ ', so the collection cannot tell whether the kernel would refuse ' ~ key] -%}
+      {%- endif -%}
+      {%- for reader in ['systemd', 'procps'] if companion.planned[reader] is not none -%}
       {%- set ns.later = ns.later + [__linux_compliance_remediate_sysctl_readers[reader] ~ ' would set ' ~ blocker.key
-            ~ ' to ' ~ setting.value ~ ' from ' ~ setting.source ~ ', and the kernel refuses ' ~ key ~ ' while '
-            ~ blocker.key ~ ' is ' ~ blocker.refused | join(' or ')
+            ~ ' to ' ~ companion.planned[reader].value ~ ' from ' ~ companion.planned[reader].source
+            ~ (' before it sets ' ~ key if reader == 'procps' else '')
+            ~ ', and the kernel refuses ' ~ key ~ ' while ' ~ blocker.key ~ ' is ' ~ blocker.refused | join(' or ')
             ~ ' (a value that the collection does not read as the kernel does counts as one of them)'] -%}
-      {%- elif setting.value is not none -%}
+      {%- endfor -%}
+      {%- if companion.current.values() | reject('none') | list | length > 0 -%}
       {%- set ns.now_ok = false -%}
       {%- endif -%}
-      {%- endfor -%}
-      {%- endfor -%}
       {%- endif -%}
       {%- for reader in ['systemd', 'procps'] -%}
       {%- for setting, planned in [[planned_readers[reader], true], [current_readers[reader], false]] -%}

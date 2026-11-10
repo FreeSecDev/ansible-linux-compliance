@@ -29,10 +29,12 @@ minor_changes:
     ``freesecdev.linux_compliance.sysctl_integer``), and the port range ``net.ipv4.ip_local_port_range`` only as
     exactly its two fields in that form (datatype ``int_vector``, new filter
     ``freesecdev.linux_compliance.sysctl_vector``); ``kernel.perf_event_max_sample_rate`` is ``overridden`` while a
-    reader sets ``kernel.perf_cpu_time_max_percent`` to 0 or 100; ufw's ``/etc/ufw/sysctl.conf`` counts only when
-    ufw is enabled (``ENABLED`` ``yes`` or ``YES``, read from ``/etc/default/ufw`` and then ``/etc/ufw/ufw.conf``,
-    both of which must be non-empty regular files holding only comments and plain assignments of ufw's own
-    variables).
+    reader sets ``kernel.perf_cpu_time_max_percent`` to 0 or 100 (for ``sysctl --system`` any such value before its
+    write of the sample rate), counting that parameter's own drop-in only when its rule is ``applied`` or
+    ``compliant`` in the same run (new filter ``freesecdev.linux_compliance.sysctl_companion``); ufw's
+    ``/etc/ufw/sysctl.conf`` counts only when ufw is enabled (``ENABLED`` ``yes`` or ``YES``, read from
+    ``/etc/default/ufw`` and then ``/etc/ufw/ufw.conf``, both of which must be non-empty regular files holding only
+    comments and plain assignments of ufw's own variables).
   - >-
     remediate - with the running values on, a rule of ``net.ipv4.conf.all`` or ``net.ipv6.conf.all`` whose value the
     kernel combines with each interface's is always applied and then, after the running values are set, reported

@@ -805,3 +805,223 @@ def test_a_vector_counts_only_as_fields_that_the_kernel_reads_as_written(
     found = sysctl_config.kernel_vector(value, 2)
     assert found == vector
     assert (found == PORT_RANGE) is (vector == PORT_RANGE)
+
+
+SAMPLE_RATE = "kernel.perf_event_max_sample_rate"
+CPU_TIME = "kernel.perf_cpu_time_max_percent"
+BLOCKER: dict[str, object] = {"key": CPU_TIME, "refused": [0, 100]}
+SAMPLE_DROP_IN = "/etc/sysctl.d/999-freesecdev-sysctl-kernel-perf-event-max-sample-rate.conf"
+CPU_DROP_IN = "/etc/sysctl.d/999-freesecdev-sysctl-kernel-perf-cpu-time-max-percent.conf"
+
+
+def perf_entries(files: dict[str, str]) -> list[dict[str, object]]:
+    """Return the sample rate's drop-in and ``files``, as the planned entries of the rule."""
+    entries: list[dict[str, object]] = [
+        {"path": path, "kind": "file", "text": text} for path, text in files.items()
+    ]
+    entries.append({"path": SAMPLE_DROP_IN, "kind": "file", "text": f"{SAMPLE_RATE} = 1\n"})
+    return entries
+
+
+def refusals(files: dict[str, str]) -> dict[str, dict[str, str] | None]:
+    """Return the refusing settings of the companion for ``files`` and the drop-in."""
+    return sysctl_config.companion_refusals(perf_entries(files), SAMPLE_RATE, CPU_TIME, [0, 100])
+
+
+@pytest.mark.parametrize("value", ["0", "100", "0x0", "00", "+1", "0100"])
+def test_a_companion_at_a_refused_value_refuses_the_key_for_both_readers(value: str) -> None:
+    found = refusals({"/etc/sysctl.d/50-perf.conf": f"{CPU_TIME} = {value}\n"})
+    setting = {"value": value, "source": "/etc/sysctl.d/50-perf.conf"}
+    assert found == {"systemd": setting, "procps": setting}
+
+
+@pytest.mark.parametrize("files", [{}, {"/etc/sysctl.d/50-perf.conf": f"{CPU_TIME} = 1\n"}])
+def test_a_companion_at_another_value_or_unset_refuses_nothing(files: dict[str, str]) -> None:
+    assert refusals(files) == {"systemd": None, "procps": None}
+
+
+def test_procps_is_refused_by_an_earlier_zero_that_a_later_file_sets_back() -> None:
+    found = refusals(
+        {
+            "/etc/sysctl.d/10-a.conf": f"{CPU_TIME} = 0\n",
+            "/etc/sysctl.d/9999-z.conf": f"{CPU_TIME} = 25\n",
+        }
+    )
+    assert found == {
+        "systemd": None,
+        "procps": {"value": "0", "source": "/etc/sysctl.d/10-a.conf"},
+    }
+
+
+def test_procps_is_not_refused_by_a_zero_after_its_last_write_of_the_key() -> None:
+    found = refusals({"/etc/sysctl.conf": f"{CPU_TIME} = 0\n"})
+    assert found == {"systemd": None, "procps": None}
+
+
+def test_a_later_write_of_the_key_after_a_zero_is_refused_for_procps() -> None:
+    found = refusals(
+        {
+            "/etc/sysctl.d/10-a.conf": f"{SAMPLE_RATE} = 1\n",
+            "/etc/sysctl.d/20-b.conf": f"{CPU_TIME} = 100\n",
+            "/etc/sysctl.d/30-c.conf": f"{CPU_TIME} = 25\n",
+        }
+    )
+    assert found == {
+        "systemd": None,
+        "procps": {"value": "100", "source": "/etc/sysctl.d/20-b.conf"},
+    }
+
+
+def test_a_glob_that_sets_the_companion_counts() -> None:
+    found = refusals({"/etc/sysctl.d/50-perf.conf": "kernel.perf_cpu_time_max_*= 0\n"})
+    setting = {"value": "0", "source": "/etc/sysctl.d/50-perf.conf"}
+    assert found == {"systemd": setting, "procps": setting}
+
+
+def test_procps_is_not_refused_when_it_never_writes_the_key() -> None:
+    entries: list[dict[str, object]] = [
+        {"path": "/etc/sysctl.d/50-perf.conf", "kind": "file", "text": f"{CPU_TIME} = 0\n"}
+    ]
+    assert sysctl_config.companion_refusals(entries, SAMPLE_RATE, CPU_TIME, [0, 100]) == {
+        "systemd": {"value": "0", "source": "/etc/sysctl.d/50-perf.conf"},
+        "procps": None,
+    }
+
+
+def test_ufw_s_file_counts_after_the_boot_files() -> None:
+    entries: list[dict[str, object]] = [
+        *perf_entries({}),
+        {"path": UFW, "kind": "file", "text": f"{CPU_TIME} = 0\n{SAMPLE_RATE} = 2\n"},
+        {"path": sysctl_config.UFW_CONF, "kind": "file", "text": "ENABLED=yes\n"},
+        {"path": sysctl_config.UFW_DEFAULT, "kind": "file", "text": PLAIN_DEFAULT},
+    ]
+    setting = {"value": "0", "source": UFW}
+    assert sysctl_config.companion_refusals(entries, SAMPLE_RATE, CPU_TIME, [0, 100]) == {
+        "systemd": setting,
+        "procps": setting,
+    }
+
+
+def companion_rule(status: str | None, *, write: bool = True) -> dict[str, object]:
+    """Return the companion's selected rule with a plan of ``status``, or no plan for None."""
+    plan: dict[str, object] | None = (
+        None if status is None else {"status": status, "write": write, "edits": []}
+    )
+    return {"plan": plan, "path": CPU_DROP_IN, "content": f"{CPU_TIME} = 1\n"}
+
+
+CONFLICT = {"/etc/sysctl.d/50-perf.conf": f"{CPU_TIME} = 0\n"}
+LATER_100 = {"/etc/sysctl.d/999-freesecdev-sysctl-kernel-perf-d.conf": f"{CPU_TIME} = 100\n"}
+
+
+@pytest.mark.parametrize(
+    "status",
+    [
+        "conflicting_setting",
+        "overridden",
+        "not_owned",
+        "duplicate_setting",
+        "unparsed_configuration",
+        "runtime_unavailable",
+        "method_changed",
+        "prior_unrestorable",
+        "prior_too_large",
+        "not_regular_file",
+        "notapplicable",
+    ],
+)
+@pytest.mark.parametrize("files", [CONFLICT, LATER_100])
+def test_a_selected_companion_that_writes_nothing_is_judged_as_the_files_leave_it(
+    status: str, files: dict[str, str]
+) -> None:
+    found = sysctl_config.companion_check(
+        perf_entries(files), [], SAMPLE_RATE, BLOCKER, companion_rule(status, write=False)
+    )
+    planned = cast("dict[str, object]", found["planned"])
+    assert found["undecided"] is False
+    assert planned["systemd"] is not None
+    assert planned["procps"] is not None
+
+
+@pytest.mark.parametrize("status", ["applied", "compliant"])
+def test_an_applied_companion_counts_with_its_drop_in(status: str) -> None:
+    found = sysctl_config.companion_check(
+        perf_entries({}), [], SAMPLE_RATE, BLOCKER, companion_rule(status)
+    )
+    assert found == {
+        "undecided": False,
+        "planned": {"systemd": None, "procps": None},
+        "current": {"systemd": None, "procps": None},
+    }
+
+
+def test_an_applied_companion_is_still_judged_on_the_planned_entries() -> None:
+    found = sysctl_config.companion_check(
+        perf_entries(LATER_100), [], SAMPLE_RATE, BLOCKER, companion_rule("applied")
+    )
+    planned = cast("dict[str, object]", found["planned"])
+    assert planned["systemd"] == {
+        "value": "100",
+        "source": "/etc/sysctl.d/999-freesecdev-sysctl-kernel-perf-d.conf",
+    }
+
+
+def test_an_applied_companion_s_vendor_edit_counts() -> None:
+    vendor = "/etc/sysctl.d/10-kernel-hardening.conf"
+    rule = companion_rule("applied", write=False)
+    rule["plan"] = {
+        "status": "applied",
+        "write": False,
+        "edits": [{"path": vendor, "original": f"{CPU_TIME}=0", "written": f"{CPU_TIME}=1"}],
+    }
+    entries = perf_entries({vendor: f"# vendor\n{CPU_TIME}=0\n"})
+    assert sysctl_config.companion_check(entries, [], SAMPLE_RATE, BLOCKER, rule)["planned"] == {
+        "systemd": None,
+        "procps": None,
+    }
+    assert sysctl_config.companion_check(entries, [], SAMPLE_RATE, BLOCKER)["planned"] == {
+        "systemd": {"value": "0", "source": vendor},
+        "procps": {"value": "0", "source": vendor},
+    }
+
+
+def test_an_applied_companion_replaces_its_old_drop_in() -> None:
+    entries = perf_entries({CPU_DROP_IN: f"# Managed by freesecdev\n{CPU_TIME} = 100\n"})
+    found = sysctl_config.companion_check(
+        entries, [], SAMPLE_RATE, BLOCKER, companion_rule("applied")
+    )
+    assert found["planned"] == {"systemd": None, "procps": None}
+
+
+@pytest.mark.parametrize("files", [{}, CONFLICT])
+def test_an_unselected_companion_is_judged_as_the_files_leave_it(files: dict[str, str]) -> None:
+    found = sysctl_config.companion_check(
+        perf_entries(files), perf_entries(files), SAMPLE_RATE, BLOCKER
+    )
+    expected = {"value": "0", "source": "/etc/sysctl.d/50-perf.conf"} if files else None
+    assert found == {
+        "undecided": False,
+        "planned": {"systemd": expected, "procps": expected},
+        "current": {"systemd": expected, "procps": expected},
+    }
+
+
+def test_a_selected_companion_without_a_plan_entry_is_undecided() -> None:
+    found = sysctl_config.companion_check(
+        perf_entries({}), [], SAMPLE_RATE, BLOCKER, companion_rule(None)
+    )
+    assert found["undecided"] is True
+
+
+@pytest.mark.parametrize(
+    "blocker",
+    [
+        {"key": CPU_TIME},
+        {"refused": [0, 100]},
+        {"key": CPU_TIME, "refused": "0"},
+        {"key": CPU_TIME, "refused": [0, "100"]},
+    ],
+)
+def test_a_malformed_blocker_is_refused(blocker: dict[str, object]) -> None:
+    with pytest.raises(sysctl_config.ConfigError):
+        sysctl_config.companion_check([], [], SAMPLE_RATE, blocker)

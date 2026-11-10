@@ -274,6 +274,24 @@ value before the run keeps the rule from being `compliant` without a write
 (`__linux_compliance_remediate_sysctl_refusing_companions`). When the companion's rule is applied too, its drop-in sets
 1, which sorts before the sample rate's drop-in.
 
+**Amendment (sixth review).** The sixth review found that the companion check of the fifth review was skipped
+whenever the companion's rule was selected, even when that rule wrote nothing: with `/etc/sysctl.d/50-perf.conf`
+setting `kernel.perf_cpu_time_max_percent = 0`, the companion's rule is `conflicting_setting` and the sample rate's
+rule was `applied`, while both readers write the 0 first and the kernel keeps the sample rate at 100000. The decision
+is now made by the model (`sysctl_config.companion_check`, through the filter
+`freesecdev.linux_compliance.sysctl_companion`), which the unit tests cover:
+
+- The companion's rule counts only when its plan entry, decided earlier in the same loop (the plan sorts rules by
+  identifier, and `..._perf_cpu_time_max_percent` sorts before `..._perf_event_max_sample_rate`, which a unit test
+  of the catalogue keeps true), has the status `applied` or `compliant`; then its drop-in, when it writes one, and its
+  vendor edits are added to the planned entries, and the companion is still judged on them. With any other status
+  the companion is judged as the files leave it, as if its rule were not selected. A selected rule without a plan
+  entry is refused as `overridden`.
+- `systemd-sysctl` is judged on the companion's last value. `sysctl --system` makes every assignment in turn, so any
+  assignment of the companion to 0 or 100 (or to a value the collection does not read as the kernel does) before its
+  last assignment of the sample rate refuses that write, even when a later file sets the companion back; one after
+  it does not. ufw's file counts after the boot files.
+
 ### 2a. A conflicting line in a vendor file is set to the compliant value
 
 The pattern of ADR 0023, section 1a: a conflicting line in one of the files that Ubuntu's packages ship with settings

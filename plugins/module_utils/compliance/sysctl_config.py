@@ -53,11 +53,12 @@ unit tests check this model against every value.
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING, Final, cast
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Iterator, Mapping, Sequence
+    from collections.abc import Iterable, Iterator, Sequence
 
 DIRECTORIES: Final[tuple[str, ...]] = (
     "/etc/sysctl.d",
@@ -574,17 +575,27 @@ def _systemd(lines: Sequence[Assignment], path: str) -> tuple[str, str] | None:
     return found
 
 
-def _procps(lines: Sequence[Assignment], path: str) -> tuple[str, str] | None:
+def _procps_writes(lines: Sequence[Assignment], path: str) -> list[int]:
+    """Return the indexes of the lines with which procps writes ``path``, in its order."""
     named = {item.raw for item in lines if not _is_glob(item.raw)}
-    found = None
-    for item in lines:
-        if item.path is None or item.value is None:
-            continue
-        if item.path == path or (
-            _is_glob(item.path) and path not in named and _matches(item.path, path)
-        ):
-            found = (item.value, item.source)
-    return found
+    return [
+        index
+        for index, item in enumerate(lines)
+        if item.path is not None
+        and item.value is not None
+        and (
+            item.path == path
+            or (_is_glob(item.path) and path not in named and _matches(item.path, path))
+        )
+    ]
+
+
+def _procps(lines: Sequence[Assignment], path: str) -> tuple[str, str] | None:
+    writes = _procps_writes(lines, path)
+    if not writes:
+        return None
+    item = lines[writes[-1]]
+    return str(item.value), item.source
 
 
 def effective(raw_entries: Iterable[Mapping[str, object]], key: str) -> dict[str, object]:
@@ -619,3 +630,155 @@ def effective(raw_entries: Iterable[Mapping[str, object]], key: str) -> dict[str
         )
     result["unsupported"] = unsupported(entries) + unclear
     return result
+
+
+def _refusing(value: str, refused: Sequence[int]) -> bool:
+    found = kernel_integer(value)
+    return found is None or found in refused
+
+
+def _procps_refusal(
+    parts: Sequence[Sequence[Assignment]],
+    key_path: str,
+    companion_path: str,
+    refused: Sequence[int],
+) -> dict[str, str] | None:
+    """Return the first refusing assignment of the companion before procps's last write of the key.
+
+    ``parts`` are the runs of procps in order (``sysctl --system``, then ufw's ``sysctl -p``),
+    each with its own exclusions from globs.
+    """
+    sequence: list[Assignment] = []
+    key_writes: list[int] = []
+    companion_writes: list[int] = []
+    for part in parts:
+        offset = len(sequence)
+        key_writes.extend(offset + index for index in _procps_writes(part, key_path))
+        companion_writes.extend(offset + index for index in _procps_writes(part, companion_path))
+        sequence.extend(part)
+    return next(
+        (
+            {"value": str(sequence[index].value), "source": sequence[index].source}
+            for index in companion_writes
+            if key_writes
+            and index < key_writes[-1]
+            and _refusing(str(sequence[index].value), refused)
+        ),
+        None,
+    )
+
+
+def companion_refusals(
+    raw_entries: Iterable[Mapping[str, object]],
+    key: str,
+    companion: str,
+    refused: Sequence[int],
+) -> dict[str, dict[str, str] | None]:
+    """Return, per reader, the setting of ``companion`` at which the kernel refuses ``key``.
+
+    The kernel refuses some parameters while another has certain values:
+    ``kernel.perf_event_max_sample_rate`` while ``kernel.perf_cpu_time_max_percent`` is 0 or 100.
+    A value of the companion that :func:`kernel_integer` does not read counts as one of
+    ``refused`` (it may be one in another notation). For ``systemd`` the setting is the
+    companion's last value, as :func:`effective` decides it (ufw's file included). ``procps``
+    makes every assignment in turn, so for it the setting is the first assignment of the companion
+    with such a value that comes before the last assignment of ``key``, in the files of
+    ``sysctl --system`` and then in those that ufw applies with ``sysctl -p``; a later assignment
+    that sets the companion back comes too late for that write. The result maps ``systemd`` and
+    ``procps`` to ``{"value", "source"}`` of that setting, or None when the reader's write of
+    ``key`` is not refused.
+    """
+    entries = load_entries(raw_entries)
+    by_path = {entry.path: entry for entry in entries}
+    key_path = normalise(key) or key
+    companion_path = normalise(companion) or companion
+    after, _ = ufw_files(entries)
+    late = [
+        item for name in after if name in by_path for item in assignments(by_path[name], PROCPS)
+    ]
+    boot = [item for entry in ordered_files(entries, PROCPS) for item in assignments(entry, PROCPS)]
+    procps = _procps_refusal((boot, late), key_path, companion_path, refused)
+    systemd_lines = [
+        item for entry in ordered_files(entries, SYSTEMD) for item in assignments(entry, SYSTEMD)
+    ]
+    found = _procps(late, companion_path) or _systemd(systemd_lines, companion_path)
+    systemd = (
+        {"value": found[0], "source": found[1]} if found and _refusing(found[0], refused) else None
+    )
+    return {SYSTEMD: systemd, PROCPS: procps}
+
+
+def _with_companion(
+    entries: Sequence[Mapping[str, object]], plan: Mapping[str, object], path: str, content: str
+) -> list[Mapping[str, object]]:
+    """Return ``entries`` as they will be after the companion rule's ``plan``.
+
+    The vendor lines that the plan edits are swapped for the lines it writes, and when it writes
+    its drop-in, the drop-in at ``path`` holds ``content``.
+    """
+    edits = cast("list[Mapping[str, object]]", plan.get("edits") or [])
+    write = bool(plan.get("write"))
+    result: list[Mapping[str, object]] = []
+    for item in entries:
+        if write and item.get("path") == path:
+            continue
+        mine = {
+            str(edit.get("original")): str(edit.get("written"))
+            for edit in edits
+            if edit.get("path") == item.get("path")
+        }
+        if mine and isinstance(item.get("text"), str):
+            lines = str(item["text"]).split("\n")
+            result.append({**item, "text": "\n".join(mine.get(line, line) for line in lines)})
+        else:
+            result.append(item)
+    if write:
+        result.append({"path": path, "kind": "file", "text": content})
+    return result
+
+
+def companion_check(
+    planned_entries: Sequence[Mapping[str, object]],
+    current_entries: Sequence[Mapping[str, object]],
+    key: str,
+    blocker: Mapping[str, object],
+    rule: Mapping[str, object] | None = None,
+) -> dict[str, object]:
+    """Decide whether the companion makes the kernel refuse ``key``, before and after the run.
+
+    ``planned_entries`` are the entries with the drop-in and the vendor edits of the rule of
+    ``key``; ``current_entries`` those as they are. ``rule`` describes the companion's own rule
+    when it is selected in the same run: ``plan`` (its plan entry, with ``status``, ``write`` and
+    ``edits``, or None when it is not decided yet), ``path`` (its drop-in) and ``content``. Only
+    when its status is ``applied`` or ``compliant`` will its drop-in and edits take effect, so only
+    then are they added to the planned entries; with any other status, or without the rule, the
+    companion is judged as the files leave it. A selected rule without a plan entry is
+    ``undecided``, which the caller must refuse. ``blocker`` names the companion (``key``) and
+    the integers at which the kernel refuses ``key`` (``refused``). The result holds
+    ``undecided`` and, for ``planned`` and ``current``, :func:`companion_refusals`.
+
+    Raises:
+        ConfigError: If ``blocker`` does not name a companion and a list of integers.
+    """
+    companion = blocker.get("key")
+    refused = blocker.get("refused")
+    if not isinstance(companion, str) or not isinstance(refused, list):
+        message = f"a companion needs a key and a list of refused integers: {dict(blocker)}"
+        raise ConfigError(message)
+    values = [value for value in cast("list[object]", refused) if isinstance(value, int)]
+    if len(values) != len(cast("list[object]", refused)):
+        message = f"the refused values of {companion} must be integers: {refused}"
+        raise ConfigError(message)
+    plan = rule.get("plan") if rule is not None else None
+    entries: Sequence[Mapping[str, object]] = planned_entries
+    if rule is not None and isinstance(plan, Mapping):
+        decided = cast("Mapping[str, object]", plan)
+        if decided.get("status") in {"applied", "compliant"}:
+            entries = _with_companion(
+                planned_entries, decided, str(rule.get("path")), str(rule.get("content"))
+            )
+    return {
+        "undecided": rule is not None and not isinstance(plan, Mapping),
+        "planned": companion_refusals(entries, key, companion, values),
+        "current": companion_refusals(current_entries, key, companion, values),
+    }
