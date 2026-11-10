@@ -19,8 +19,9 @@ version_added: "0.1.0"
 author:
   - FreeSecDev contributors (@FreeSecDev)
 description:
-  - The kernel refuses some kernel parameters while another, the companion, has certain values:
-    C(kernel.perf_event_max_sample_rate) while C(kernel.perf_cpu_time_max_percent) is 0 or 100.
+  - The kernel refuses some kernel parameters while another, the companion, has certain values,
+    such as C(kernel.perf_event_max_sample_rate) while C(kernel.perf_cpu_time_max_percent) is 0 or
+    100.
   - Returns, for the entries after the run (O(_input)) and as they are (O(current)), and for
     C(systemd) (C(systemd-sysctl) at boot) and C(procps) (C(sysctl --system)), the setting of the
     companion at which the kernel would refuse the reader's write of O(key), with C(value) and
@@ -29,9 +30,11 @@ description:
     edits count only when its plan status is C(applied) or C(compliant); with any other status
     the companion is judged as the files leave it, and without a plan entry the result is
     C(undecided), which the caller refuses.
-  - For C(systemd) that is the companion's last value. C(procps) makes every assignment in turn, so
-    for it that is any assignment of the companion with such a value before its last assignment of
-    O(key), even when a later file sets the companion back. A value that the filter
+  - The kernel checks the companion only when O(key) is written. For C(systemd) the setting is the
+    companion's last value in C(systemd-sysctl)'s own files or, when ufw applies its file after
+    boot, its last value there; either refuses. C(procps) makes every assignment in turn, so for it
+    the setting is the companion's value when it writes O(key) for the last time; an assignment of
+    the companion outside its range leaves the value it had. A value that the filter
     C(freesecdev.linux_compliance.sysctl_integer) does not read counts as a refused one (ADR 0029).
 options:
   _input:
@@ -52,8 +55,9 @@ options:
     required: true
   blocker:
     description:
-      - The companion, with C(key) (the companion kernel parameter, in the dotted form) and
-        C(refused) (the integers at which the kernel refuses O(key)), as
+      - The companion, with C(key) (the companion kernel parameter, in the dotted form),
+        C(refused) (the integers at which the kernel refuses O(key)) and C(minimum) and C(maximum)
+        (the range in which the kernel takes a value of the companion), as
         C(__linux_compliance_remediate_sysctl_refusing_companions) of the remediate role names it.
     type: dict
     required: true
@@ -72,7 +76,8 @@ EXAMPLES = r"""
     msg: >-
       {{ planned | freesecdev.linux_compliance.sysctl_companion(current,
          'kernel.perf_event_max_sample_rate',
-         {'key': 'kernel.perf_cpu_time_max_percent', 'refused': [0, 100]}) }}
+         {'key': 'kernel.perf_cpu_time_max_percent', 'refused': [0, 100], 'minimum': 0,
+          'maximum': 100}) }}
 """
 
 RETURN = r"""
@@ -98,8 +103,8 @@ def sysctl_companion(
         planned: The configuration entries after the run.
         current: The configuration entries as they are.
         key: The kernel parameter that the kernel may refuse.
-        blocker: The companion's ``key`` and the ``refused`` values at which the kernel refuses
-            ``key``.
+        blocker: The companion's ``key``, the ``refused`` values at which the kernel refuses
+            ``key``, and its ``minimum`` and ``maximum``.
         rule: The companion's selected rule, with ``plan``, ``path`` and ``content``, or None.
 
     Returns:

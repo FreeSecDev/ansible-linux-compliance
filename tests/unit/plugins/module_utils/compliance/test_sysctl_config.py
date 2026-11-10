@@ -809,7 +809,8 @@ def test_a_vector_counts_only_as_fields_that_the_kernel_reads_as_written(
 
 SAMPLE_RATE = "kernel.perf_event_max_sample_rate"
 CPU_TIME = "kernel.perf_cpu_time_max_percent"
-BLOCKER: dict[str, object] = {"key": CPU_TIME, "refused": [0, 100]}
+BLOCKER: dict[str, object] = {"key": CPU_TIME, "refused": [0, 100], "minimum": 0, "maximum": 100}
+COMPANION = sysctl_config.load_companion(BLOCKER)
 SAMPLE_DROP_IN = "/etc/sysctl.d/999-freesecdev-sysctl-kernel-perf-event-max-sample-rate.conf"
 CPU_DROP_IN = "/etc/sysctl.d/999-freesecdev-sysctl-kernel-perf-cpu-time-max-percent.conf"
 
@@ -825,7 +826,7 @@ def perf_entries(files: dict[str, str]) -> list[dict[str, object]]:
 
 def refusals(files: dict[str, str]) -> dict[str, dict[str, str] | None]:
     """Return the refusing settings of the companion for ``files`` and the drop-in."""
-    return sysctl_config.companion_refusals(perf_entries(files), SAMPLE_RATE, CPU_TIME, [0, 100])
+    return sysctl_config.companion_refusals(perf_entries(files), SAMPLE_RATE, COMPANION)
 
 
 @pytest.mark.parametrize("value", ["0", "100", "0x0", "00", "+1", "0100"])
@@ -840,7 +841,7 @@ def test_a_companion_at_another_value_or_unset_refuses_nothing(files: dict[str, 
     assert refusals(files) == {"systemd": None, "procps": None}
 
 
-def test_procps_is_refused_by_an_earlier_zero_that_a_later_file_sets_back() -> None:
+def test_procps_is_refused_by_a_zero_at_its_write_although_a_later_file_sets_it_back() -> None:
     found = refusals(
         {
             "/etc/sysctl.d/10-a.conf": f"{CPU_TIME} = 0\n",
@@ -858,7 +859,7 @@ def test_procps_is_not_refused_by_a_zero_after_its_last_write_of_the_key() -> No
     assert found == {"systemd": None, "procps": None}
 
 
-def test_a_later_write_of_the_key_after_a_zero_is_refused_for_procps() -> None:
+def test_procps_counts_the_companion_s_value_at_its_last_write_of_the_key() -> None:
     found = refusals(
         {
             "/etc/sysctl.d/10-a.conf": f"{SAMPLE_RATE} = 1\n",
@@ -866,10 +867,82 @@ def test_a_later_write_of_the_key_after_a_zero_is_refused_for_procps() -> None:
             "/etc/sysctl.d/30-c.conf": f"{CPU_TIME} = 25\n",
         }
     )
-    assert found == {
-        "systemd": None,
-        "procps": {"value": "100", "source": "/etc/sysctl.d/20-b.conf"},
+    assert found == {"systemd": None, "procps": None}
+
+
+@pytest.mark.parametrize(
+    ("values", "refused"),
+    [
+        (["0", "1"], None),
+        (["100", "25"], None),
+        (["1", "0"], "0"),
+        (["0", "200"], "0"),
+        (["0", "-1"], "0"),
+        (["1", "200"], None),
+        (["1", "0x0"], "0x0"),
+        (["0", "0x19"], "0x19"),
+        (["1", "+1"], "+1"),
+        (["0x0", "1"], None),
+    ],
+)
+def test_procps_tracks_the_companion_through_its_assignments(
+    values: list[str], refused: str | None
+) -> None:
+    files = {
+        f"/etc/sysctl.d/{index}0-c.conf": f"{CPU_TIME} = {value}\n"
+        for index, value in enumerate(values, start=1)
     }
+    found = refusals(files)["procps"]
+    source = next(
+        (path for path, text in files.items() if text == f"{CPU_TIME} = {refused}\n"), None
+    )
+    assert found == (None if refused is None else {"value": refused, "source": source})
+
+
+def test_procps_judges_each_run_of_the_key_by_the_value_at_its_last_write() -> None:
+    found = refusals(
+        {
+            "/etc/sysctl.d/10-a.conf": f"{CPU_TIME} = 0\n{SAMPLE_RATE} = 2\n",
+            "/etc/sysctl.d/20-b.conf": f"{CPU_TIME} = 1\n",
+        }
+    )
+    assert found["procps"] is None
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["kernel/perf_cpu_time_max_percent/ = 0\n", f"vm.swappiness = 10\r{CPU_TIME} = 0\n"],
+)
+def test_systemd_s_own_zero_refuses_although_ufw_sets_one_later(text: str) -> None:
+    entries: list[dict[str, object]] = [
+        *perf_entries({"/etc/sysctl.d/10-a.conf": text}),
+        {"path": UFW, "kind": "file", "text": f"{CPU_TIME} = 1\n"},
+        {"path": sysctl_config.UFW_CONF, "kind": "file", "text": "ENABLED=yes\n"},
+        {"path": sysctl_config.UFW_DEFAULT, "kind": "file", "text": PLAIN_DEFAULT},
+    ]
+    assert sysctl_config.companion_refusals(entries, SAMPLE_RATE, COMPANION) == {
+        "systemd": {"value": "0", "source": "/etc/sysctl.d/10-a.conf"},
+        "procps": None,
+    }
+
+
+def test_ufw_s_zero_refuses_for_systemd_after_its_own_one() -> None:
+    entries: list[dict[str, object]] = [
+        *perf_entries({"/etc/sysctl.d/10-a.conf": f"{CPU_TIME} = 1\n"}),
+        {"path": UFW, "kind": "file", "text": f"{CPU_TIME} = 0\n"},
+        {"path": sysctl_config.UFW_CONF, "kind": "file", "text": "ENABLED=yes\n"},
+        {"path": sysctl_config.UFW_DEFAULT, "kind": "file", "text": PLAIN_DEFAULT},
+    ]
+    assert sysctl_config.companion_refusals(entries, SAMPLE_RATE, COMPANION) == {
+        "systemd": {"value": "0", "source": UFW},
+        "procps": None,
+    }
+
+
+@pytest.mark.parametrize("value", ["200", "-1"])
+def test_systemd_does_not_refuse_on_a_value_that_the_kernel_refuses(value: str) -> None:
+    found = refusals({"/etc/sysctl.d/50-perf.conf": f"{CPU_TIME} = {value}\n"})
+    assert found == {"systemd": None, "procps": None}
 
 
 def test_a_glob_that_sets_the_companion_counts() -> None:
@@ -882,7 +955,7 @@ def test_procps_is_not_refused_when_it_never_writes_the_key() -> None:
     entries: list[dict[str, object]] = [
         {"path": "/etc/sysctl.d/50-perf.conf", "kind": "file", "text": f"{CPU_TIME} = 0\n"}
     ]
-    assert sysctl_config.companion_refusals(entries, SAMPLE_RATE, CPU_TIME, [0, 100]) == {
+    assert sysctl_config.companion_refusals(entries, SAMPLE_RATE, COMPANION) == {
         "systemd": {"value": "0", "source": "/etc/sysctl.d/50-perf.conf"},
         "procps": None,
     }
@@ -896,7 +969,7 @@ def test_ufw_s_file_counts_after_the_boot_files() -> None:
         {"path": sysctl_config.UFW_DEFAULT, "kind": "file", "text": PLAIN_DEFAULT},
     ]
     setting = {"value": "0", "source": UFW}
-    assert sysctl_config.companion_refusals(entries, SAMPLE_RATE, CPU_TIME, [0, 100]) == {
+    assert sysctl_config.companion_refusals(entries, SAMPLE_RATE, COMPANION) == {
         "systemd": setting,
         "procps": setting,
     }
@@ -1017,11 +1090,93 @@ def test_a_selected_companion_without_a_plan_entry_is_undecided() -> None:
     "blocker",
     [
         {"key": CPU_TIME},
-        {"refused": [0, 100]},
-        {"key": CPU_TIME, "refused": "0"},
-        {"key": CPU_TIME, "refused": [0, "100"]},
+        {"refused": [0, 100], "minimum": 0, "maximum": 100},
+        {"key": CPU_TIME, "refused": "0", "minimum": 0, "maximum": 100},
+        {"key": CPU_TIME, "refused": [0, "100"], "minimum": 0, "maximum": 100},
+        {"key": CPU_TIME, "refused": [True], "minimum": 0, "maximum": 100},
+        {"key": CPU_TIME, "refused": [0, 100]},
+        {"key": CPU_TIME, "refused": [0, 100], "minimum": 0, "maximum": "100"},
+        {"key": CPU_TIME, "refused": [0, 100], "minimum": False, "maximum": 100},
     ],
 )
 def test_a_malformed_blocker_is_refused(blocker: dict[str, object]) -> None:
     with pytest.raises(sysctl_config.ConfigError):
         sysctl_config.companion_check([], [], SAMPLE_RATE, blocker)
+
+
+@pytest.mark.parametrize(
+    "plan",
+    [
+        {"status": "applied", "write": True, "edits": "x"},
+        {"status": "applied", "write": True, "edits": [1]},
+        {
+            "status": "applied",
+            "write": True,
+            "edits": [{"path": 1, "original": "a", "written": "b"}],
+        },
+        {"status": "applied", "write": True, "edits": [{"path": "/etc/x", "original": "a"}]},
+        {"status": "applied", "write": "yes", "edits": []},
+    ],
+)
+def test_a_malformed_plan_of_an_applied_companion_is_refused(plan: dict[str, object]) -> None:
+    rule = {"plan": plan, "path": CPU_DROP_IN, "content": f"{CPU_TIME} = 1\n"}
+    with pytest.raises(sysctl_config.ConfigError):
+        sysctl_config.companion_check(perf_entries({}), [], SAMPLE_RATE, BLOCKER, rule)
+
+
+def test_a_plan_without_edits_or_with_null_edits_adds_only_the_drop_in() -> None:
+    for plan in ({"status": "applied"}, {"status": "applied", "write": True, "edits": None}):
+        rule = {"plan": plan, "path": CPU_DROP_IN, "content": f"{CPU_TIME} = 1\n"}
+        found = sysctl_config.companion_check(perf_entries({}), [], SAMPLE_RATE, BLOCKER, rule)
+        assert found["planned"] == {"systemd": None, "procps": None}
+
+
+VENDOR = "/etc/sysctl.d/10-kernel-hardening.conf"
+
+
+def test_a_cleanup_restore_writes_the_original_line_back() -> None:
+    texts: dict[str, object] = {VENDOR: f"kernel.kptr_restrict = 1\n{CPU_TIME} = 1\n", "/x": None}
+    restores = [{"path": VENDOR, "written": f"{CPU_TIME} = 1", "original": f"{CPU_TIME} = 0"}]
+    assert sysctl_config.restore_lines(texts, restores) == {
+        VENDOR: f"kernel.kptr_restrict = 1\n{CPU_TIME} = 0\n",
+        "/x": None,
+    }
+
+
+@pytest.mark.parametrize(
+    "text",
+    [f"{CPU_TIME} = 1\n{CPU_TIME} = 1\n", f"{CPU_TIME} = 2\n", f"{CPU_TIME} = 1\r\n"],
+)
+def test_a_restore_leaves_a_file_without_exactly_one_written_line_alone(text: str) -> None:
+    restores = [{"path": VENDOR, "written": f"{CPU_TIME} = 1", "original": f"{CPU_TIME} = 0"}]
+    assert sysctl_config.restore_lines({VENDOR: text}, restores) == {VENDOR: text}
+
+
+def test_a_restore_of_an_unknown_file_changes_nothing() -> None:
+    restores = [{"path": VENDOR, "written": "a", "original": "b"}]
+    assert sysctl_config.restore_lines({}, restores) == {}
+
+
+@pytest.mark.parametrize(
+    "restore",
+    [
+        {"path": VENDOR, "written": "a"},
+        {"path": 1, "written": "a", "original": "b"},
+        {"path": VENDOR, "written": None, "original": "b"},
+    ],
+)
+def test_a_malformed_restore_is_refused(restore: dict[str, object]) -> None:
+    with pytest.raises(sysctl_config.ConfigError):
+        sysctl_config.restore_lines({VENDOR: "a\n"}, [restore])
+
+
+def test_the_restored_vendor_line_refuses_the_sample_rate() -> None:
+    texts = {VENDOR: f"kernel.kptr_restrict = 1\n{CPU_TIME} = 1\n"}
+    restores = [{"path": VENDOR, "written": f"{CPU_TIME} = 1", "original": f"{CPU_TIME} = 0"}]
+    restored = sysctl_config.restore_lines(texts, restores)
+    entries = perf_entries({VENDOR: str(restored[VENDOR])})
+    setting = {"value": "0", "source": VENDOR}
+    assert sysctl_config.companion_refusals(entries, SAMPLE_RATE, COMPANION) == {
+        "systemd": setting,
+        "procps": setting,
+    }

@@ -133,6 +133,8 @@ __linux_compliance_remediate_sysctl_refusing_companions:
     refused:
       - 0
       - 100
+    minimum: 0
+    maximum: 100
 __linux_compliance_remediate_sysctl_side_effects:
   net.ipv4.ip_forward:
     - net.ipv4.conf.all.accept_redirects

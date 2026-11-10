@@ -34,8 +34,8 @@ options:
       - The entries of the configuration directories, C(/etc/sysctl.conf) and ufw's
         C(/etc/ufw/ufw.conf), C(/etc/default/ufw) and C(/etc/ufw/sysctl.conf), each a mapping
         with C(path), C(kind) (C(file), C(link), C(directory) or C(other)), C(text), the
-        content of a file or of a link's regular target, or null, and, for a link, C(target):
-        C(file) for a regular file, C(null) for C(/dev/null), anything else otherwise.
+        content of a file or of a link's regular target, or null, and, for a link, C(target), which
+        is C(file) for a regular file, C(null) for C(/dev/null) and anything else otherwise.
       - ufw's C(/etc/ufw/sysctl.conf) counts, after every other file, only when C(ENABLED) is
         C(yes) or C(YES) and C(IPT_SYSCTL) names that file, each read from C(/etc/default/ufw)
         and then C(ufw.conf), as ufw sources them; ufw applies nothing unless both are non-empty

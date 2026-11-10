@@ -614,11 +614,25 @@
   tags:
     - always
 
-- name: Kernel parameters | Keep the running values as they are now
+- name: Kernel parameters | Keep the running values and the texts of the configuration as the cleanup leaves them
+  vars:
+    __linux_compliance_remediate_sc_reverted_plans: >-
+      {{ __linux_compliance_remediate_sc_reverted_ids | map('extract', __linux_compliance_remediate_sc_cleanup_plan)
+         | list }}
+    __linux_compliance_remediate_sc_planned_restores: >-
+      {{ dict(__linux_compliance_remediate_sc_reverted_plans | map(attribute='runtime') | flatten
+              | map(attribute='name')
+              | zip(__linux_compliance_remediate_sc_reverted_plans | map(attribute='runtime') | flatten
+                    | map(attribute='value'))) }}
   ansible.builtin.set_fact:
     __linux_compliance_remediate_sc_running_values: >-
       {{ __linux_compliance_remediate_sc_running_values
+         | combine(__linux_compliance_remediate_sc_planned_restores if ansible_check_mode else {})
          | combine(__linux_compliance_remediate_sc_reread.running | default({})) }}
+    __linux_compliance_remediate_sc_texts: >-
+      {{ __linux_compliance_remediate_sc_texts
+         | freesecdev.linux_compliance.sysctl_restored(__linux_compliance_remediate_sc_reverted_plans
+                                                       | map(attribute='restores') | flatten) }}
   tags:
     - always
 
@@ -740,7 +754,7 @@
       {%- for reader in ['systemd', 'procps'] if companion.planned[reader] is not none -%}
       {%- set ns.later = ns.later + [__linux_compliance_remediate_sysctl_readers[reader] ~ ' would set ' ~ blocker.key
             ~ ' to ' ~ companion.planned[reader].value ~ ' from ' ~ companion.planned[reader].source
-            ~ (' before it sets ' ~ key if reader == 'procps' else '')
+            ~ (', and that is its value when it writes ' ~ key ~ ' for the last time' if reader == 'procps' else '')
             ~ ', and the kernel refuses ' ~ key ~ ' while ' ~ blocker.key ~ ' is ' ~ blocker.refused | join(' or ')
             ~ ' (a value that the collection does not read as the kernel does counts as one of them)'] -%}
       {%- endfor -%}

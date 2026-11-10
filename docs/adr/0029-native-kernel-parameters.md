@@ -287,10 +287,33 @@ is now made by the model (`sysctl_config.companion_check`, through the filter
   vendor edits are added to the planned entries, and the companion is still judged on them. With any other status
   the companion is judged as the files leave it, as if its rule were not selected. A selected rule without a plan
   entry is refused as `overridden`.
-- `systemd-sysctl` is judged on the companion's last value. `sysctl --system` makes every assignment in turn, so any
-  assignment of the companion to 0 or 100 (or to a value the collection does not read as the kernel does) before its
-  last assignment of the sample rate refuses that write, even when a later file sets the companion back; one after
-  it does not. ufw's file counts after the boot files.
+- `systemd-sysctl` is judged on the companion's last value. For `sysctl --system`, the seventh review's amendment
+  below replaces the rule of this review.
+
+**Amendment (seventh review).** The seventh review found two more ways in which the sample rate was reported
+`applied` or `compliant` while the kernel refuses it at boot, and that the rule for `sysctl --system` was stricter
+than the kernel:
+
+- Cleanup runs before the plan of the rules to apply, but the plan judged the texts read before the cleanup. When the
+  companion's rule is switched off, its cleanup writes the recorded vendor line `kernel.perf_cpu_time_max_percent = 0`
+  back into `10-kernel-hardening.conf`, and the plan still saw the 1 that the collection had written. The cleanup's
+  restores (the one written line becomes the recorded original line, as `lineinfile` does) are now applied to the
+  texts that the plan judges (the filter `freesecdev.linux_compliance.sysctl_restored`, `sysctl_config.restore_lines`),
+  for every rule, not only the companion. The drop-ins that the cleanup removes were already left out. In check mode
+  the running values that the cleanup would set back are taken as set too; in a real run they are read again.
+- `systemd-sysctl` writes the sample rate at boot, before ufw starts, so a 0 that only it reads (a key with a trailing
+  slash, or after a lone carriage return) refuses the write even when ufw's file later sets the companion to 1. For
+  `systemd-sysctl` the companion's last value in its own files and its last value in ufw's file are both checked;
+  either refuses.
+- The kernel checks the companion only when the sample rate is written. For `sysctl --system` the model now follows the
+  companion's value through every assignment in order: it starts at the kernel's default, a value of 0 or 100 or one
+  that the collection does not read as the kernel does (which the kernel may take in another notation) makes it
+  refusing, a value outside the companion's range of 0 to 100 leaves it as it was, because the kernel refuses that
+  write, and any other value makes it accepting. The write of the sample rate that counts is the last one, so the rule
+  is refused when the companion is refusing at that moment; a 0 followed by a 1 before it no longer refuses, and a
+  0 after it does not either. `__linux_compliance_remediate_sysctl_refusing_companions` names the range
+  (`minimum`, `maximum`) as well, and a malformed entry, plan entry or restore raises an error instead of being
+  guessed.
 
 ### 2a. A conflicting line in a vendor file is set to the compliant value
 

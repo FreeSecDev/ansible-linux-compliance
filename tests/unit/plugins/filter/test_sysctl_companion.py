@@ -6,7 +6,7 @@ from ansible_collections.freesecdev.linux_compliance.plugins.filter import sysct
 
 SAMPLE_RATE = "kernel.perf_event_max_sample_rate"
 CPU_TIME = "kernel.perf_cpu_time_max_percent"
-BLOCKER: dict[str, object] = {"key": CPU_TIME, "refused": [0, 100]}
+BLOCKER: dict[str, object] = {"key": CPU_TIME, "refused": [0, 100], "minimum": 0, "maximum": 100}
 ENTRIES: list[dict[str, object]] = [
     {"path": "/etc/sysctl.d/50-perf.conf", "kind": "file", "text": f"{CPU_TIME} = 0\n"},
     {"path": "/etc/sysctl.d/99-rate.conf", "kind": "file", "text": f"{SAMPLE_RATE} = 1\n"},

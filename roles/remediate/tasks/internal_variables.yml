@@ -993,6 +993,9 @@
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_sc_plan$') == [] or
         '__linux_compliance_remediate_sc_plan' in (hostvars[inventory_hostname] | list)
       - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_sc_planned_restores$') == [] or
+        '__linux_compliance_remediate_sc_planned_restores' in (hostvars[inventory_hostname] | list)
+      - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_sc_read$') == [] or
         '__linux_compliance_remediate_sc_read' in (hostvars[inventory_hostname] | list)
       - >-
@@ -1028,6 +1031,9 @@
       - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_sc_reverted_ids$') == [] or
         '__linux_compliance_remediate_sc_reverted_ids' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_sc_reverted_plans$') == [] or
+        '__linux_compliance_remediate_sc_reverted_plans' in (hostvars[inventory_hostname] | list)
       - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_sc_rule$') == [] or
         '__linux_compliance_remediate_sc_rule' in (hostvars[inventory_hostname] | list)
@@ -2304,9 +2310,11 @@
       - __linux_compliance_remediate_sc_linked == '__linux_compliance_unset__'
       - __linux_compliance_remediate_sc_nulled == '__linux_compliance_unset__'
       - __linux_compliance_remediate_sc_path == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_sc_planned_restores == '__linux_compliance_unset__'
       - __linux_compliance_remediate_sc_read_texts == '__linux_compliance_unset__'
       - __linux_compliance_remediate_sc_restore == '__linux_compliance_unset__'
       - __linux_compliance_remediate_sc_restored_names == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_sc_reverted_plans == '__linux_compliance_unset__'
       - __linux_compliance_remediate_sc_rule == '__linux_compliance_unset__'
       - __linux_compliance_remediate_sc_set_names == '__linux_compliance_unset__'
       - __linux_compliance_remediate_sc_source == '__linux_compliance_unset__'
@@ -2748,9 +2756,11 @@
     __linux_compliance_remediate_sc_linked: __linux_compliance_unset__
     __linux_compliance_remediate_sc_nulled: __linux_compliance_unset__
     __linux_compliance_remediate_sc_path: __linux_compliance_unset__
+    __linux_compliance_remediate_sc_planned_restores: __linux_compliance_unset__
     __linux_compliance_remediate_sc_read_texts: __linux_compliance_unset__
     __linux_compliance_remediate_sc_restore: __linux_compliance_unset__
     __linux_compliance_remediate_sc_restored_names: __linux_compliance_unset__
+    __linux_compliance_remediate_sc_reverted_plans: __linux_compliance_unset__
     __linux_compliance_remediate_sc_rule: __linux_compliance_unset__
     __linux_compliance_remediate_sc_set_names: __linux_compliance_unset__
     __linux_compliance_remediate_sc_source: __linux_compliance_unset__
@@ -3606,9 +3616,11 @@
       - __linux_compliance_remediate_sc_linked == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_sc_nulled == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_sc_path == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_sc_planned_restores == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_sc_read_texts == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_sc_restore == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_sc_restored_names == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_sc_reverted_plans == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_sc_rule == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_sc_set_names == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_sc_source == '__linux_compliance_unset_again__'
@@ -3726,9 +3738,11 @@
     __linux_compliance_remediate_sc_linked: __linux_compliance_unset_again__
     __linux_compliance_remediate_sc_nulled: __linux_compliance_unset_again__
     __linux_compliance_remediate_sc_path: __linux_compliance_unset_again__
+    __linux_compliance_remediate_sc_planned_restores: __linux_compliance_unset_again__
     __linux_compliance_remediate_sc_read_texts: __linux_compliance_unset_again__
     __linux_compliance_remediate_sc_restore: __linux_compliance_unset_again__
     __linux_compliance_remediate_sc_restored_names: __linux_compliance_unset_again__
+    __linux_compliance_remediate_sc_reverted_plans: __linux_compliance_unset_again__
     __linux_compliance_remediate_sc_rule: __linux_compliance_unset_again__
     __linux_compliance_remediate_sc_set_names: __linux_compliance_unset_again__
     __linux_compliance_remediate_sc_source: __linux_compliance_unset_again__
