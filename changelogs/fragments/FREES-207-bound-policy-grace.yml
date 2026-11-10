@@ -1,0 +1,11 @@
+---
+bugfixes:
+  - >-
+    process helper - the allow-list that is bound at import now keeps every field of an executable's policy. Its copy
+    left out ``term_grace_seconds``, so ``augenrules`` got ``SIGKILL`` at its timeout instead of ``SIGTERM`` and five
+    seconds for its trap to remove its temporary files; the copy is now made with ``dataclasses.replace``, so a field
+    added later is kept as well (FREES-207).
+trivial:
+  - >-
+    Tests: the output cap test no longer races its timeout. It wrote nothing before a 0.5 second timeout on a busy
+    runner; it now writes 5000 bytes before an endless stream and has a 3 second timeout (FREES-210).

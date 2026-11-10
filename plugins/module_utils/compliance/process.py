@@ -69,7 +69,7 @@ import stat
 import subprocess
 import time
 from contextlib import suppress
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path, PurePosixPath
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Final, NoReturn, Protocol, cast
@@ -845,16 +845,15 @@ def _check_arguments(
 
 
 def _copy_policy(policy: ExecutablePolicy) -> ExecutablePolicy:
-    copied = ExecutablePolicy(
-        policy.name,
-        frozenset(policy.allowed_options),
-        tuple(tuple(prefix) for prefix in policy.command_prefixes),
-        tuple(tuple(command) for command in policy.standalone_commands),
-        policy.fixed_path,
-        tuple(tuple(form) for form in policy.argument_forms),
-        tuple((pair[0], pair[1]) for pair in policy.environment),
-        tuple((pair[0], pair[1]) for pair in policy.option_values),
-        tuple((pair[0], tuple(pair[1])) for pair in policy.option_prefixes),
+    copied = replace(
+        policy,
+        allowed_options=frozenset(policy.allowed_options),
+        command_prefixes=tuple(tuple(prefix) for prefix in policy.command_prefixes),
+        standalone_commands=tuple(tuple(command) for command in policy.standalone_commands),
+        argument_forms=tuple(tuple(form) for form in policy.argument_forms),
+        environment=tuple((pair[0], pair[1]) for pair in policy.environment),
+        option_values=tuple((pair[0], pair[1]) for pair in policy.option_values),
+        option_prefixes=tuple((pair[0], tuple(pair[1])) for pair in policy.option_prefixes),
     )
     _check_policy_environment(copied)
     return copied
