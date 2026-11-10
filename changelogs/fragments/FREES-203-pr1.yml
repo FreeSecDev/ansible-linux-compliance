@@ -9,14 +9,31 @@ minor_changes:
     ``community.general.make`` or ``ansible.posix.at`` are refused, and so are the ``ansible.builtin`` names that
     ansible-core redirects to them or removes (``ansible.builtin.make``, ``ansible.builtin.at``,
     ``ansible.builtin.sysctl``): only the module files of the pinned ansible-core that its routing leaves in place are
-    accepted. A module of this collection needs its file and no redirect in ``meta/runtime.yml``. ``include_role``,
+    accepted, without ``ansible.builtin.gather_facts``, ``ansible.builtin.package`` and ``ansible.builtin.service``,
+    whose action plugins choose the module to run from an argument, a variable or a fact while the play runs. An
+    ``action`` or ``local_action`` whose module is not a plain string is refused, because ansible-core's JSON loader
+    reads a load marker such as ``__ansible_unsafe`` there as the module name. A module of this collection needs its
+    file and no redirect in ``meta/runtime.yml``. ``include_role``,
     ``import_role`` and role dependencies are refused, and ``include_tasks`` and ``import_tasks`` must target
     ``{{ role_path }}/tasks/``. Every file below ``roles/remediate/tasks``, ``handlers`` and ``meta`` must be a
     ``.yml`` or ``.yaml`` file that the check can read, with task lists or a metadata mapping, because Ansible also
     loads ``main.json``, ``main`` without a suffix, any file that ``tasks_from`` or ``handlers_from`` names, JSON
-    that is not YAML and vaulted files there. An allow-listed module also needs its collection pinned at one exact
-    version in ``galaxy.yml`` ``dependencies``, ``extensions/molecule/requirements.yml`` and
-    ``extensions/molecule/collections.pins``.
+    that is not YAML and vaulted files there, and no key in them may start with ``__ansible_``. An allow-listed
+    module also needs its collection pinned at one exact version in ``galaxy.yml`` ``dependencies``,
+    ``extensions/molecule/requirements.yml`` and ``extensions/molecule/collections.pins``.
+  - >-
+    Repository guard - ``make lint-repo`` refuses names that Ansible learns only while the play runs, in every task
+    list (FREES-203): a templated ``set_fact`` key (accepted only in the Molecule harness below
+    ``extensions/molecule/``), ``args``, a ``module_defaults`` entry or the mapping form of ``action`` that is not a
+    mapping with literal keys, a free-form module argument with a template other than an include target, and a
+    ``loop_var``, ``index_var``, ``register`` or ``include_vars`` or ``vars_prompt`` ``name`` that is templated or
+    names a variable that changes what Ansible executes. A templated key or argument got past the rules that refuse
+    execution-altering variables and module parameters by their literal names.
+bugfixes:
+  - >-
+    remediate - the ``ssh`` family reloads sshd with ``ansible.builtin.systemd_service`` and only where
+    ``service_facts`` reports ``ssh.service`` or ``sshd.service`` running under systemd. ``ansible.builtin.service``
+    ran the module that the ``service_mgr`` fact names, which a task could set (FREES-203).
 trivial:
   - >-
     Documentation - ADR 0032 is accepted, with corrections to its context and the decisions of its implementation;

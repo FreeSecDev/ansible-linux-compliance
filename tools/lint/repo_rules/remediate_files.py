@@ -13,8 +13,12 @@ scalar still runs its tasks.
 ``handlers/`` and ``meta/``, at any depth and case-folded: it must have a ``.yml`` or ``.yaml``
 suffix and be YAML that PyYAML reads, and each of its documents must be empty or have the root that
 Ansible needs there, a sequence of tasks or a metadata mapping. Every task and handler that the
-role can run is then in a document that the module rule reads. The role's ``vars/`` and
-``defaults/`` hold variables, not tasks (``vars_from`` and ``defaults_from`` load variables only).
+role can run is then in a document that the module rule reads. A file that is also JSON is read by
+``AnsibleJSONDecoder``, which replaces any mapping that holds a load marker (``__ansible_unsafe``,
+``__ansible_vault``, ``__ansible_type``) with the value it decodes, so PyYAML and Ansible would see
+different tasks; a key that starts with ``__ansible_`` is refused at any depth of these files. The
+role's ``vars/`` and ``defaults/`` hold variables, not tasks (``vars_from`` and ``defaults_from``
+load variables only).
 A handler of the role runs when a task notifies its name or a topic that it listens to, and it is
 read like any task; a handler that the playbook defines is the playbook's code and out of scope,
 like its tasks.
@@ -50,6 +54,13 @@ ROLE_FILE_ROOT_MESSAGE: Final[str] = (
     "a document of roles/remediate/{directory}/ must be empty or {expected}: Ansible loads "
     "{loaded} from it, and a vaulted or other scalar document hides it from the rule (ADR 0032 §1)"
 )
+LOAD_MARKER_PREFIX: Final[str] = "__ansible_"
+LOAD_MARKER_MESSAGE: Final[str] = (
+    "key {key!r} is not allowed in roles/remediate/{directory}/: ansible-core's JSON loader "
+    "replaces a mapping that holds a key such as __ansible_unsafe, __ansible_vault or "
+    "__ansible_type with the value it decodes, so the rule would read another task than the one "
+    "Ansible runs (ADR 0032 §1)"
+)
 TASK_LIST_ROOT: Final[str] = "a sequence of tasks"
 METADATA_ROOT: Final[str] = "a mapping"
 TASK_LIST_LOADED: Final[str] = "tasks or handlers"
@@ -77,6 +88,31 @@ def _is_empty(document: yaml.Node) -> bool:
     return isinstance(document, yaml.ScalarNode) and document.tag == NULL_TAG
 
 
+def _marker_keys(document: yaml.Node) -> list[yaml.ScalarNode]:
+    """Return every scalar key below ``document`` that starts with ``LOAD_MARKER_PREFIX``.
+
+    Aliases are followed once, so a cycle ends.
+    """
+    found: list[yaml.ScalarNode] = []
+    seen: set[int] = set()
+    pending: list[yaml.Node] = [document]
+    while pending:
+        node = pending.pop()
+        if id(node) in seen:
+            continue
+        seen.add(id(node))
+        if isinstance(node, yaml.MappingNode):
+            for key, value in node.value:
+                if isinstance(key, yaml.ScalarNode) and str(key.value).startswith(
+                    LOAD_MARKER_PREFIX
+                ):
+                    found.append(key)
+                pending.extend((key, value))
+        elif isinstance(node, yaml.SequenceNode):
+            pending.extend(node.value)
+    return found
+
+
 def _compose(text: str) -> list[yaml.Node]:
     """Return every document of ``text``; raise ``yaml.YAMLError`` when PyYAML cannot read it."""
     loader = yaml.SafeLoader(text)
@@ -93,7 +129,8 @@ def role_file_findings(path: Path, relative: Path | None, data: bytes) -> list[V
     ``relative`` is the repository path of ``path`` and ``data`` its content. A file below
     ``roles/remediate/tasks/``, ``handlers/`` or ``meta/`` must have a ``.yml`` or ``.yaml``
     suffix, must be UTF-8 YAML that PyYAML composes, and each document must be empty or a sequence
-    (``tasks``, ``handlers``) or a mapping (``meta``). Other files give no finding.
+    (``tasks``, ``handlers``) or a mapping (``meta``), and no key may start with ``__ansible_``.
+    Other files give no finding.
     """
     directory = role_load_directory(relative)
     if directory is None:
@@ -116,8 +153,18 @@ def role_file_findings(path: Path, relative: Path | None, data: bytes) -> list[V
         expected=TASK_LIST_ROOT if tasks else METADATA_ROOT,
         loaded=TASK_LIST_LOADED if tasks else METADATA_LOADED,
     )
-    return [
+    violations = [
         Violation(path, document.start_mark.line + 1, message)
         for document in documents
         if not isinstance(document, expected) and not _is_empty(document)
     ]
+    violations.extend(
+        Violation(
+            path,
+            key.start_mark.line + 1,
+            LOAD_MARKER_MESSAGE.format(key=key.value, directory=directory),
+        )
+        for document in documents
+        for key in _marker_keys(document)
+    )
+    return violations

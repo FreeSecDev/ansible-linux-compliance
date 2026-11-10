@@ -367,3 +367,48 @@ request of FREES-203 that owns that part.
 - **S. Register writes when a run aborts.** The register record is written before the family writes, in the order the
   ledger already uses, and only for rules whose deviation state changes. One final step in `tasks/main.yml` removes
   the records of rules that were cleaned up or planned `none`.
+
+## Correction 2026-11-10: builtins that choose their module at run time (FREES-203)
+
+This corrects the acceptance section above, which stays as written.
+
+- **Not every name of `BUILTIN_MODULES` runs ansible-core's code.** Three of them are action plugins that choose while
+  the play runs which module they execute (`_execute_module` with a name that is not a literal):
+  `ansible.builtin.gather_facts` runs the fact modules that its `network_os` argument, `ansible_network_os` or
+  `ansible_facts_modules` names (`cisco.ios.ios` runs `cisco.ios.ios_facts`), `ansible.builtin.package` runs the
+  module that `ansible_package_use` or the `pkg_mgr` fact names, and `ansible.builtin.service` the one that the
+  `service_mgr` fact names. A task of the role can set each of them, a variable by a `set_fact` key that is templated
+  and so got past the literal-name rules of ADR 0004, and a fact by a cacheable `set_fact`. With ansible-core 2.21.6
+  such a task file ran a module of an arbitrary installed collection, and the rule reported nothing. These three are
+  now refused in `roles/remediate` (`DISPATCHING_MODULES` of `tools/lint/repo_rules/remediate_modules.py`); they stay
+  on `BUILTIN_MODULES`, so that list remains equal to the module files of ansible-core. `ansible.builtin.dnf` chooses
+  its backend at run time too, but only among `VALID_BACKENDS` of ansible-core, which name its `dnf` and `dnf5`
+  modules or no module at all (`yum`), so it is accepted as `BOUNDED_DISPATCHING_MODULES`. A unit test parses every
+  action plugin of the installed ansible-core and fails when one runs a module whose name is not a literal and it is
+  on neither list. The first bullet of the acceptance therefore reads: the name must be an `ansible.builtin` module
+  of `BUILTIN_MODULES` other than `DISPATCHING_MODULES`, a `freesecdev.linux_compliance` module or a module on
+  `ALLOWED_COMMUNITY_MODULES`.
+- **The documented limit is withdrawn.** The paragraph that starts "One limit is documented rather than enforced"
+  described `ansible.builtin.service` as safe on the supported platforms and its module as chosen by the host's service
+  manager. That was too narrow: the role's own tasks could choose the module, and `package` and `gather_facts` had the
+  same property. The role no longer uses `ansible.builtin.service`. The `ssh` family reloads sshd with
+  `ansible.builtin.systemd_service`, a module without an action plugin, and only where `service_facts` reports
+  `ssh.service` or `sshd.service` running with `source: systemd`; elsewhere nothing is reloaded, as before where no
+  service manager runs. No limit of §1 remains documented instead of enforced.
+- **JSON load markers.** `DataLoader` reads a task file as JSON before YAML, and `AnsibleJSONDecoder` replaces any
+  mapping that holds `__ansible_unsafe`, `__ansible_vault` or `__ansible_type` with the value it decodes. In an
+  `action` or `local_action`, or in its `module` key, `{"__ansible_unsafe": "zz.evil.pwn"}` is therefore a module name
+  to Ansible and a mapping to the rule. Only the unrelated rule that every YAML file starts with `---` kept such a
+  file out. The module rule now refuses an `action` or `local_action` that is neither a string nor a mapping whose
+  every `module` key is a string, and `tools/lint/repo_rules/remediate_files.py` refuses any key that starts with
+  `__ansible_` in the role's `tasks/`, `handlers/` and `meta/` files; a unit test keeps the markers of ansible-core's
+  JSON loader under that prefix.
+- **Names learned at run time, outside §1.** The templated `set_fact` key above is one case of a wider gap of the
+  rules of ADR 0004 (FREES-159), which refuse execution-altering variables and module parameters by their literal
+  names: the same key sets `ansible_python_interpreter`, `ansible_connection` or `ansible_become_method`, a template
+  given as `args`, as a free-form argument or as a `module_defaults` entry becomes the module's arguments (with
+  ansible-core 2.21.6, `ansible.builtin.copy: "{{ d }}"` ran the `validate` command of `d`), and a literal
+  `loop_var: ansible_python_interpreter` sets the interpreter for each loop item.
+  `tools/lint/repo_rules/runtime_names.py` refuses these forms in every task list of the repository. A templated
+  `set_fact` key is accepted only below `extensions/molecule/`, where the lifecycle harness switches the catalogue
+  toggles of a family by name in throwaway instances; the roles, playbooks and test playbooks have none.

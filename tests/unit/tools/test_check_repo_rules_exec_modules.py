@@ -185,13 +185,27 @@ def test_fact_path_is_refused_as_a_play_keyword(tmp_path: Path) -> None:
             "---\n- hosts: all\n  module_defaults:\n    ansible.builtin.copy:\n      mode: '0644'\n"
             "    ansible.builtin.debug: {}\n  tasks: []\n"
         ),
-        "---\n- hosts: all\n  module_defaults:\n    - 7\n  tasks: []\n",
-        "---\n- ansible.builtin.copy:\n    - a\n- action: []\n",
+        "---\n- ansible.builtin.copy:\n    - a\n",
         "---\n- action:\n    src: a\n    module: ansible.builtin.copy\n",
     ],
 )
 def test_ordinary_parameters_pass(tmp_path: Path, text: str) -> None:
     assert messages(tmp_path, text) == []
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "---\n- hosts: all\n  module_defaults:\n    - 7\n  tasks: []\n",
+        "---\n- action: []\n",
+    ],
+)
+def test_shapes_without_parameters_are_left_to_the_runtime_name_rule(
+    tmp_path: Path, text: str
+) -> None:
+    found_messages = messages(tmp_path, text)
+    assert not any(PARAMETER in message for message in found_messages), found_messages
+    assert any("must be a mapping with literal keys" in message for message in found_messages)
 
 
 def test_a_validate_key_of_a_data_document_is_not_a_parameter(tmp_path: Path) -> None:

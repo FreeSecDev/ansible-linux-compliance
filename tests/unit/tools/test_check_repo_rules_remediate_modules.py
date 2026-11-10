@@ -9,6 +9,7 @@ must be one that the rule reads.
 
 from __future__ import annotations
 
+import ast
 import importlib
 import importlib.util
 import inspect
@@ -992,3 +993,235 @@ def test_the_remediate_role_files_are_all_read() -> None:
     for path in files:
         relative = path.relative_to(REPOSITORY_ROOT)
         assert role_files.role_file_findings(path, relative, path.read_bytes()) == [], relative
+
+
+DISPATCH = "chooses while the play runs"
+
+
+def dispatching_forms(module: str) -> list[str]:
+    name = f"ansible.builtin.{module}"
+    return [
+        f"---\n- name: Key\n  {name}:\n    name: x\n",
+        f"---\n- name: Action\n  action: {name} name=x\n",
+        f"---\n- name: Local\n  local_action:\n    module: {name}\n    name: x\n",
+    ]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        pytest.param(text, id=f"{module}-{index}")
+        for module in sorted(remediate.DISPATCHING_MODULES)
+        for index, text in enumerate(dispatching_forms(module))
+    ],
+)
+def test_builtins_that_choose_their_module_at_run_time_are_refused(text: str) -> None:
+    messages = check(text)
+    assert len(messages) == 1, messages
+    assert DISPATCH in messages[0]
+    assert NOT_ALLOWED in messages[0]
+    assert ADR in messages[0]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "---\n- name: Gather\n  ansible.builtin.gather_facts:\n    network_os: cisco.ios.ios\n",
+        (
+            "---\n- name: Gather\n  ansible.builtin.gather_facts:\n  vars:\n"
+            "    ansible_network_os: ios\n"
+        ),
+        (
+            "---\n- name: Pick\n  ansible.builtin.set_fact:\n    x: 1\n"
+            "- name: Install\n  ansible.builtin.package:\n    name: foo\n"
+        ),
+        "---\n- name: Reload\n  ansible.builtin.service:\n    name: foo\n    state: reloaded\n",
+    ],
+)
+def test_the_reviewed_probes_of_dispatching_builtins_are_refused(text: str) -> None:
+    assert any(DISPATCH in message for message in check(text))
+
+
+def test_check_file_refuses_a_dispatching_builtin_in_the_role(tmp_path: Path) -> None:
+    target = tmp_path / TASK_FILE
+    target.parent.mkdir(parents=True)
+    target.write_text("---\n- name: Reload\n  ansible.builtin.service:\n    name: foo\n")
+    messages = [violation.message for violation in rules.check_file(target, tmp_path)]
+    assert any(DISPATCH in message for message in messages), messages
+
+
+def test_the_systemd_modules_that_replace_service_are_accepted() -> None:
+    text = (
+        "---\n- name: Reload\n  ansible.builtin.systemd_service:\n    name: sshd\n"
+        "    state: reloaded\n- name: Services\n  ansible.builtin.service_facts:\n"
+    )
+    assert check(text) == []
+
+
+def test_dispatching_modules_are_reviewed_builtin_modules() -> None:
+    reviewed = remediate.DISPATCHING_MODULES | remediate.BOUNDED_DISPATCHING_MODULES
+    assert reviewed <= remediate.BUILTIN_MODULES
+    assert not remediate.DISPATCHING_MODULES & remediate.BOUNDED_DISPATCHING_MODULES
+
+
+def _is_execute_module(call: ast.Call) -> bool:
+    function = call.func
+    return isinstance(function, ast.Attribute) and function.attr == "_execute_module"
+
+
+def _module_name_argument(call: ast.Call) -> ast.expr | None:
+    for keyword in call.keywords:
+        if keyword.arg == "module_name":
+            return keyword.value
+    return call.args[0] if call.args else None
+
+
+def chooses_its_module(source: str) -> bool:
+    """Return whether ``source`` calls ``_execute_module`` with a module name that is not literal.
+
+    A call without ``module_name`` runs the task's own module, which the rule reads.
+    """
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Call) and _is_execute_module(node):
+            argument = _module_name_argument(node)
+            if argument is not None and not (
+                isinstance(argument, ast.Constant) and isinstance(argument.value, str)
+            ):
+                return True
+    return False
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        ("self._execute_module(task_vars=v)", False),
+        ("self._execute_module(module_name='ansible.legacy.copy', task_vars=v)", False),
+        ("self._execute_module('ansible.legacy.uri', task_vars=v)", False),
+        ("self._execute_module(module_name=module, task_vars=v)", True),
+        ("self._execute_module(name, task_vars=v)", True),
+        ("self._execute_module(module_name=None)", True),
+        ("other(module_name=module)", False),
+        ("self._execute(module_name=module)", False),
+    ],
+)
+def test_the_drift_scan_finds_non_literal_module_names(source: str, expected: bool) -> None:
+    assert chooses_its_module(source) is expected
+
+
+def test_dispatching_action_plugins_match_ansible_core() -> None:
+    directory = ansible_core_root() / "plugins" / "action"
+    choosing = {
+        path.stem
+        for path in directory.glob("*.py")
+        if chooses_its_module(path.read_text(encoding="utf-8"))
+    }
+    assert choosing == remediate.DISPATCHING_MODULES | remediate.BOUNDED_DISPATCHING_MODULES
+
+
+def test_the_dnf_backends_stay_in_ansible_core() -> None:
+    """``dnf`` runs ``ansible.legacy.dnf`` or ``dnf5``; ``yum`` names no module and fails."""
+    backends = cast(
+        "frozenset[str]", importlib.import_module("ansible.plugins.action.dnf").VALID_BACKENDS
+    )
+    assert backends == {"yum", "yum4", "dnf", "dnf4", "dnf5"}
+    source = inspect.getsource(importlib.import_module("ansible.plugins.action.dnf"))
+    assert 'module = "dnf"' in source
+    assert "module = 'ansible.legacy.' + module" in source
+    routing = ansible_core_routing()["modules"]
+    modules = ansible_core_root() / "modules"
+    found = {
+        backend for backend in backends - {"yum4", "dnf4"} if backend in remediate.BUILTIN_MODULES
+    }
+    assert found == {"dnf", "dnf5"}
+    assert "yum" not in routing
+    assert not (modules / "yum.py").exists()
+
+
+MARKER_ACTIONS = [
+    pytest.param(
+        '[{"name": "x", "action": {"__ansible_unsafe": "zz.evil.pwn"}}]\n',
+        "action",
+        id="action-unsafe",
+    ),
+    pytest.param(
+        '[{"name": "x", "local_action": {"__ansible_unsafe": "zz.evil.pwn"}}]\n',
+        "local_action",
+        id="local-action-unsafe",
+    ),
+    pytest.param(
+        '[{"name": "x", "action": {"module": {"__ansible_unsafe": "zz.evil.pwn"}}}]\n',
+        "action",
+        id="action-module-unsafe",
+    ),
+    pytest.param(
+        '[{"name": "x", "local_action": {"module": {"__ansible_vault": "x"}}}]\n',
+        "local_action",
+        id="local-action-module-vault",
+    ),
+]
+
+
+@pytest.mark.parametrize(("text", "keyword"), MARKER_ACTIONS[:3])
+def test_ansible_reads_a_load_marker_as_the_module_name(text: str, keyword: str) -> None:
+    loader = importlib.import_module("ansible.parsing.dataloader").DataLoader()
+    loaded = cast("list[dict[str, object]]", loader.load(text))
+    value = loaded[0][keyword]
+    module = value if isinstance(value, str) else cast("dict[str, object]", value)["module"]
+    assert module == "zz.evil.pwn"
+
+
+@pytest.mark.parametrize(("text", "keyword"), MARKER_ACTIONS)
+def test_actions_whose_module_is_not_a_string_are_refused(text: str, keyword: str) -> None:
+    messages = check(text)
+    assert any(
+        f"{keyword} must be a module string" in message and ADR in message for message in messages
+    ), messages
+    found = role_findings(TASK_FILE, text.encode())
+    assert any("__ansible_" in message for message in found), found
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "---\n- name: Sequence\n  action: [ansible.builtin.debug]\n",
+        "---\n- name: No module\n  local_action:\n    msg: x\n",
+        "---\n- name: Module list\n  action:\n    module: [ansible.builtin.debug]\n",
+        (
+            "---\n- name: Second module\n  action:\n    module: ansible.builtin.debug\n"
+            "    module: {x: 1}\n"
+        ),
+    ],
+)
+def test_action_values_of_another_shape_are_refused(text: str) -> None:
+    messages = check(text)
+    assert any("must be a module string" in message for message in messages), messages
+
+
+def test_load_markers_match_ansible_core() -> None:
+    legacy = importlib.import_module("ansible._internal._json._profiles._legacy")
+    markers = cast("dict[str, object]", vars(legacy)["_Profile"].deserialize_map)
+    assert markers
+    assert all(key.startswith(role_files.LOAD_MARKER_PREFIX) for key in markers)
+
+
+@pytest.mark.parametrize(
+    ("relative", "text", "line"),
+    [
+        (
+            "roles/remediate/tasks/x.yml",
+            "---\n- name: x\n  ansible.builtin.debug:\n    msg:\n      __ansible_unsafe: x\n",
+            5,
+        ),
+        (
+            "roles/remediate/handlers/main.yml",
+            "---\n- &a\n  name: x\n  when: {__ansible_type: x}\n- *a\n",
+            4,
+        ),
+        ("roles/remediate/meta/main.yml", "---\ngalaxy_info:\n  __ansible_vault: x\n", 3),
+    ],
+)
+def test_role_files_with_load_marker_keys_are_refused(relative: str, text: str, line: int) -> None:
+    found = role_files.role_file_findings(Path(relative), Path(relative), text.encode())
+    assert [violation.line for violation in found] == [line]
+    assert "__ansible_" in found[0].message
+    assert ADR in found[0].message

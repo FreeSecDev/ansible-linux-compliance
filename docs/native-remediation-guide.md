@@ -40,13 +40,22 @@ A task of `roles/remediate` names its module by the fully qualified name, and th
   names to other collections: `ansible.builtin.make` runs `community.general.make`, `ansible.builtin.at` runs
   `ansible.posix.at` and `ansible.builtin.sysctl` runs `ansible.posix.sysctl`, so these names are refused like the
   modules they reach;
+- except `ansible.builtin.gather_facts`, `ansible.builtin.package` and `ansible.builtin.service`
+  (`DISPATCHING_MODULES`): their action plugins choose the module they run while the play runs, from an argument
+  (`network_os`), a variable (`ansible_network_os`, `ansible_facts_modules`, `ansible_package_use`) or a fact
+  (`pkg_mgr`, `service_mgr`) that a task can set, so they could run any installed module. Reload or restart a unit
+  with `ansible.builtin.systemd_service`. `ansible.builtin.dnf` also picks its backend at run time, but only among
+  the dnf modules of ansible-core, and stays allowed; a unit test fails when ansible-core gains another action plugin
+  that runs a module whose name is not a literal;
 - a module or action plugin of this collection, `freesecdev.linux_compliance.*`, whose file is in `plugins/modules` or
   `plugins/action` and which `meta/runtime.yml` neither redirects nor removes;
 - a module of a community collection that is on `ALLOWED_COMMUNITY_MODULES` in
   `tools/lint/repo_rules/remediate_modules.py`. **The list is empty today.**
 
 `make lint-repo` refuses every other module in every YAML task file below `roles/remediate`, including a short name
-(`copy:`), an `ansible.legacy` name and a templated name, in a task key as well as in `action` and `local_action`. A
+(`copy:`), an `ansible.legacy` name and a templated name, in a task key as well as in `action` and `local_action`,
+and an `action` or `local_action` whose module is not a plain string (in a JSON file ansible-core reads
+`{"__ansible_unsafe": "zz.evil.pwn"}` there as the module name). A
 module of a community collection, such as `community.general.make` or `ansible.posix.at`, is refused because it is not
 listed. To list one, the same pull request:
 
@@ -67,16 +76,21 @@ Ansible loads a role's `tasks`, `handlers` and `meta` entry point `main` also as
 suffix, and `tasks_from` or `handlers_from` loads any file below `tasks/` or `handlers/` by its exact name. It reads
 each file as JSON first and decrypts a vaulted file. So every file below `roles/remediate/tasks/`, `handlers/` and
 `meta/` must end in `.yml` or `.yaml`, must be YAML that PyYAML reads, and must hold only task lists (`tasks/`,
-`handlers/`) or a mapping (`meta/`); `make lint-repo` refuses anything else there, so no task or handler of the role
+`handlers/`) or a mapping (`meta/`), with no key that starts with `__ansible_` (ansible-core's JSON loader decodes
+such a mapping into another value); `make lint-repo` refuses anything else there, so no task or handler of the role
 escapes the allow list.
 
 The allow list governs modules, so the role does not run tasks it does not own: `include_role`, `import_role` and a
 dependency in `roles/remediate/meta/main.yml` are refused, and `include_tasks` and `import_tasks` are task keys whose
 target is `{{ role_path }}/tasks/` followed by a literal path. Ansible looks for any other relative target in the
-playbook's directory as well, and the rule never reads that file. One limit stays: `ansible.builtin.service` (and
-`package`, which the role does not use) runs the module that the host's service manager fact names. On the supported
-platforms that is `systemd`, a module of ansible-core; on a host with another service manager it can be a community
-module, if that collection is installed on the controller.
+playbook's directory as well, and the rule never reads that file.
+
+Names that Ansible learns only while the play runs get past every rule that reads literal keys, so `make lint-repo`
+refuses them in every task list of the repository: a templated `set_fact` key (accepted only below
+`extensions/molecule/`, whose lifecycle harness switches toggles by name), `args`, a `module_defaults` entry or the
+mapping form of `action` that is not a mapping with literal keys, a free-form argument string with a template (other
+than an include target), and a `loop_var`, `index_var`, `register` or `include_vars`/`vars_prompt` `name` that is
+templated or names a variable that changes what Ansible executes, such as `ansible_python_interpreter`.
 
 ## 1. Read what the content expects
 
@@ -188,8 +202,9 @@ reviews catch most often:
   accept a configuration before it is written, validate it with a module of this collection that runs the service's
   own test through the audited process helper, as `sshd_validate` does for `ssh` (ADR 0023), and validate the
   effective configuration rather than the new file alone.
-- Restart or reload a service only where it runs (`service_facts`), once per run, after a final validation, and prefer
-  a reload that keeps open sessions; check mode never reloads.
+- Restart or reload a service only where systemd runs it (`service_facts` reports it `running` with `source:
+  systemd`), with `ansible.builtin.systemd_service`, once per run, after a final validation, and prefer a reload that
+  keeps open sessions; check mode never reloads. `ansible.builtin.service` is refused in `roles/remediate`.
 
 ## 5. Declare the lifecycle
 

@@ -111,10 +111,14 @@ Rules:
   plus the ``with_`` loops) and the module of an ``action`` or ``local_action`` must be a
   module of ``BUILTIN_MODULES``, a ``freesecdev.linux_compliance`` module or a community module on
   ``ALLOWED_COMMUNITY_MODULES`` of ``tools/lint/repo_rules/remediate_modules.py``, by its fully
-  qualified name; short, ``ansible.legacy`` and templated names are refused. ``BUILTIN_MODULES``
+  qualified name; short, ``ansible.legacy`` and templated names are refused, and so is an
+  ``action`` or ``local_action`` whose module is not a plain string (a JSON load marker such as
+  ``__ansible_unsafe`` is a module name to Ansible). ``BUILTIN_MODULES``
   holds the module files of the pinned ansible-core that its ``plugin_routing`` neither redirects
   nor removes, so ``ansible.builtin.make`` (``community.general.make``) and
-  ``ansible.builtin.sysctl`` (``ansible.posix.sysctl``) are refused; a collection module needs its
+  ``ansible.builtin.sysctl`` (``ansible.posix.sysctl``) are refused, and its
+  ``DISPATCHING_MODULES`` ``gather_facts``, ``package`` and ``service`` are refused because their
+  action plugins choose the module to run while the play runs; a collection module needs its
   file in ``plugins/modules`` or ``plugins/action`` and no redirect or tombstone in
   ``meta/runtime.yml``. ``include_role``, ``import_role`` and a dependency in
   ``roles/remediate/meta/main.yml`` are refused, and ``include_tasks`` and ``import_tasks`` must
@@ -126,7 +130,16 @@ Rules:
   cannot read and vaulted files as a role's tasks, handlers or metadata,
   ``tools/lint/repo_rules/remediate_files.py`` refuses every file below
   ``roles/remediate/tasks/``, ``handlers/`` and ``meta/`` that is not a readable ``.yml`` or
-  ``.yaml`` file of task lists (``meta/``: mappings).
+  ``.yaml`` file of task lists (``meta/``: mappings) or that holds a key starting with
+  ``__ansible_``, which ansible-core's JSON loader decodes into another value.
+
+* Names that Ansible learns only at run time (FREES-203): in every task list, ``set_fact`` keys are
+  literal (a templated key is accepted only below ``extensions/molecule/``), ``args``,
+  ``module_defaults`` entries and the mapping form of ``action`` are mappings with literal keys, a
+  free-form argument string holds no template except an include target, and ``loop_var``,
+  ``index_var``, ``register`` and the ``name`` of ``include_vars`` and ``vars_prompt`` are
+  literal names that are not execution-altering variables
+  (``tools/lint/repo_rules/runtime_names.py``).
 
 Violations are printed as ``path:line: message`` and the exit status is 1. An
 ``--index-modes`` listing that cannot be read is reported with exit status 2.

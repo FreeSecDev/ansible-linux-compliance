@@ -15,7 +15,9 @@ module, and so do the first word of an ``action`` or ``local_action`` string and
 of their mapping form. Such a name must be the fully qualified name of a module of
 ``BUILTIN_MODULES``, of a ``freesecdev.linux_compliance`` module or of an allow-listed module: a
 short name, an ``ansible.legacy`` name and a templated name are refused, because Ansible may resolve
-them to any module.
+them to any module. An ``action`` or ``local_action`` that is neither a string nor a mapping whose
+every ``module`` key is a string is refused too: ansible-core's JSON loader reads a mapping such as
+``{"__ansible_unsafe": "zz.evil.pwn"}`` there as the module name.
 
 A fully qualified name is not proof of the code that runs, because a routing entry sends a name to
 another plugin before Ansible looks for the file. ansible-core routes more than 3700
@@ -44,6 +46,18 @@ also holds ``async_wrapper``, which ansible-core runs on the host for an ``async
 lets no other collection's code run, and the drift test that keeps the list equal to ansible-core
 fails if they are removed.
 
+A name of ``BUILTIN_MODULES`` is still not proof of the module that runs when its action plugin
+chooses that module while the play runs. ``gather_facts`` runs the fact modules that its
+``network_os`` argument, ``ansible_network_os`` or ``ansible_facts_modules`` name (``cisco.ios.ios``
+runs ``cisco.ios.ios_facts``), ``package`` runs the module that ``ansible_package_use`` or the
+``pkg_mgr`` fact names, and ``service`` the one that the ``service_mgr`` fact names; a task can set
+each of these, a fact also through a templated ``set_fact`` key. ``DISPATCHING_MODULES`` lists them,
+and they are refused although they stay on ``BUILTIN_MODULES``. ``dnf`` also chooses its backend at
+run time, but only among ``VALID_BACKENDS`` of ansible-core, ``dnf``, ``dnf5`` and ``yum``, which
+ansible-core redirects to ``dnf``; ``BOUNDED_DISPATCHING_MODULES`` records that review. A unit
+test reads every action plugin of the installed ansible-core and fails when one runs a module whose
+name is not a literal and it is on neither list.
+
 An allow-listed module is accepted only while its collection is pinned at one exact version
 (``<major>.<minor>.<patch>``) in ``galaxy.yml`` ``dependencies``, in
 ``extensions/molecule/requirements.yml`` and in ``extensions/molecule/collections.pins``. Files
@@ -62,6 +76,7 @@ import yaml
 from tools.lint.repo_rules.ansible_tasks import (
     ACTION_KEYS,
     INCLUDE_FILE_KEYS,
+    MODULE_KEY,
     ROLE_PATH_TARGET,
     TEMPLATE_MARKERS,
     action_modules,
@@ -152,6 +167,8 @@ BUILTIN_MODULES: Final[frozenset[str]] = frozenset(
         "yum_repository",
     }
 )
+DISPATCHING_MODULES: Final[frozenset[str]] = frozenset({"gather_facts", "package", "service"})
+BOUNDED_DISPATCHING_MODULES: Final[frozenset[str]] = frozenset({"dnf"})
 REMEDIATE_ROLE: Final[tuple[str, str]] = ("roles", "remediate")
 ROLE_METADATA: Final[frozenset[tuple[str, ...]]] = frozenset(
     {("roles", "remediate", "meta", "main.yml"), ("roles", "remediate", "meta", "main.yaml")}
@@ -244,6 +261,16 @@ BUILTIN_MESSAGE: Final[str] = (
     "files of the pinned ansible-core that its plugin_routing leaves in place, so it runs a module "
     "of another collection or none (ADR 0032 §1)"
 )
+DISPATCH_MESSAGE: Final[str] = (
+    "module {name!r} is not allowed in roles/remediate: its action plugin chooses while the play "
+    "runs, from an argument, a variable or a fact, which module to execute, and that module is "
+    "never checked against the allow list (ADR 0032 §1)"
+)
+ACTION_SHAPE_MESSAGE: Final[str] = (
+    "{keyword} must be a module string or a mapping whose every module key is a string in "
+    "roles/remediate: Ansible reads a JSON load marker such as __ansible_unsafe there as the "
+    "module name, which the rule cannot see (ADR 0032 §1)"
+)
 OWN_MISSING_MESSAGE: Final[str] = (
     "module {name!r} is not allowed in roles/remediate: plugins/modules and plugins/action hold "
     "no file {module}.py (ADR 0032 §1)"
@@ -314,6 +341,28 @@ def _module_names(task: yaml.MappingNode) -> Iterable[tuple[yaml.Node, str, yaml
                 yield module, words[0] if words else "", None
         elif not _is_keyword(name):
             yield key, name, value
+
+
+def _action_shape_problems(task: yaml.MappingNode) -> Iterable[tuple[yaml.Node, str]]:
+    """Yield every ``action`` or ``local_action`` value of ``task`` whose module is not plain.
+
+    Ansible takes the module of these keywords from a string or from the ``module`` key of a
+    mapping. ``DataLoader`` reads a task file as JSON first, and its ``AnsibleJSONDecoder`` turns a
+    mapping that holds a load marker (``{"__ansible_unsafe": "zz.evil.pwn"}``, or
+    ``__ansible_vault``) into a string, so such a mapping in the keyword or in its ``module`` key
+    names a module that PyYAML shows as a mapping. A mapping without a ``module`` key, a ``module``
+    value that is not a scalar and a value that is neither a scalar nor a mapping are refused.
+    """
+    for name, _, value in scalar_items(task):
+        if name not in ACTION_KEYS or isinstance(value, yaml.ScalarNode):
+            continue
+        modules = (
+            [inner for key, _, inner in scalar_items(value) if key == MODULE_KEY]
+            if isinstance(value, yaml.MappingNode)
+            else []
+        )
+        if not modules or not all(isinstance(module, yaml.ScalarNode) for module in modules):
+            yield value, ACTION_SHAPE_MESSAGE.format(keyword=name)
 
 
 def _mapping(value: object) -> dict[object, object]:
@@ -448,6 +497,8 @@ def _name_problem(name: str, allowed: frozenset[str], root: Path) -> str | None:
         return MODULE_MESSAGE.format(name=name)
     collection, module = match.group("collection", "module")
     if collection == BUILTIN_COLLECTION:
+        if module in DISPATCHING_MODULES:
+            return DISPATCH_MESSAGE.format(name=name)
         return None if module in BUILTIN_MODULES else BUILTIN_MESSAGE.format(name=name)
     if collection == OWN_COLLECTION:
         return _own_module_problem(name, module, root)
@@ -488,6 +539,7 @@ def _task_problems(
 ) -> Iterable[tuple[yaml.Node, str]]:
     """Yield every module, role include and task include of ``document`` that may not run."""
     for task in task_mappings(document):
+        yield from _action_shape_problems(task)
         for node, name, arguments in _module_names(task):
             problem = _name_problem(name, allowed, root)
             if problem is not None:

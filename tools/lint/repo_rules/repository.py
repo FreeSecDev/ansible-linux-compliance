@@ -47,6 +47,7 @@ from tools.lint.repo_rules.own_remediation import own_remediation_findings
 from tools.lint.repo_rules.remediate_files import role_file_findings
 from tools.lint.repo_rules.remediate_modules import check_remediate_modules
 from tools.lint.repo_rules.rendered_files import NUL, rendered_file_findings
+from tools.lint.repo_rules.runtime_names import runtime_name_findings
 from tools.lint.repo_rules.yaml_text import check_document_start, check_yaml_comments
 
 if TYPE_CHECKING:
@@ -242,6 +243,7 @@ def _yaml_violations(path: Path, data: bytes, relative: Path | None, root: Path)
         *module_parameter_findings(path, documents, relative),
         *target_findings(path, relative, documents),
         *yaml_variable_findings(path, relative, documents),
+        *runtime_name_findings(path, relative, documents),
         *check_remediate_modules(path, relative, documents, root=root),
     ]
     if not executed:

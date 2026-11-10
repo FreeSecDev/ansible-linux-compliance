@@ -315,8 +315,9 @@ takes effect, so a drop-in that sshd does not use is never reported applied or c
 - **Mitigation:** the family is disruptive and runs only with `ssh` in the allow-list, for apply and cleanup alike.
   Every change is validated with `sshd -t` on the whole effective configuration before anything is written; when sshd
   refuses, nothing is installed. After the changes `sshd -t` runs again; when it refuses, the run rolls back what it
-  created and fails without reloading. sshd is reloaded, never restarted, and only where `service_facts` reports it
-  running, so open sessions, including the controller's, continue. A run that applies `PermitRootLogin no` or
+  created and fails without reloading. sshd is reloaded through systemd (`ansible.builtin.systemd_service`), never
+  restarted, and only where `service_facts` reports it running under systemd, so open sessions, including the
+  controller's, continue. A run that applies `PermitRootLogin no` or
   `prohibit-password` while it reaches the host over SSH as root prints a warning. Check mode reports every change and
   changes nothing.
 - **Residual:** the settings themselves are the profile's; a profile that forbids root logins locks out an operator who
