@@ -493,6 +493,56 @@
   tags:
     - always
 
+- name: Kernel parameters | Inspect the vendor files to write back again, with their SHA-256, before the cleanup writes
+  ansible.builtin.stat:
+    path: "{{ __linux_compliance_remediate_kp_restore_path }}"
+    follow: false
+    get_checksum: true
+    checksum_algorithm: sha256
+    get_mime: false
+    get_attributes: false
+  loop: >-
+    {{ __linux_compliance_remediate_kp_cleanup_plan.values() | rejectattr('reason') | map(attribute='restores')
+       | flatten | map(attribute='path') | unique | sort }}
+  loop_control:
+    loop_var: __linux_compliance_remediate_kp_restore_path
+  register: __linux_compliance_remediate_kp_restore_stats
+  tags:
+    - always
+
+- name: Kernel parameters | Refuse the cleanup of the rules whose vendor file changed since it was read
+  vars:
+    __linux_compliance_remediate_kp_stale: >-
+      {%- set stale = [] -%}
+      {%- for result in __linux_compliance_remediate_kp_restore_stats.results | default([]) -%}
+      {%- set path = result.__linux_compliance_remediate_kp_restore_path -%}
+      {%- if not (result.stat.isreg | default(false))
+            or result.stat.checksum | default('')
+               != __linux_compliance_remediate_kp_texts[path] | default('') | hash('sha256') -%}
+      {%- set _ = stale.append(path) -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {{ stale }}
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_kp_cleanup_plan: >-
+      {%- set plan = {} -%}
+      {%- for rule_id, planned in __linux_compliance_remediate_kp_cleanup_plan.items() -%}
+      {%- set changed = planned.restores | map(attribute='path')
+            | select('in', __linux_compliance_remediate_kp_stale) | list -%}
+      {%- if planned.reason is none and changed | length > 0 -%}
+      {%- set _ = plan.update({rule_id: {'reason': 'modified_since_read',
+            'detail': changed | join(', ') ~ ' changed after the collection read it, so it would no longer write'
+                      ~ ' back the line into the bytes that it decided on',
+            'restores': [], 'runtime': []}}) -%}
+      {%- else -%}
+      {%- set _ = plan.update({rule_id: planned}) -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {{ plan }}
+  when: __linux_compliance_remediate_kp_stale | length > 0
+  tags:
+    - always
+
 - name: Kernel parameters | Name the rules whose prior state can be restored, those that change forwarding first
   ansible.builtin.set_fact:
     __linux_compliance_remediate_kp_reverted_ids: >-
@@ -630,6 +680,10 @@
     __linux_compliance_remediate_kp_reverted_plans: >-
       {{ __linux_compliance_remediate_kp_reverted_ids | map('extract', __linux_compliance_remediate_kp_cleanup_plan)
          | list }}
+    __linux_compliance_remediate_kp_restored_texts: >-
+      {{ __linux_compliance_remediate_kp_texts
+         | freesecdev.linux_compliance.sysctl_restored(__linux_compliance_remediate_kp_reverted_plans
+                                                       | map(attribute='restores') | flatten) }}
     __linux_compliance_remediate_kp_planned_restores: >-
       {{ dict(__linux_compliance_remediate_kp_reverted_plans | map(attribute='runtime') | flatten
               | map(attribute='name')
@@ -640,10 +694,10 @@
       {{ __linux_compliance_remediate_kp_running_values
          | combine(__linux_compliance_remediate_kp_planned_restores if ansible_check_mode else {})
          | combine(__linux_compliance_remediate_kp_reread.running | default({})) }}
-    __linux_compliance_remediate_kp_texts: >-
-      {{ __linux_compliance_remediate_kp_texts
-         | freesecdev.linux_compliance.sysctl_restored(__linux_compliance_remediate_kp_reverted_plans
-                                                       | map(attribute='restores') | flatten) }}
+    __linux_compliance_remediate_kp_texts: "{{ __linux_compliance_remediate_kp_restored_texts }}"
+    __linux_compliance_remediate_kp_disk_texts: >-
+      {{ __linux_compliance_remediate_kp_texts if ansible_check_mode
+         else __linux_compliance_remediate_kp_restored_texts }}
   tags:
     - always
 
@@ -863,6 +917,55 @@
             'current': current}}) -%}
       {%- endfor -%}
       {{ plan }}
+  tags:
+    - always
+
+- name: Kernel parameters | Inspect the vendor files to edit again, with their SHA-256, right before anything is written
+  ansible.builtin.stat:
+    path: "{{ __linux_compliance_remediate_kp_edit_path }}"
+    follow: false
+    get_checksum: true
+    checksum_algorithm: sha256
+    get_mime: false
+    get_attributes: false
+  loop: >-
+    {{ __linux_compliance_remediate_kp_plan.values() | selectattr('status', 'equalto', 'applied')
+       | map(attribute='edits') | flatten | map(attribute='path') | unique | sort }}
+  loop_control:
+    loop_var: __linux_compliance_remediate_kp_edit_path
+  register: __linux_compliance_remediate_kp_edit_stats
+  tags:
+    - always
+
+- name: Kernel parameters | Refuse every rule when a vendor file to edit changed since it was read, before any write
+  vars:
+    __linux_compliance_remediate_kp_stale: >-
+      {%- set stale = [] -%}
+      {%- for result in __linux_compliance_remediate_kp_edit_stats.results | default([]) -%}
+      {%- set path = result.__linux_compliance_remediate_kp_edit_path -%}
+      {%- if not (result.stat.isreg | default(false))
+            or result.stat.checksum | default('')
+               != __linux_compliance_remediate_kp_disk_texts[path] | default('') | hash('sha256') -%}
+      {%- set _ = stale.append(path) -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {{ stale }}
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_kp_plan: >-
+      {%- set plan = {} -%}
+      {%- for rule_id, planned in __linux_compliance_remediate_kp_plan.items() -%}
+      {%- if planned.status in ['applied', 'compliant'] -%}
+      {%- set _ = plan.update({rule_id: planned | combine({'status': 'modified_since_read',
+            'reason': __linux_compliance_remediate_kp_stale | join(', ') ~ ' changed after the collection read it;'
+                      ~ ' every rule of the family is decided on the texts of all its files together, so none'
+                      ~ ' was written, and the next run reads them again',
+            'write': false, 'edits': [], 'runtime': []})}) -%}
+      {%- else -%}
+      {%- set _ = plan.update({rule_id: planned}) -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {{ plan }}
+  when: __linux_compliance_remediate_kp_stale | length > 0
   tags:
     - always
 

@@ -330,6 +330,41 @@ refuses malformed input. `lineinfile` is the only module that edits a file in pl
 cleanup tasks themselves are now rendered in check mode by `tests/unit/roles/test_sysctl_plan_render.py`, which runs
 the real tasks on local hosts with mocked inputs, so their Jinja is tested in CI.
 
+**Amendment (FREES-208).** Neither write of a vendor line, the apply edit nor the cleanup restore, checked that
+the file still held the bytes that the family had read and decided on, as the families of `login.defs`, `auditd.conf`
+and the SSH server do: a carriage return or any other change written between the read and the write would still have
+been rewritten by `lineinfile`. Both now read the SHA-256 of every vendor file that they would write again, with
+`stat` and `follow: false`, and compare it with the bytes that were read:
+
+- Cleanup checks the files of its restores before it writes anything, the running values included. A rule whose
+  restore would write into a file that is no longer a regular file with those bytes stays `cleanup_incomplete` with
+  the reason `modified_since_read`, writes nothing and keeps its ledger entry; the other rules are cleaned up.
+- Apply checks the files of its edits after every rule is decided and before anything is written: the ledger
+  records, the drop-in directory, the drop-ins, the edits and the running values. The bytes expected are the texts
+  as the cleanup of the same run leaves them (in check mode, as they were read, because the cleanup wrote nothing).
+  When one file changed, every rule that is `applied` or `compliant` becomes `modified_since_read` and nothing of the
+  family is written: each rule is decided on the texts of all the family's files together, and the sample rate's
+  decision on its companion's planned edit as well (section 2b), so no decision of the run still holds. The next run
+  reads the files again.
+
+`restore_lines`, which gives the texts as the cleanup leaves them, now also ends a restored last line with a line
+feed, as `lineinfile` does, so the bytes compared after a cleanup in the same run are the bytes on the disk; the
+`changes` regression group proves this on Ubuntu with one run that restores the last line, without a line feed, of
+`10-network-security.conf` for `all.rp_filter` and edits its line of `default.rp_filter`. A concurrent write itself
+cannot be staged in Molecule without a program running beside the role, so the refusals are proven by the render
+test below.
+`tests/unit/roles/test_sysctl_plan_render.py` renders both refusals with the role's own Jinja, from files whose bytes
+on the disk differ from those read, and resolves the rules' values with the role's own resolution task instead of
+the catalogue's raw value; it fails instead of skipping when `CI` is set and `ansible-playbook` or the collection link
+is missing. The adversarial cases of the third to eighth reviews stay open on FREES-208 and are still not in
+`cases.json`: the verdict generator runs `unshare --propagation private` and mounts a tmpfs over `/proc/sys` inside its
+container, and Docker's default AppArmor profile refuses every mount, so `make sysctl-reader-verdicts` fails on an
+AppArmor host such as the workstation of this change. Running the container without AppArmor confinement
+(`apparmor=unconfined`) would weaken the generator's isolation and was not done; the generator is unchanged. Until the
+table can be regenerated (a host without AppArmor, or a reviewed AppArmor profile that allows only these mounts), those
+forms stay refused (fail closed) and covered by unit tests, and the companion value that is tracked per write (R6-2)
+is not yet checked against the real readers.
+
 ### 2a. A conflicting line in a vendor file is set to the compliant value
 
 The pattern of ADR 0023, section 1a: a conflicting line in one of the files that Ubuntu's packages ship with settings

@@ -782,7 +782,10 @@ sorts after the drop-ins (`zz-…`) makes its rule `overridden` and one that sor
 restores, the vendor file byte for byte; a drop-in removed by hand is `restored` without a write; a file without the
 header at a drop-in path is `not_owned`; with the running values on, a rule whose running value the container cannot
 set is `runtime_unavailable` with nothing written or recorded; and on Rocky Linux, where `/etc/sysctl.d` is missing as
-built, a symbolic link in its place makes every rule `not_directory` with nothing written through it. `runtime`
+built, a symbolic link in its place makes every rule `not_directory` with nothing written through it; on Ubuntu,
+one run that cleans up `all.rp_filter` and applies `default.rp_filter` in the same vendor file, whose last line has no
+line feed, restores the one line and edits the other instead of refusing the edit as `modified_since_read`: the bytes
+that the cleanup leaves are the ones that the apply decided on (FREES-208). `runtime`
 requires libvirt and is described in the [libvirt guide](molecule-libvirt.md#driver-requirements-of-a-topic).
 
 `shared/tasks/lifecycle_ssh_vendor_regressions.yml`, the `vendor` group, adds

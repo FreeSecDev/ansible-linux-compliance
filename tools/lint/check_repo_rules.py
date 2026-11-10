@@ -106,6 +106,14 @@ Rules:
   (including ``usg fix``) or run a script that it provides, except the exact ``PINNED_EXCEPTIONS``
   of ``tools/lint/repo_rules/own_remediation.py``.
 
+* Every remediation family has an internal variable prefix of its own (FREES-208,
+  ``tools/lint/repo_rules/family_prefixes.py``): the task files of ``roles/remediate/tasks``
+  that include one another (a family file, its helpers and the families that share them) define
+  internal variables with exactly one prefix ``__linux_compliance_remediate_<xx>_``, which no
+  other group of task files uses and which is neither the first component of a constant of the
+  role nor that of a name the role shares between families (``__linux_compliance_remediate_rule``
+  and the names that ``main.yml`` and ``dispatch.yml`` define).
+
 Violations are printed as ``path:line: message`` and the exit status is 1. An
 ``--index-modes`` listing that cannot be read is reported with exit status 2.
 """
