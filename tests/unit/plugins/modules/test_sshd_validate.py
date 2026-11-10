@@ -25,13 +25,14 @@ def result(
     stdout: bytes = b"",
     *,
     timed_out: bool = False,
+    truncated: bool = False,
 ) -> process.CommandResult:
     return process.CommandResult(
         argv=("/usr/sbin/sshd",),
         returncode=returncode,
         stdout=stdout,
         stderr=stderr,
-        stdout_truncated=False,
+        stdout_truncated=truncated,
         stderr_truncated=False,
         duration_seconds=0.01,
         timed_out=timed_out,
@@ -126,7 +127,7 @@ def test_every_keyword_of_the_catalogue_is_accepted() -> None:
 def test_a_valid_configuration(monkeypatch: pytest.MonkeyPatch) -> None:
     fake = install(monkeypatch, FakeRun(result))
     outcome = sshd_validate.validate(["PermitRootLogin=no", "MaxAuthTries=4"])
-    assert outcome == {"available": True, "valid": True, "message": ""}
+    assert outcome == {"available": True, "valid": True, "message": "", "effective": {}}
     assert fake.specs[0].executable == "sshd"
     assert fake.specs[0].args == (
         "-t",
@@ -188,6 +189,7 @@ def test_a_missing_sshd_is_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
         "available": False,
         "valid": False,
         "message": "executable not found in the trusted directories: 'sshd'",
+        "effective": {},
     }
     assert fake.specs == []
 
@@ -245,6 +247,7 @@ def test_check_mode_runs_the_same_read_only_test(
     assert code == 0
     assert outcome["valid"] is False
     assert outcome["message"] == "bad"
+    assert outcome["check_mode"] is True
     assert fake.specs[0].args == ("-t", "-f", "/etc/ssh/sshd_config")
 
 
@@ -271,3 +274,130 @@ def test_the_module_runs_as_a_script(
     with patch_module_args({}), pytest.raises(SystemExit) as raised:
         spec.loader.exec_module(importlib.util.module_from_spec(spec))
     assert raised.value.code == 0
+
+
+EFFECTIVE_OUTPUT = (
+    b"port 22\n"
+    b"permitrootlogin without-password\n"
+    b"clientaliveinterval 300\n"
+    b"ciphers aes256-gcm@openssh.com,aes128-ctr\n"
+    b"banner none\n"
+    b"permitrootlogin yes\n"
+    b"PermitRootLogin no\n"
+    b"x11forwarding \x01yes\n"
+    b"subsystem sftp /usr/lib/openssh/sftp-server\n"
+)
+
+
+def test_the_extended_test_mode_returns_the_native_keywords(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake = install(monkeypatch, FakeRun(lambda: result(0, b"", EFFECTIVE_OUTPUT)))
+    outcome = sshd_validate.validate(["PermitRootLogin=no"], effective=True)
+    assert outcome == {
+        "available": True,
+        "valid": True,
+        "message": "",
+        "effective": {
+            "permitrootlogin": "without-password",
+            "clientaliveinterval": "300",
+            "ciphers": "aes256-gcm@openssh.com,aes128-ctr",
+            "banner": "none",
+        },
+    }
+    assert fake.specs[0].args == ("-T", "-f", "/etc/ssh/sshd_config", "-o", "PermitRootLogin=no")
+
+
+def test_the_extended_test_mode_applies_the_match_blocks_of_a_client(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake = install(monkeypatch, FakeRun(lambda: result(0, b"", b"permitrootlogin yes\n")))
+    client = sshd_validate.client_argument(
+        {"user": "alice", "host": "client.example", "addr": "192.0.2.10"}
+    )
+    outcome = sshd_validate.validate([], effective=True, client=client)
+    assert outcome["effective"] == {"permitrootlogin": "yes"}
+    assert fake.specs[0].args == (
+        "-T",
+        "-f",
+        "/etc/ssh/sshd_config",
+        "-C",
+        "user=alice,host=client.example,addr=192.0.2.10",
+    )
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        lambda: result(255, b"line 1: Bad configuration option: Foo", EFFECTIVE_OUTPUT),
+        lambda: result(0, b"", EFFECTIVE_OUTPUT, truncated=True),
+        lambda: result(0, b"", EFFECTIVE_OUTPUT, timed_out=True),
+    ],
+)
+def test_a_refused_or_incomplete_extended_test_returns_no_values(
+    monkeypatch: pytest.MonkeyPatch, answer: Callable[[], process.CommandResult]
+) -> None:
+    install(monkeypatch, FakeRun(answer))
+    outcome = sshd_validate.validate([], effective=True)
+    assert outcome["valid"] is False
+    assert outcome["effective"] == {}
+
+
+def test_the_message_of_the_extended_test_holds_only_what_sshd_reports_on_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    install(monkeypatch, FakeRun(lambda: result(0, b"warning", EFFECTIVE_OUTPUT)))
+    assert sshd_validate.validate([], effective=True)["message"] == "warning"
+
+
+@pytest.mark.parametrize(
+    "client",
+    [
+        "user=alice",
+        {"user": "alice", "host": "client.example"},
+        {"user": "Alice", "host": "client.example", "addr": "192.0.2.10"},
+        {"user": "alice", "host": "client.example", "addr": "2001:db8::1"},
+        {"user": "alice", "host": "client.example,addr=1.2.3.4", "addr": "192.0.2.10"},
+        {"user": 1, "host": "client.example", "addr": "192.0.2.10"},
+    ],
+)
+def test_clients_that_are_not_passed_to_sshd(client: object) -> None:
+    with pytest.raises(sshd_validate.SettingError, match="client"):
+        sshd_validate.client_argument(client)
+
+
+def test_no_client_passes_no_option() -> None:
+    assert sshd_validate.client_argument(None) is None
+
+
+def test_the_module_returns_the_effective_values(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake = install(monkeypatch, FakeRun(lambda: result(0, b"", EFFECTIVE_OUTPUT)))
+    code, outcome = run(
+        capsys,
+        {
+            "effective": True,
+            "client": {"user": "bob", "host": "h", "addr": "192.0.2.1"},
+        },
+    )
+    assert code == 0
+    assert outcome["changed"] is False
+    assert cast("dict[str, str]", outcome["effective"])["permitrootlogin"] == "without-password"
+    assert fake.specs[0].args[:5] == (
+        "-T",
+        "-f",
+        "/etc/ssh/sshd_config",
+        "-C",
+        "user=bob,host=h,addr=192.0.2.1",
+    )
+
+
+def test_the_module_refuses_a_client_without_the_extended_test(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake = install(monkeypatch, FakeRun(result))
+    code, outcome = run(capsys, {"client": {"user": "bob", "host": "h", "addr": "192.0.2.1"}})
+    assert code == 1
+    assert "only used with effective=true" in str(outcome["msg"])
+    assert fake.specs == []

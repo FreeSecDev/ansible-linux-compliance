@@ -1,0 +1,80 @@
+---
+- name: Faillock case | Write the faillock.conf of the case, as an administrator would
+  ansible.builtin.copy:
+    content: "{{ regression_case.text }}"
+    dest: "{{ regression_conf }}"
+    follow: false
+    mode: "{{ regression_original_stat.stat.mode }}"
+    owner: root
+    group: root
+
+- name: Faillock case | Switch every rule of the topic on
+  ansible.builtin.set_fact:
+    "{{ item }}": true
+  loop: "{{ regression_toggles }}"
+
+- name: Faillock case | Apply the topic to the file of the case
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+    lifecycle_family: faillock
+
+- name: Faillock case | Read faillock.conf after the apply
+  ansible.builtin.slurp:
+    src: "{{ regression_conf }}"
+  register: regression_case_applied
+
+- name: Faillock case | Check the status of each rule and the file after the apply
+  vars:
+    regression_case_statuses: >-
+      {{ {regression_deny: regression_case.statuses.deny, regression_unlock: regression_case.statuses.unlock} }}
+  ansible.builtin.assert:
+    that:
+      - lifecycle_results | items2dict(key_name='rule_id', value_name='status') == regression_case_statuses
+      - >-
+        lifecycle_results | rejectattr('status', 'in', ['applied', 'compliant']) | selectattr('reason', 'none')
+        | list == []
+      - >-
+        lifecycle_results | rejectattr('status', 'equalto', 'applied') | selectattr('changed') | list == []
+      - regression_case_applied.content | b64decode == regression_case.applied
+    fail_msg: >-
+      {{ regression_label }}, {{ regression_case.name }}, apply: {{ lifecycle_results }};
+      file {{ regression_case_applied.content | b64decode | to_json }}
+    quiet: true
+
+- name: Faillock case | Switch every rule of the topic off
+  ansible.builtin.set_fact:
+    "{{ item }}": false
+  loop: "{{ regression_toggles }}"
+
+- name: Faillock case | Clean up the topic
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+    lifecycle_family: faillock
+
+- name: Faillock case | Read faillock.conf and the ledger after the cleanup
+  ansible.builtin.slurp:
+    src: "{{ regression_conf }}"
+  register: regression_case_cleaned
+
+- name: Faillock case | Read the ledger after the cleanup
+  freesecdev.linux_compliance.control_state:
+    action: list
+  register: regression_case_ledger
+
+- name: Faillock case | Check that every applied rule was restored and the file is byte for byte that of the case
+  ansible.builtin.assert:
+    that:
+      - lifecycle_results | map(attribute='status') | unique | list in [['restored'], []]
+      - >-
+        lifecycle_results | map(attribute='rule_id') | sort
+        == regression_case.statuses | dict2items | selectattr('value', 'equalto', 'applied')
+           | map(attribute='key') | map('extract', {'deny': regression_deny, 'unlock': regression_unlock})
+           | sort
+      - regression_case_cleaned.content | b64decode == regression_case.text
+      - regression_case_ledger.entries | selectattr('rule_id', 'in', lifecycle_rule_ids) | list == []
+    fail_msg: "{{ regression_label }}, {{ regression_case.name }}, cleanup: {{ lifecycle_results }}"
+    quiet: true

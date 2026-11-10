@@ -1,0 +1,165 @@
+---
+- name: PAM configuration line | Refuse to prepare a family that the dispatcher did not plan
+  ansible.builtin.assert:
+    that:
+      - linux_compliance_remediate_enabled is boolean
+      - linux_compliance_remediate_enabled
+      - __linux_compliance_remediate_plan is defined
+      - __linux_compliance_remediate_plan is mapping
+      - __linux_compliance_remediate_plan.enabled is true
+      - __linux_compliance_remediate_family is mapping
+      - __linux_compliance_remediate_family.name in ['faillock', 'pwhistory']
+      - >-
+        __linux_compliance_remediate_family ==
+        (__linux_compliance_remediate_plan.families
+         | selectattr('name', 'equalto', __linux_compliance_remediate_family.name) | list | first | default({}))
+      - __linux_compliance_remediate_sc is mapping
+      - >-
+        __linux_compliance_remediate_sc == {
+          'faillock': {'family': 'faillock', 'path': __linux_compliance_remediate_faillock_conf,
+                       'module': 'pam_faillock', 'type': 'auth'},
+          'pwhistory': {'family': 'pwhistory', 'path': __linux_compliance_remediate_pwhistory_conf,
+                        'module': 'pam_pwhistory', 'type': 'password'}
+        }[__linux_compliance_remediate_family.name]
+    fail_msg: >-
+      pam_conf_prepare.yml runs only from the faillock or pwhistory family file that the remediate dispatcher
+      included, with linux_compliance_remediate_enabled true. No change was made to the host.
+    quiet: true
+  tags:
+    - always
+
+- name: PAM configuration line | Resolve the value that the profile requires for every rule to apply
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_sc_values: >-
+      {%- set values = {} -%}
+      {%- for rule in __linux_compliance_remediate_family.apply -%}
+      {%- set found = rule.parameters.profile_values | default([])
+            | selectattr('content_sha256', 'equalto', linux_compliance_discovered.content_sha256)
+            | selectattr('profiles', 'contains', linux_compliance_remediate_profile)
+            | map(attribute='value') | map('join', '') | list -%}
+      {%- set _ = values.update({rule.rule_id: (found | first | default(none))
+            if rule.parameters.value_id is defined else ''}) -%}
+      {%- endfor -%}
+      {{ values }}
+    __linux_compliance_remediate_sc_written: {}
+    __linux_compliance_remediate_sc_pending_text: null
+    __linux_compliance_remediate_sc_pending_read: ''
+  tags:
+    - always
+
+- name: PAM configuration line | Refuse a malformed rule or a missing profile value before anything changes
+  vars:
+    __linux_compliance_remediate_sc_check: "{{ __linux_compliance_remediate_sc_rule.parameters | default({}) }}"
+    __linux_compliance_remediate_sc_check_value: >-
+      {{ __linux_compliance_remediate_sc_values[__linux_compliance_remediate_sc_rule.rule_id] | default('') }}
+  ansible.builtin.assert:
+    that:
+      - __linux_compliance_remediate_sc_check.setting | default('') is string
+      - >-
+        __linux_compliance_remediate_sc_check.setting | default('')
+        is match(__linux_compliance_remediate_security_conf_setting_pattern)
+      - >-
+        __linux_compliance_remediate_sc_check.comparison | default('')
+        in __linux_compliance_remediate_security_conf_comparisons
+      - __linux_compliance_remediate_sc_check.stack_checked | default('') is boolean
+      - >-
+        (__linux_compliance_remediate_sc_check.comparison | default('') == 'present')
+        == (__linux_compliance_remediate_sc_check.value_id is not defined)
+      - >-
+        __linux_compliance_remediate_sc_rule not in __linux_compliance_remediate_family.apply
+        or __linux_compliance_remediate_sc_check.comparison == 'present'
+        or (__linux_compliance_remediate_sc_check_value is string
+            and __linux_compliance_remediate_sc_check_value
+                is match(__linux_compliance_remediate_security_conf_number_pattern)
+            and (__linux_compliance_remediate_sc_check.comparison != 'at_most'
+                 or __linux_compliance_remediate_sc_check_value | int >= 1))
+    fail_msg: >-
+      {{ __linux_compliance_remediate_sc_rule.rule_id }} cannot be written to
+      {{ __linux_compliance_remediate_sc.path }}: it needs a setting name in lower case, a comparison of
+      {{ __linux_compliance_remediate_security_conf_comparisons }}, a boolean stack_checked, a value exactly when
+      the comparison is not present and, to be applied, the value
+      {{ __linux_compliance_remediate_sc_check.value_id | default('') }} that the profile
+      {{ linux_compliance_remediate_profile }} gives it in the content
+      {{ linux_compliance_discovered.content_sha256 | default('') }} as a decimal number (at least 1 for a maximum),
+      but the catalogue holds {{ __linux_compliance_remediate_sc_check_value }}. The values are generated from the
+      pinned content (ADR 0021, ADR 0027); no setting was changed.
+    quiet: true
+  loop: "{{ __linux_compliance_remediate_family.cleanup + __linux_compliance_remediate_family.apply }}"
+  loop_control:
+    loop_var: __linux_compliance_remediate_sc_rule
+    label: "{{ __linux_compliance_remediate_sc_rule.rule_id }}"
+  tags:
+    - always
+
+- name: PAM configuration line | Inspect the directories from which libpam reads service files
+  ansible.builtin.stat:
+    path: "{{ __linux_compliance_remediate_sc_directory }}"
+    follow: true
+    get_checksum: false
+    get_mime: false
+    get_attributes: false
+  loop: "{{ __linux_compliance_remediate_pam_directories }}"
+  loop_control:
+    loop_var: __linux_compliance_remediate_sc_directory
+  register: __linux_compliance_remediate_sc_directories
+  tags:
+    - always
+
+- name: PAM configuration line | List every PAM service file, since any service can load the module with arguments
+  ansible.builtin.find:
+    paths: >-
+      {{ __linux_compliance_remediate_sc_directories.results | selectattr('stat.isdir', 'defined')
+         | selectattr('stat.isdir') | map(attribute='__linux_compliance_remediate_sc_directory') | list }}
+    file_type: file
+    follow: true
+    hidden: true
+    recurse: false
+  register: __linux_compliance_remediate_sc_stack_files
+  tags:
+    - always
+
+- name: PAM configuration line | Read every PAM service file, as libpam reads it through a link
+  ansible.builtin.slurp:
+    src: "{{ __linux_compliance_remediate_sc_stack_source }}"
+  loop: "{{ __linux_compliance_remediate_sc_stack_files.files | map(attribute='path') | sort }}"
+  loop_control:
+    loop_var: __linux_compliance_remediate_sc_stack_source
+  register: __linux_compliance_remediate_sc_stack_read
+  no_log: true
+  tags:
+    - always
+
+- name: PAM configuration line | Keep the text of every PAM service file
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_sc_stack_texts: >-
+      {{ dict(__linux_compliance_remediate_sc_stack_read.results | default([])
+              | map(attribute='__linux_compliance_remediate_sc_stack_source')
+              | zip(__linux_compliance_remediate_sc_stack_read.results | default([]) | map(attribute='content')
+                    | map('b64decode'))) }}
+  no_log: true
+  tags:
+    - always
+
+- name: PAM configuration line | Name the ledger entries of the family, oldest first
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_sc_ledger: >-
+      {{ __linux_compliance_remediate_ledger.entries | default([])
+         | selectattr('family', 'equalto', __linux_compliance_remediate_family.name)
+         | sort(attribute='applied_at') | list }}
+  tags:
+    - always
+
+- name: PAM configuration line | Name the rules that hold the file and its SHA-256 before the first of them wrote
+  vars:
+    __linux_compliance_remediate_sc_first: >-
+      {{ (__linux_compliance_remediate_sc_ledger | first).prior_values | default([])
+         | items2dict(key_name='name', value_name='value')
+         if __linux_compliance_remediate_sc_ledger else {} }}
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_sc_entries: >-
+      {{ __linux_compliance_remediate_sc_ledger | map(attribute='rule_id') | list }}
+    __linux_compliance_remediate_sc_baseline: >-
+      {{ __linux_compliance_remediate_sc_first.baseline_sha256
+         | default(__linux_compliance_remediate_sc_first.sha256 | default(none)) }}
+  tags:
+    - always

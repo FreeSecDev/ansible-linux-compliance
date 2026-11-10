@@ -91,7 +91,7 @@
     "{{ item }}": false
   loop: "{{ rollback_toggles }}"
 
-- name: SSH rollback regressions | Clean up, which validates nothing first, so that the final sshd -t refuses
+- name: SSH rollback regressions | Clean up, which validates nothing first, so that the final sshd -T refuses
   block:
     - name: SSH rollback regressions | Run the cleanup that sshd refuses after its changes
       ansible.builtin.include_tasks:
@@ -121,12 +121,12 @@
     action: list
   register: rollback_ledger_refused
 
-- name: SSH rollback regressions | Check that the run failed at the final sshd -t, before any reload
+- name: SSH rollback regressions | Check that the run failed at the final sshd -T, before any reload
   ansible.builtin.assert:
     that:
       - rollback_cleanup_passed is not defined
       - rollback_failed_task is search('Stop because sshd refuses the configuration after this run')
-      - rollback_failed_message is search('sshd -t refuses the configuration after this run')
+      - rollback_failed_message is search('sshd -T refuses the configuration after this run')
       - rollback_failed_message is search('NotAnSshdKeyword')
       - rollback_after_refusal.results[:2] | map(attribute='stat.exists') | list == [false, false]
       - rollback_after_refusal.results[2].stat.exists

@@ -1,0 +1,160 @@
+---
+- name: Pwhistory regressions | Refuse to run unless the pwhistory topic has just run its cycles
+  ansible.builtin.assert:
+    that:
+      - lifecycle_topic.family == 'pwhistory'
+      - lifecycle_rule_ids | length == 3
+      - lifecycle_allow_disruptive == ['pwhistory']
+    fail_msg: >-
+      The pwhistory regressions reuse the facts of the pwhistory lifecycle, which must have just run with its three
+      rules; the topic was {{ lifecycle_topic.family | default('none') }} with {{ lifecycle_rule_ids }}.
+    quiet: true
+
+- name: Pwhistory regressions | Name the rules, the toggles and the lines of the regressions
+  ansible.builtin.set_fact:
+    pwr_label: pwhistory regressions
+    pwr_prefix: xccdf_org.ssgproject.content_rule_accounts_password_pam_pwhistory_
+    pwr_conf: /etc/security/pwhistory.conf
+    pwr_stack: /etc/pam.d/system-auth
+    pwr_service: /etc/pam.d/fsd-regression-pwhistory
+    pwr_newline: "\n"
+
+- name: Pwhistory regressions | Name the three rules and their toggles
+  ansible.builtin.set_fact:
+    pwr_root: "{{ pwr_prefix }}enforce_for_root"
+    pwr_password: "{{ pwr_prefix }}remember_password_auth"
+    pwr_system: "{{ pwr_prefix }}remember_system_auth"
+    pwr_root_toggle: linux_compliance_rule_accounts_password_pam_pwhistory_enforce_for_root_enabled
+    pwr_password_toggle: linux_compliance_rule_accounts_password_pam_pwhistory_remember_password_auth_enabled
+    pwr_system_toggle: linux_compliance_rule_accounts_password_pam_pwhistory_remember_system_auth_enabled
+
+- name: Pwhistory regressions | Check that the lifecycle ran exactly these three rules
+  ansible.builtin.assert:
+    that:
+      - lifecycle_rule_ids | sort == [pwr_root, pwr_password, pwr_system] | sort
+      - lifecycle_rules | map(attribute='toggle') | sort == [pwr_root_toggle, pwr_password_toggle, pwr_system_toggle]
+    fail_msg: "{{ pwr_label }}: {{ lifecycle_rule_ids }}"
+    quiet: true
+
+- name: Pwhistory regressions | Read pwhistory.conf and system-auth as built
+  ansible.builtin.slurp:
+    src: "{{ item }}"
+  loop:
+    - "{{ pwr_conf }}"
+    - "{{ pwr_stack }}"
+  register: pwr_original
+
+- name: Pwhistory regressions | Inspect pwhistory.conf and system-auth as built
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+  loop:
+    - "{{ pwr_conf }}"
+    - "{{ pwr_stack }}"
+  register: pwr_original_stats
+
+- name: Pwhistory regressions | Keep the texts as built and after the apply
+  ansible.builtin.set_fact:
+    pwr_text: "{{ pwr_original.results[0].content | b64decode }}"
+    pwr_applied_text: >-
+      {{ pwr_original.results[0].content | b64decode ~ 'enforce_for_root' ~ pwr_newline ~ 'remember = 24'
+         ~ pwr_newline }}
+
+- name: Pwhistory regressions | Take the state of the whole instance before the regressions
+  ansible.builtin.include_tasks:
+    file: lifecycle_broad.yml
+
+- name: Pwhistory regressions | Remember the state of the whole instance before the regressions
+  ansible.builtin.set_fact:
+    pwr_broad_before: "{{ lifecycle_broad_record }}"
+
+- name: Pwhistory regressions | Run each step of the regressions
+  ansible.builtin.include_tasks:
+    file: lifecycle_pwhistory_step.yml
+  loop:
+    - name: every rule on, the second remember rule records the line that the first wrote
+      toggles: [true, true, true]
+      statuses: [applied, applied, applied]
+      text: "{{ pwr_applied_text }}"
+      recorded: [enforce_for_root, remember_password_auth, remember_system_auth]
+    - name: a second apply finds every rule compliant
+      toggles: [true, true, true]
+      statuses: [compliant, compliant, compliant]
+      text: "{{ pwr_applied_text }}"
+      recorded: [enforce_for_root, remember_password_auth, remember_system_auth]
+    - name: remember_system_auth off restores its line, which remember_password_auth writes and keeps again
+      toggles: [true, true, false]
+      statuses: [compliant, applied, restored]
+      text: "{{ pwr_applied_text }}"
+      recorded: [enforce_for_root, remember_password_auth]
+    - name: remember_system_auth on again finds the line of the other rule and records nothing
+      toggles: [true, true, true]
+      statuses: [compliant, compliant, compliant]
+      text: "{{ pwr_applied_text }}"
+      recorded: [enforce_for_root, remember_password_auth]
+    - name: remember_password_auth off restores the line, which remember_system_auth then writes and records
+      toggles: [true, false, true]
+      statuses: [compliant, restored, applied]
+      text: "{{ pwr_applied_text }}"
+      recorded: [enforce_for_root, remember_system_auth]
+    - name: an entry of another method is refused at apply
+      toggles: [true, false, true]
+      method: enforce_for_root
+      statuses: [method_changed, none, compliant]
+      text: "{{ pwr_applied_text }}"
+      recorded: [enforce_for_root, remember_system_auth]
+    - name: and at cleanup, while the other rule is restored
+      toggles: [false, false, false]
+      statuses: [cleanup_incomplete, none, restored]
+      text: "{{ pwr_text }}enforce_for_root{{ pwr_newline }}"
+      recorded: [enforce_for_root]
+      restore_method: true
+    - name: enforce_for_root removed by hand is restored without a write
+      toggles: [false, false, false]
+      edit:
+        regexp: "^enforce_for_root$"
+        absent: true
+      statuses: [restored, none, none]
+      text: "{{ pwr_text }}"
+      recorded: []
+  loop_control:
+    loop_var: pwr_step
+    label: "{{ pwr_step.name }}"
+
+- name: Pwhistory regressions | Remove the service file of the regressions
+  ansible.builtin.file:
+    path: "{{ pwr_service }}"
+    state: absent
+
+- name: Pwhistory regressions | Give system-auth its content, mode and ownership as built back
+  ansible.builtin.copy:
+    content: "{{ pwr_original.results[1].content | b64decode }}"
+    dest: "{{ pwr_stack }}"
+    follow: false
+    mode: "{{ pwr_original_stats.results[1].stat.mode }}"
+    owner: root
+    group: root
+
+- name: Pwhistory regressions | Read the ledger after the regressions
+  freesecdev.linux_compliance.control_state:
+    action: list
+  register: pwr_ledger_after
+
+- name: Pwhistory regressions | Check that the ledger records no rule of the topic any more
+  ansible.builtin.assert:
+    that:
+      - pwr_ledger_after.entries | selectattr('rule_id', 'in', lifecycle_rule_ids) | list == []
+    fail_msg: "{{ pwr_label }}: the ledger still holds {{ pwr_ledger_after.entries }}"
+    quiet: true
+
+- name: Pwhistory regressions | Assert that the whole instance is back to its state before the regressions
+  ansible.builtin.include_tasks:
+    file: lifecycle_broad_compare.yml
+  vars:
+    lifecycle_label: pwhistory regressions
+    lifecycle_broad_step: the regressions
+    lifecycle_broad_reference: "{{ pwr_broad_before }}"
+
+- name: Pwhistory regressions | Record that this regression file ran to its end
+  ansible.builtin.set_fact:
+    lifecycle_regression_files_run: "{{ lifecycle_regression_files_run + ['lifecycle_pwhistory_regressions.yml'] }}"

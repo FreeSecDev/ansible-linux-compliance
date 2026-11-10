@@ -468,6 +468,8 @@ def test_the_repository_declarations_pass_against_the_repository_catalogue(tmp_p
         "wireless_modules",
         "ssh",
         "pwquality",
+        "pwhistory",
+        "faillock",
         "login_defs",
         "sudo",
     ]
@@ -963,7 +965,10 @@ def test_regression_groups_are_planned_on_the_platforms_whose_docker_scenario_ru
 
 def test_the_repository_declares_regression_groups_for_pwquality_ssh_and_sudo() -> None:
     found = lifecycle.regression_platforms(REPOSITORY_ROOT)
-    assert found["pwquality"] == {"changes": frozenset({"ubuntu", "rhel_compatible"})}
+    assert found["pwquality"] == {
+        "changes": frozenset({"ubuntu", "rhel_compatible"}),
+        "readers": frozenset({"ubuntu", "rhel_compatible"}),
+    }
     assert found["sudo"] == {
         "changes": frozenset({"ubuntu", "rhel_compatible"}),
         "files": frozenset({"ubuntu"}),
@@ -972,6 +977,19 @@ def test_the_repository_declares_regression_groups_for_pwquality_ssh_and_sudo() 
     assert found["ssh"] == {
         "changes": frozenset({"ubuntu", "rhel_compatible"}),
         "vendor": frozenset({"ubuntu", "rhel_compatible"}),
+        "readers": frozenset({"ubuntu", "rhel_compatible"}),
+    }
+    assert found["faillock"] == {
+        "changes": frozenset({"ubuntu", "rhel_compatible"}),
+        "stack": frozenset({"ubuntu", "rhel_compatible"}),
+        "readers": frozenset({"ubuntu", "rhel_compatible"}),
+        "bytes": frozenset({"ubuntu", "rhel_compatible"}),
+        "profiles": frozenset({"ubuntu", "rhel_compatible"}),
+    }
+    assert found["pwhistory"] == {
+        "changes": frozenset({"rhel_compatible"}),
+        "readers": frozenset({"rhel_compatible"}),
+        "stack": frozenset({"rhel_compatible"}),
     }
     assert found["ipv4_parameters"] == {"changes": frozenset({"ubuntu", "rhel_compatible"})}
     assert lifecycle.regression_platforms(REPOSITORY_ROOT, "libvirt")["ipv4_parameters"] == {
@@ -991,7 +1009,7 @@ def test_the_repository_declares_regression_groups_for_pwquality_ssh_and_sudo() 
     assert found["file_permissions"] == {}
     assert found["auditd_conf"] == {"changes": frozenset({"ubuntu", "rhel_compatible"})}
     assert found["auditd_rules_time"] == {"changes": frozenset({"ubuntu", "rhel_compatible"})}
-    assert len(lifecycle.dispatched_regressions(REPOSITORY_ROOT)) == 20
+    assert len(lifecycle.dispatched_regressions(REPOSITORY_ROOT)) == 30
 
 
 LIBVIRT_GROUP = {**GROUP, "requires": ["libvirt"]}

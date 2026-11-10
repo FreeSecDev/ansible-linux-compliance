@@ -1,0 +1,129 @@
+---
+- name: Faillock readers | Refuse to run unless the faillock topic has just run its cycles
+  ansible.builtin.assert:
+    that:
+      - lifecycle_topic.family == 'faillock'
+      - lifecycle_rule_ids | length == 2
+      - lifecycle_allow_disruptive == ['faillock']
+    fail_msg: >-
+      The faillock reader regressions reuse the facts of the faillock lifecycle, which must have just run with the deny
+      and unlock_time rules; the topic was {{ lifecycle_topic.family | default('none') }} with {{ lifecycle_rule_ids }}.
+    quiet: true
+
+- name: Faillock readers | Name the rules, the toggles, the lines and the characters of the cases
+  ansible.builtin.set_fact:
+    regression_label: faillock reader regressions
+    regression_toggles: "{{ lifecycle_rules | map(attribute='toggle') | list }}"
+    regression_deny: xccdf_org.ssgproject.content_rule_accounts_passwords_pam_faillock_deny
+    regression_unlock: xccdf_org.ssgproject.content_rule_accounts_passwords_pam_faillock_unlock_time
+    regression_conf: /etc/security/faillock.conf
+    regression_deny_line: "deny = {{ {'ubuntu': 4, 'rhel_compatible': 5}[lifecycle_platform] }}"
+    regression_unlock_line: unlock_time = 900
+    regression_newline: "\n"
+    regression_vt: "\v"
+    regression_ff: "\f"
+    regression_cr: "\r"
+
+- name: Faillock readers | Check that the lifecycle ran exactly the deny and unlock_time rules
+  ansible.builtin.assert:
+    that:
+      - lifecycle_rule_ids | sort == [regression_deny, regression_unlock] | sort
+    fail_msg: "{{ regression_label }}: {{ lifecycle_rule_ids }}"
+    quiet: true
+
+- name: Faillock readers | Read faillock.conf as built
+  ansible.builtin.slurp:
+    src: "{{ regression_conf }}"
+  register: regression_original
+
+- name: Faillock readers | Inspect faillock.conf as built
+  ansible.builtin.stat:
+    path: "{{ regression_conf }}"
+    follow: false
+  register: regression_original_stat
+
+- name: Faillock readers | Keep the text as built
+  ansible.builtin.set_fact:
+    regression_text: "{{ regression_original.content | b64decode }}"
+
+- name: Faillock readers | Take the state of the whole instance before the reader regressions
+  ansible.builtin.include_tasks:
+    file: lifecycle_broad.yml
+
+- name: Faillock readers | Remember the state of the whole instance before the reader regressions
+  ansible.builtin.set_fact:
+    regression_broad_before: "{{ lifecycle_broad_record }}"
+
+- name: Faillock readers | Apply and clean up each file whose lines pam_faillock reads otherwise than a pattern would
+  ansible.builtin.include_tasks:
+    file: lifecycle_faillock_case.yml
+  loop:
+    - name: an unlock_time above the 604800 seconds that pam_faillock accepts, which it ignores, is rewritten
+      text: "{{ regression_text }}unlock_time = 1000000{{ regression_newline }}"
+      statuses:
+        deny: applied
+        unlock: applied
+      applied: >-
+        {{ regression_text }}{{ regression_unlock_line }}{{ regression_newline }}{{ regression_deny_line
+        }}{{ regression_newline }}
+    - name: an unlock_time of 0, which never unlocks and is stricter than the profile, is kept and refused
+      text: "{{ regression_text }}unlock_time = 0{{ regression_newline }}"
+      statuses:
+        deny: applied
+        unlock: stricter_setting
+      applied: >-
+        {{ regression_text }}unlock_time = 0{{ regression_newline }}{{ regression_deny_line }}{{ regression_newline }}
+    - name: deny after a vertical tab, which pam_faillock reads and the collection does not edit, is refused
+      text: "{{ regression_text ~ regression_vt ~ 'deny = 9' ~ regression_newline }}"
+      statuses:
+        deny: hidden_setting
+        unlock: applied
+      applied: >-
+        {{ regression_text ~ regression_vt ~ 'deny = 9' ~ regression_newline ~ regression_unlock_line
+           ~ regression_newline }}
+    - name: deny after a form feed and a carriage return and unlock_time with a vertical tab after the key
+      text: >-
+        {{ regression_text ~ regression_ff ~ 'deny = 9' ~ regression_newline ~ regression_cr ~ 'deny = 9'
+           ~ regression_newline ~ 'unlock_time' ~ regression_vt ~ '= 60' ~ regression_newline }}
+      statuses:
+        deny: hidden_setting
+        unlock: hidden_setting
+      applied: >-
+        {{ regression_text ~ regression_ff ~ 'deny = 9' ~ regression_newline ~ regression_cr ~ 'deny = 9'
+           ~ regression_newline ~ 'unlock_time' ~ regression_vt ~ '= 60' ~ regression_newline }}
+  loop_control:
+    loop_var: regression_case
+    label: "{{ regression_case.name }}"
+
+- name: Faillock readers | Give faillock.conf its content, mode and ownership as built back
+  ansible.builtin.copy:
+    content: "{{ regression_text }}"
+    dest: "{{ regression_conf }}"
+    follow: false
+    mode: "{{ regression_original_stat.stat.mode }}"
+    owner: root
+    group: root
+
+- name: Faillock readers | Read the ledger after the reader regressions
+  freesecdev.linux_compliance.control_state:
+    action: list
+  register: regression_ledger_after
+
+- name: Faillock readers | Check that the ledger records no rule of the topic any more
+  ansible.builtin.assert:
+    that:
+      - regression_ledger_after.entries | selectattr('rule_id', 'in', lifecycle_rule_ids) | list == []
+    fail_msg: "{{ regression_label }}: the ledger still holds {{ regression_ledger_after.entries }}"
+    quiet: true
+
+- name: Faillock readers | Assert that the whole instance is back to its state before the reader regressions
+  ansible.builtin.include_tasks:
+    file: lifecycle_broad_compare.yml
+  vars:
+    lifecycle_label: faillock reader regressions
+    lifecycle_broad_step: the reader regressions
+    lifecycle_broad_reference: "{{ regression_broad_before }}"
+
+- name: Faillock readers | Record that this regression file ran to its end
+  ansible.builtin.set_fact:
+    lifecycle_regression_files_run: "{{ lifecycle_regression_files_run + ['lifecycle_faillock_readers.yml'] }}"

@@ -745,9 +745,9 @@ expected absent, they are neither recorded nor cleaned up, and the scan must rep
 `notapplicable`), which the harness checks for every overridden rule of a pre-state with scans; every other rule is
 applied and passes, and the cleanup leaves both site files alone. The two site files share one pre-state, which runs with the rule
 toggle only (`modes: [rule]`): the `rule` leg runs two cycles and the `topic` leg one. The declaration also expects `sshd_config` and `50-redhat.conf` to keep their checksums as built,
-because no rule of the lifecycle profiles conflicts with their lines. `ssh` has two regression groups, each a Docker leg of its own
-on both platforms: `changes` (`lifecycle_ssh_regressions.yml` and `lifecycle_ssh_rollback_regressions.yml`) and
-`vendor` (`lifecycle_ssh_vendor_regressions.yml`). `shared/tasks/lifecycle_ssh_regressions.yml` is narrowed like a
+because no rule of the lifecycle profiles conflicts with their lines. `ssh` has three regression groups, each a Docker leg of its own
+on both platforms: `changes` (`lifecycle_ssh_regressions.yml` and `lifecycle_ssh_rollback_regressions.yml`),
+`vendor` (`lifecycle_ssh_vendor_regressions.yml`) and `readers` (`lifecycle_ssh_readers_regressions.yml`, FREES-200). `shared/tasks/lifecycle_ssh_regressions.yml` is narrowed like a
 profile to
 `sshd_set_max_auth_tries` and `sshd_set_login_grace_time` so that each run stays short: a drop-in with a keyword that sshd does not know
 makes every rule `invalid_config` with nothing installed and nothing recorded; a ledger entry of another method makes
@@ -800,12 +800,35 @@ edited. It ends with the whole-instance comparison.
 to the same two rules,
 and reaches the end of the family that the cycles never reach. With an administrator's drop-in in place that sshd
 refuses, a cleanup removes the two drop-ins and forgets their entries, which validates nothing first; the final `sshd
--t` then refuses the configuration and the run fails at the task that stops it, before the reload, with the cleanup
+-T` then refuses the configuration and the run fails at the task that stops it, before the reload, with the cleanup
 kept, because that is the prior state. With the sshd binary removed, as removing openssh-server would, a cleanup
 succeeds and reports both rules `restored`. The binary is copied to `/tmp` and back with its mode; Rocky Linux
 ships `/usr/sbin` with mode `0555` and the instance drops the capability that lets root write it anyway, so the
 regression adds the owner's write bit for the move and puts the mode back. The whole-instance comparison at the end
 leaves out only the inode and times of the binary and the times of `/usr/sbin`.
+
+`shared/tasks/lifecycle_ssh_readers_regressions.yml`, the `readers` group (FREES-200), adds `sshd_disable_root_login`,
+`sshd_enable_pubkey_auth` and `sshd_disable_x11_forwarding` to the verified profile and checks that sshd itself decides
+([ADR 0023](adr/0023-native-ssh-server-configuration.md), amendment of FREES-200). With the vendor file rewritten with
+CRLF line ends and a lone CR in a comment, the three rules apply, `sshd -T` (`sshd_validate` with `effective: true`)
+prints the three values, only the `X11Forwarding` line changed, and the cleanup restores the file byte for byte. With
+an earlier drop-in `DSAAuthentication no`, the alias of `PubkeyAuthentication`, the drop-in in place is `overridden`
+(by the lexer, which reads the alias, or by `sshd -T`), and the rule is refused again after the cleanup, with no
+drop-in and no ledger entry left. With a later
+drop-in `="Match" User freesecdev-probe` holding `Permit"RootLogin" yes`, `=X11Forwarding yes` and
+`PubkeyAuthentication<CR>no`, `sshd -T -C user=freesecdev-probe,...` shows that sshd reads the three looser values for
+that user, and the three rules are `overridden` with `inside a Match block`. With the drop-in `Include` line of
+`/etc/ssh/sshd_config` naming a second glob, `/etc/ssh/freesecdev-readers.d/*.conf`, whose file holds `Match User
+freesecdev-probe` and `PermitRootLogin yes`, `sshd -T -C` shows `yes` for that user and the three rules are
+`overridden` with `includes /etc/ssh/freesecdev-readers.d/*.conf after the drop-ins` (review of PR #89, round 2,
+N1); the main file and the directory are put back. It ends with the whole-instance comparison.
+
+`pwquality` has a second group, `readers` (FREES-200, `shared/tasks/lifecycle_pwquality_readers_regressions.yml`, both
+platforms): with `minlen` and `enforce_for_root`, a main file with CRLF line ends, a lone CR in a comment and
+`minlen = 8` is applied (the line rewritten in place on Ubuntu, `overridden` by the main file on Rocky Linux, where the
+drop-ins are read first) and cleaned up byte for byte; then a PAM file that passes `minlen=8` to `pam_pwquality` makes
+`minlen` `overridden`, and a drop-in read first with `minlen == 14`, which stops libpwquality, makes
+`enforce_for_root` `unreadable_file`, with nothing written. It ends with the whole-instance comparison.
 
 The auditd topics ([ADR 0030](adr/0030-native-auditd-settings-and-audit-rules.md), FREES-110) select their rules
 with `profiles`: `auditd_conf` runs with `cis_level2_server` on Ubuntu and `stig` on Rocky Linux, `auditd_rules_time`
@@ -875,6 +898,69 @@ rule, the forms that util-linux reads through libeconf: `FAIL_DELAY = 30` and a 
 (both written as `FAIL_DELAY  30`), `FAIL_DELAY=30`, a NUL and `-1` (`unreadable_value`), a section line
 (`unreadable_file`), drop-ins that set `FAIL_DELAY` and `CREATE_HOME=no` (`overridden`), and `CREATE_HOME yes` with a
 Windows line ending (`compliant`).
+
+`faillock` and `pwhistory` ([ADR 0027](adr/0027-native-faillock-pwhistory.md)) write one recorded line per setting
+into `/etc/security/faillock.conf` and `/etc/security/pwhistory.conf`. Their cycles run from the file as built and from
+a file that an administrator customised with the pre-state key `lines` (`lineinfile` on a declared file whose
+`rewritten` is true; the harness puts the content back after the cycle): `deny=10` in place of the commented default,
+which the cleanup must restore and not a default, and a stricter `unlock_time = 1800`, which stays `compliant`; for
+`pwhistory`, `remember=5`. The cycles do not scan, because neither image loads `pam_faillock` or `pam_pwhistory` in its
+PAM stack and the content limits the rules to `system_with_kernel`; the SHA-256 of the whole file after the apply is
+the evidence.
+`faillock` has five groups on both platforms. `changes` (`shared/tasks/lifecycle_faillock_regressions.yml`) applies the
+topic and compares the whole file with the as-built text plus the two lines; records both entries as if another method
+had written them (`method_changed` at apply and at cleanup, entries kept, file untouched); makes `deny` stricter and
+removes the `unlock_time` line by hand (`modified_since_apply` for `deny`, `restored` without a write for
+`unlock_time`) and puts the written line back (`restored`, the file byte for byte as built); then runs
+`shared/tasks/lifecycle_faillock_case.yml` over a duplicate `deny` (`duplicate_setting`), a zero-padded `deny` with a
+comment and a stricter `unlock_time=1800` (`deny = 3` written in place, `unlock_time` `compliant`) and a commented
+`deny` with a looser commented `unlock_time` (both written), each restored byte for byte; and refuses a symbolic link
+in place of the file (`not_regular_file`, nothing written through it) and a missing file (`notapplicable`, nothing
+created). `readers` (`lifecycle_faillock_readers.yml`) runs the same case file over the values and lines that
+`pam_faillock` reads its own way: an `unlock_time = 1000000`, which it ignores (rewritten to the profile's value), an
+`unlock_time = 0` (`stricter_setting`, kept), `deny` after a vertical tab (`hidden_setting`), and `deny` after a form
+feed and after a carriage return with `unlock_time`, a vertical tab and `= 60` (both `hidden_setting`, nothing
+written), each restored byte for byte. `bytes` (`lifecycle_faillock_bytes.yml`) runs it over a comment with a CR
+before a looser `deny` (kept a comment, `deny` `compliant`), two CRLF files (each restored byte for byte), a comment of
+1202 bytes in 602 characters (`unreadable_file`) and `deny = 65540` (`unreadable_value`); then it applies both rules, adds a comment at the top by hand and checks that the cleanup
+restores `deny` but refuses the last rule, `unlock_time`, as `restore_mismatch`, because the file would not get its
+recorded SHA-256 back, and that it restores it once the comment is removed. The control characters are passed as
+variables, because a Jinja escape in a task file reaches the file as a backslash. `stack` (`lifecycle_faillock_stack.yml`) writes the PAM stack that authselect `with-faillock` or a
+pam-auth-update profile writes into `common-auth` and `common-account` (Ubuntu) or `system-auth` and `password-auth`
+(Rocky Linux), applies the topic and checks that the file gained exactly the lines of both rules; with `deny=3`
+on the `pam_faillock` preauth line `deny` is `overridden` with that file named and only `unlock_time` is written; with
+`conf=` on that line both rules are `overridden`; and a service file of its own, `/etc/pam.d/fsd-regression-faillock`,
+with an upper-case `AUTH` type and `deny=3` on a continued line, and one with `auth [default=die]pam_faillock.so
+deny=3`, make `deny` `overridden` with that file named; an include of `/etc/security/fsd-site-auth`, which the
+collection does not read, makes both rules `unreadable_stack` (the order of `/etc/pam.d`, `/usr/lib/pam.d` and
+`/usr/share/pam.d` is unit-tested only, because the whole-instance record keeps the times of `/usr`, which a file
+written there changes for good); no
+scan runs, because both contents put the faillock rules below a group limited to `system_with_kernel`, so a container
+scan reports them `notapplicable` even with the module in the stack; each cleanup restores the file byte for byte and the stack files are put back at the end.
+`profiles` (`lifecycle_faillock_other_profiles.yml`) applies in check mode and for real, repeats and cleans up the rules
+that the CIS level 1 profiles do not select with the STIG profile and a CIS level 2 profile of each platform, and checks
+that the file as built gained exactly the profile's lines; the STIG profiles start from an `unlock_time = 600`, which
+their required `0` (never) replaces in place and the cleanup puts back. `pwhistory` has three groups on Rocky Linux. `changes`
+(`lifecycle_pwhistory_regressions.yml`) has steps that check the shared `remember` line: the second rule records the
+line that the first wrote, switching either rule off restores the line and the other rule writes and records it again,
+a rule switched back on finds the other rule's line `compliant`; then a change of method and a line removed by hand.
+`stack` (`lifecycle_pwhistory_stack.yml`) starts from the file as built: `remember=24` on the `pam_pwhistory` line of
+`system-auth` (both remember rules `overridden`), a change by hand that both remember rules keep until the written
+line is back, `conf=` on the `pam_pwhistory` line of `system-auth` (all three rules `overridden`) and a service file
+of its own, `/etc/pam.d/fsd-regression-pwhistory`, with an upper-case `PASSWORD` type and `REMEMBER=1` (both
+remember rules `overridden`). `readers` (`lifecycle_pwhistory_readers.yml`)
+runs the same step file over `REMEMBER = 1` in upper case and `remember` after a vertical tab (both remember rules
+`hidden_setting`), a comment that hides a `remember` behind a CR, before a looser `remember` (rewritten in place) and
+before a compliant one (kept), and a CRLF file whose `enforce_for_root` line ends in a CR, which `pam_pwhistory` does
+not read (`hidden_setting`); every cleanup gives the file back byte for byte.
+
+The reader verdict table of ADR 0027 (`tests/fixtures/pam_conf/reader_verdicts.json`) is built in the same images:
+`make pam-reader-verdicts` builds the images if needed and runs `tools/pam/oracle/probe-in-image.sh` in a container of
+each, which fetches the source package of the installed `pam`, compiles the readers of `pam_faillock` and
+`pam_pwhistory`, and libpam's own `_pam_assemble_line` and `_pam_StrTok`, into probes and records what they read
+for every case of `tools/pam/reader_corpus.py`. Run it after a
+change of the corpus or of the images' pam package and commit the table; `tests/unit/tools/test_pam_conf_oracle.py`
+fails until the table covers the corpus.
 
 ### CI legs
 
@@ -947,12 +1033,15 @@ way.
 
 With `sudo` (FREES-175) the regressions moved out of the cycle legs: `make molecule-matrix` adds one leg per regression
 group that a declaration lists and platform it runs on, with the mode `regressions-<group>`, after the two toggle
-modes of the topic, so 34 cycle legs and 21 regression legs (`pwquality` `changes`, `ssh` `changes` and
-`vendor`, `sudo` `changes` and `profiles`, `login_defs` `changes`, `refusals`, `values` and `profiles`,
-`filesystem_modules` `changes` on both platforms, `sudo` `files` on Ubuntu; `wireless_modules` runs on Rocky Linux
-only). The kernel parameter topics (FREES-107) add 12 cycle legs and the two `ipv4_parameters` `changes`
-legs to the Docker matrix, and the `ipv4_parameters` `runtime` group, which requires libvirt, a leg per
-platform to the libvirt matrix. `tests/unit/tools/test_molecule_matrix.py` checks that every declared group
+modes of the topic, so 40 cycle legs and 37 regression legs (`pwquality` `changes`, `ssh` `changes` and
+`vendor`, `sudo` `changes` and `profiles`, `login_defs` `changes`, `refusals`, `values`, `profiles` and `bytes`,
+`filesystem_modules` `changes`, `faillock` `changes`, `readers`, `bytes`, `stack` and `profiles` on both platforms,
+`sudo` `files` on Ubuntu, `login_defs` `readers` and `pwhistory` `changes`, `readers` and `stack` on Rocky Linux;
+`wireless_modules` runs on Rocky Linux only). The kernel parameter topics (FREES-107) add 12 cycle legs and the two
+`ipv4_parameters` `changes` legs to the Docker matrix, and the `ipv4_parameters` `runtime` group, which requires
+libvirt, a leg per platform to the libvirt matrix. A topic skips
+the platforms that its declaration lists under `unselected_platforms` (`pwhistory` on Ubuntu), which get no leg.
+`tests/unit/tools/test_molecule_matrix.py` checks that every declared group
 gets its legs with the drivers it requires, `make lint-lifecycle` checks the groups, and the harness fails a regression leg whose
 group did not run. Before the split the `sudo` cycle legs carried up to four minutes of regressions each and took 14 to
 19 minutes on slow runners.
@@ -1115,9 +1204,9 @@ No topic can gain a native rule without its lifecycle test:
 
 ### Disruptive topics
 
-`pwquality`, `ssh`, `sudo` and the kernel module topics (`filesystem_modules`, `protocol_modules`,
-`wireless_modules`) are the disruptive families with native rules; the others (`pam`, `sssd`, `faillock` and the rest
-that the registry flags) have none yet. A disruptive topic is opted in by its declaration:
+`pwquality`, `ssh`, `sudo`, `pwhistory`, `faillock` and the kernel module topics (`filesystem_modules`,
+`protocol_modules`, `wireless_modules`) are the disruptive families with native rules; the others (`pam`, `sssd` and
+the rest that the registry flags) have none yet. A disruptive topic is opted in by its declaration:
 `disruptive: true`, which must match the registry, and a `containment` note. The harness then passes `linux_compliance_remediate_allow_disruptive` with
 that one family, for that topic's runs only, both for apply and for cleanup (ADR 0011). The breakage stays in the
 container:
