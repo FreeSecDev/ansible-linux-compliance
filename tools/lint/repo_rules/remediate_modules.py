@@ -12,11 +12,27 @@ a task or handler file looks, and follows its tasks and blocks with
 :func:`~tools.lint.repo_rules.ansible_tasks.task_mappings`, through aliases and merge keys. A key of
 a task that is not a keyword of ``TASK_KEYWORDS`` and does not start with ``with_`` names the
 module, and so do the first word of an ``action`` or ``local_action`` string and the ``module`` key
-of their mapping form. Such a name must be the fully qualified name of an ``ansible.builtin``
-module, of a ``freesecdev.linux_compliance`` module or of an allow-listed module: a short name, an
-``ansible.legacy`` name and a templated name are refused, because Ansible may resolve them to any
-module. A document with another root, such as ``vars/rules.yml`` or ``meta/argument_specs.yml``, is
-not a task list and is not read.
+of their mapping form. Such a name must be the fully qualified name of a module of
+``BUILTIN_MODULES``, of a ``freesecdev.linux_compliance`` module or of an allow-listed module: a
+short name, an ``ansible.legacy`` name and a templated name are refused, because Ansible may resolve
+them to any module.
+
+A fully qualified name is not proof of the code that runs, because a routing entry sends a name to
+another plugin before Ansible looks for the file. ansible-core routes more than 3700
+``ansible.builtin`` names to other collections (``ansible.builtin.make`` runs
+``community.general.make``, ``ansible.builtin.sysctl`` runs ``ansible.posix.sysctl``), so only the
+names of ``BUILTIN_MODULES`` are accepted: the module files of the pinned ansible-core that its
+``plugin_routing`` neither redirects nor removes. A unit test keeps the list equal to the installed
+ansible-core. A ``freesecdev.linux_compliance`` name is accepted only when ``plugins/modules`` or
+``plugins/action`` holds its file and ``meta/runtime.yml`` neither redirects nor removes it; a
+``meta/runtime.yml`` that cannot be read refuses every such name.
+
+The allow list governs modules, so the role may not run another role's tasks: ``include_role`` and
+``import_role`` are refused, and so is a dependency in ``meta/main.yml``. ``include_tasks`` and
+``import_tasks`` are accepted only as a task key whose target is ``{{ role_path }}/tasks/`` followed
+by a literal relative path. Ansible looks for a plain relative target in the role first, but falls
+back to the playbook's directory, whose task files this rule never reads. A document with another
+root, such as ``vars/rules.yml`` or ``meta/argument_specs.yml``, is not a task list and is not read.
 
 An allow-listed module is accepted only while its collection is pinned at one exact version
 (``<major>.<minor>.<patch>``) in ``galaxy.yml`` ``dependencies``, in
@@ -35,6 +51,8 @@ import yaml
 
 from tools.lint.repo_rules.ansible_tasks import (
     ACTION_KEYS,
+    INCLUDE_FILE_KEYS,
+    ROLE_PATH_TARGET,
     TEMPLATE_MARKERS,
     action_modules,
     scalar_items,
@@ -46,7 +64,88 @@ if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping, Sequence
 
 ALLOWED_COMMUNITY_MODULES: Final[frozenset[str]] = frozenset()
+BUILTIN_COLLECTION: Final[str] = "ansible.builtin"
+OWN_COLLECTION: Final[str] = "freesecdev.linux_compliance"
+BUILTIN_MODULES: Final[frozenset[str]] = frozenset(
+    {
+        "add_host",
+        "apt",
+        "apt_key",
+        "apt_repository",
+        "assemble",
+        "assert",
+        "async_status",
+        "async_wrapper",
+        "blockinfile",
+        "command",
+        "copy",
+        "cron",
+        "deb822_repository",
+        "debconf",
+        "debug",
+        "dnf",
+        "dnf5",
+        "dpkg_selections",
+        "expect",
+        "fail",
+        "fetch",
+        "file",
+        "find",
+        "gather_facts",
+        "get_url",
+        "getent",
+        "git",
+        "group",
+        "group_by",
+        "hostname",
+        "import_playbook",
+        "import_role",
+        "import_tasks",
+        "include_role",
+        "include_tasks",
+        "include_vars",
+        "iptables",
+        "known_hosts",
+        "lineinfile",
+        "meta",
+        "mount_facts",
+        "package",
+        "package_facts",
+        "pause",
+        "ping",
+        "pip",
+        "raw",
+        "reboot",
+        "replace",
+        "rpm_key",
+        "script",
+        "service",
+        "service_facts",
+        "set_fact",
+        "set_stats",
+        "setup",
+        "shell",
+        "slurp",
+        "stat",
+        "subversion",
+        "systemd",
+        "systemd_service",
+        "sysvinit",
+        "tempfile",
+        "template",
+        "unarchive",
+        "uri",
+        "user",
+        "validate_argument_spec",
+        "wait_for",
+        "wait_for_connection",
+        "yum_repository",
+    }
+)
 REMEDIATE_ROLE: Final[tuple[str, str]] = ("roles", "remediate")
+ROLE_METADATA: Final[frozenset[tuple[str, ...]]] = frozenset(
+    {("roles", "remediate", "meta", "main.yml"), ("roles", "remediate", "meta", "main.yaml")}
+)
 TASK_KEYWORDS: Final[frozenset[str]] = frozenset(
     {
         "action",
@@ -98,11 +197,14 @@ TASK_KEYWORDS: Final[frozenset[str]] = frozenset(
     }
 )
 LOOP_PREFIX: Final[str] = "with_"
-OWN_MODULE: Final[re.Pattern[str]] = re.compile(
-    r"(?:ansible\.builtin|freesecdev\.linux_compliance)\.[a-z_][a-z0-9_]*"
+TASK_INCLUDE_MODULES: Final[frozenset[str]] = frozenset(
+    {"ansible.builtin.include_tasks", "ansible.builtin.import_tasks"}
 )
-COMMUNITY_MODULE: Final[re.Pattern[str]] = re.compile(
-    r"(?P<collection>[a-z0-9][a-z0-9_]*\.[a-z0-9][a-z0-9_]*)\.[a-z_][a-z0-9_]*"
+ROLE_INCLUDE_MODULES: Final[frozenset[str]] = frozenset(
+    {"ansible.builtin.include_role", "ansible.builtin.import_role"}
+)
+QUALIFIED_NAME: Final[re.Pattern[str]] = re.compile(
+    r"(?P<collection>[a-z0-9][a-z0-9_]*\.[a-z0-9][a-z0-9_]*)\.(?P<module>[a-z_][a-z0-9_]*)"
 )
 EXACT_VERSION: Final[re.Pattern[str]] = re.compile(r"[0-9]+\.[0-9]+\.[0-9]+")
 PIN_LINE: Final[re.Pattern[str]] = re.compile(
@@ -111,6 +213,12 @@ PIN_LINE: Final[re.Pattern[str]] = re.compile(
 GALAXY_FILE: Final[Path] = Path("galaxy.yml")
 REQUIREMENTS_FILE: Final[Path] = Path("extensions/molecule/requirements.yml")
 PINS_FILE: Final[Path] = Path("extensions/molecule/collections.pins")
+RUNTIME_FILE: Final[Path] = Path("meta/runtime.yml")
+OWN_PLUGIN_DIRECTORIES: Final[tuple[Path, ...]] = (Path("plugins/modules"), Path("plugins/action"))
+PLUGIN_SUFFIX: Final[str] = ".py"
+ROUTING_KEY: Final[str] = "plugin_routing"
+ROUTING_SECTIONS: Final[tuple[str, ...]] = ("modules", "action")
+ROUTING_CHANGES: Final[frozenset[str]] = frozenset({"redirect", "tombstone"})
 DEPENDENCIES_KEY: Final[str] = "dependencies"
 COLLECTIONS_KEY: Final[str] = "collections"
 NAME_KEY: Final[str] = "name"
@@ -121,6 +229,19 @@ MODULE_MESSAGE: Final[str] = (
     "freesecdev.linux_compliance module by its fully qualified name, or a community module on the "
     "allow list (ADR 0032 §1)"
 )
+BUILTIN_MESSAGE: Final[str] = (
+    "module {name!r} is not allowed in roles/remediate: it is not on BUILTIN_MODULES, the module "
+    "files of the pinned ansible-core that its plugin_routing leaves in place, so it runs a module "
+    "of another collection or none (ADR 0032 §1)"
+)
+OWN_MISSING_MESSAGE: Final[str] = (
+    "module {name!r} is not allowed in roles/remediate: plugins/modules and plugins/action hold "
+    "no file {module}.py (ADR 0032 §1)"
+)
+OWN_ROUTED_MESSAGE: Final[str] = (
+    "module {name!r} is not allowed in roles/remediate: meta/runtime.yml redirects or removes it, "
+    "or cannot be read (ADR 0032 §1)"
+)
 TEMPLATED_MESSAGE: Final[str] = (
     "templated module name {name!r} is not allowed in roles/remediate: the module must be known "
     "before the run (ADR 0032 §1)"
@@ -129,6 +250,23 @@ PIN_MESSAGE: Final[str] = (
     "allow-listed module {name!r} needs its collection {collection} pinned at one exact version "
     "in galaxy.yml dependencies, extensions/molecule/requirements.yml and "
     "extensions/molecule/collections.pins; found {versions} (ADR 0032 §1)"
+)
+ROLE_INCLUDE_MESSAGE: Final[str] = (
+    "{name} is not allowed in roles/remediate: the tasks of another role are not checked against "
+    "the allow list (ADR 0032 §1)"
+)
+INCLUDE_ACTION_MESSAGE: Final[str] = (
+    "{name} in action or local_action is not allowed in roles/remediate: write it as a task key "
+    "with a {{{{ role_path }}}}/tasks/ target (ADR 0032 §1)"
+)
+INCLUDE_TARGET_MESSAGE: Final[str] = (
+    "{name} target {target!r} is not allowed in roles/remediate: use {{{{ role_path }}}}/tasks/ "
+    "followed by a literal relative path, because Ansible looks for any other target in the "
+    "playbook's directory too (ADR 0032 §1)"
+)
+DEPENDENCY_MESSAGE: Final[str] = (
+    "role dependencies are not allowed in roles/remediate/meta/main.yml: their tasks are not "
+    "checked against the allow list; dependencies must be an empty list (ADR 0032 §1)"
 )
 
 
@@ -143,23 +281,29 @@ def is_remediate_file(relative: Path | None) -> bool:
     return tuple(part.casefold() for part in relative.parts[:2]) == REMEDIATE_ROLE
 
 
+def _is_role_metadata(relative: Path) -> bool:
+    """Return whether ``relative`` is ``roles/remediate/meta/main.yml``, case-folded."""
+    return tuple(part.casefold() for part in relative.parts) in ROLE_METADATA
+
+
 def _is_keyword(name: str) -> bool:
     return name in TASK_KEYWORDS or name.startswith(LOOP_PREFIX)
 
 
-def _module_names(task: yaml.MappingNode) -> Iterable[tuple[yaml.Node, str]]:
-    """Yield the node and text of every name that ``task`` may run as a module.
+def _module_names(task: yaml.MappingNode) -> Iterable[tuple[yaml.Node, str, yaml.Node | None]]:
+    """Yield the node, text and arguments of every name that ``task`` may run as a module.
 
-    That is every key that is not a keyword, the first word of an ``action`` or ``local_action``
-    string and every ``module`` key of their mapping form.
+    That is every key that is not a keyword, with its value as the arguments, and the first word
+    of an ``action`` or ``local_action`` string and every ``module`` key of their mapping form,
+    without arguments.
     """
     for name, key, value in scalar_items(task):
         if name in ACTION_KEYS:
             for module in action_modules(value):
                 words = str(module.value).split(maxsplit=1)
-                yield module, words[0] if words else ""
+                yield module, words[0] if words else "", None
         elif not _is_keyword(name):
-            yield key, name
+            yield key, name, value
 
 
 def _mapping(value: object) -> dict[object, object]:
@@ -167,13 +311,20 @@ def _mapping(value: object) -> dict[object, object]:
     return cast("dict[object, object]", value) if isinstance(value, dict) else {}
 
 
+def _read_yaml(path: Path) -> object:
+    """Return the YAML document of ``path``; raise ``ValueError`` when it cannot be read."""
+    try:
+        return yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, yaml.YAMLError) as error:
+        raise ValueError(str(path)) from error
+
+
 def _load_mapping(path: Path) -> dict[object, object]:
     """Return the YAML mapping of ``path``, or an empty one when it cannot be read or parsed."""
     try:
-        loaded: object = yaml.safe_load(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, yaml.YAMLError):
+        return _mapping(_read_yaml(path))
+    except ValueError:
         return {}
-    return _mapping(loaded)
 
 
 def _galaxy_versions(root: Path, collection: str) -> list[object]:
@@ -229,20 +380,121 @@ def pinned_version(sources: Mapping[str, Sequence[object]]) -> str | None:
     return first if all(version == first for version in versions) else None
 
 
-def _name_problem(name: str, allowed: frozenset[str], root: Path) -> str | None:
-    """Return why ``name`` may not run in ``roles/remediate``, or ``None`` when it may."""
-    if any(marker in name for marker in TEMPLATE_MARKERS):
-        return TEMPLATED_MESSAGE.format(name=name)
-    if OWN_MODULE.fullmatch(name) is not None:
-        return None
-    match = COMMUNITY_MODULE.fullmatch(name)
-    if name not in allowed or match is None:
+def is_routed(root: Path, module: str) -> bool:
+    """Return whether ``meta/runtime.yml`` below ``root`` may send ``module`` elsewhere.
+
+    A ``redirect`` or ``tombstone`` entry for the module or action plugin counts, and so does a
+    file that cannot be read or parsed or whose document is not a mapping, because Ansible's
+    routing is then unknown. A missing file routes nothing.
+    """
+    path = root / RUNTIME_FILE
+    if not path.exists():
+        return False
+    try:
+        loaded = _read_yaml(path)
+    except ValueError:
+        return True
+    if loaded is None:
+        return False
+    if not isinstance(loaded, dict):
+        return True
+    routing = _mapping(cast("dict[object, object]", loaded).get(ROUTING_KEY))
+    return any(
+        ROUTING_CHANGES & _mapping(_mapping(routing.get(section)).get(module)).keys()
+        for section in ROUTING_SECTIONS
+    )
+
+
+def _own_module_problem(name: str, module: str, root: Path) -> str | None:
+    """Return why the collection's ``module`` may not run, or ``None`` when it may."""
+    if not any(
+        (root / directory / f"{module}{PLUGIN_SUFFIX}").is_file()
+        for directory in OWN_PLUGIN_DIRECTORIES
+    ):
+        return OWN_MISSING_MESSAGE.format(name=name, module=module)
+    if is_routed(root, module):
+        return OWN_ROUTED_MESSAGE.format(name=name)
+    return None
+
+
+def _community_module_problem(
+    name: str, collection: str, allowed: frozenset[str], root: Path
+) -> str | None:
+    """Return why the community module ``name`` may not run, or ``None`` when it may."""
+    if name not in allowed:
         return MODULE_MESSAGE.format(name=name)
-    collection = match.group("collection")
     sources = pin_sources(collection, root)
     if pinned_version(sources) is None:
         return PIN_MESSAGE.format(name=name, collection=collection, versions=sources)
     return None
+
+
+def _name_problem(name: str, allowed: frozenset[str], root: Path) -> str | None:
+    """Return why ``name`` may not run in ``roles/remediate``, or ``None`` when it may."""
+    if any(marker in name for marker in TEMPLATE_MARKERS):
+        return TEMPLATED_MESSAGE.format(name=name)
+    match = QUALIFIED_NAME.fullmatch(name)
+    if match is None:
+        return MODULE_MESSAGE.format(name=name)
+    collection, module = match.group("collection", "module")
+    if collection == BUILTIN_COLLECTION:
+        return None if module in BUILTIN_MODULES else BUILTIN_MESSAGE.format(name=name)
+    if collection == OWN_COLLECTION:
+        return _own_module_problem(name, module, root)
+    return _community_module_problem(name, collection, allowed, root)
+
+
+def _include_targets(arguments: yaml.Node) -> list[yaml.Node]:
+    """Return the nodes that name the task file of an ``include_tasks`` or ``import_tasks``."""
+    if isinstance(arguments, yaml.MappingNode):
+        return [value for name, _, value in scalar_items(arguments) if name in INCLUDE_FILE_KEYS]
+    return [arguments]
+
+
+def _include_problems(
+    node: yaml.Node, name: str, arguments: yaml.Node | None
+) -> Iterable[tuple[yaml.Node, str]]:
+    """Yield why an include of ``name`` may run tasks that the rule did not read.
+
+    ``arguments`` is the value of the task key, or ``None`` for the module of an ``action``.
+    """
+    if name in ROLE_INCLUDE_MODULES:
+        yield node, ROLE_INCLUDE_MESSAGE.format(name=name)
+    elif name in TASK_INCLUDE_MODULES:
+        if arguments is None:
+            yield node, INCLUDE_ACTION_MESSAGE.format(name=name)
+            return
+        targets = _include_targets(arguments)
+        if not targets:
+            yield node, INCLUDE_TARGET_MESSAGE.format(name=name, target=None)
+        for target in targets:
+            text = str(target.value) if isinstance(target, yaml.ScalarNode) else None
+            if text is None or ROLE_PATH_TARGET.fullmatch(text) is None:
+                yield target, INCLUDE_TARGET_MESSAGE.format(name=name, target=text)
+
+
+def _task_problems(
+    document: yaml.SequenceNode, allowed: frozenset[str], root: Path
+) -> Iterable[tuple[yaml.Node, str]]:
+    """Yield every module, role include and task include of ``document`` that may not run."""
+    for task in task_mappings(document):
+        for node, name, arguments in _module_names(task):
+            problem = _name_problem(name, allowed, root)
+            if problem is not None:
+                yield node, problem
+            else:
+                yield from _include_problems(node, name, arguments)
+
+
+def _dependency_problems(document: yaml.Node) -> Iterable[tuple[yaml.Node, str]]:
+    """Yield every ``dependencies`` entry of a role metadata ``document`` that is not empty."""
+    if not isinstance(document, yaml.MappingNode):
+        return
+    for name, key, value in scalar_items(document):
+        if name != DEPENDENCIES_KEY:
+            continue
+        if not isinstance(value, yaml.SequenceNode) or value.value:
+            yield key, DEPENDENCY_MESSAGE
 
 
 def check_remediate_modules(
@@ -256,17 +508,20 @@ def check_remediate_modules(
     """Return a violation for every module a task of ``roles/remediate`` may not run.
 
     ``documents`` are the composed YAML documents of ``path``; ``relative`` is its repository
-    path. ``allowed`` is the allow list and ``root`` the repository whose pin files are read.
+    path. ``allowed`` is the allow list and ``root`` the repository whose pin files, plugins and
+    ``meta/runtime.yml`` are read. The role's ``meta/main.yml`` may not name a dependency.
     """
-    if not is_remediate_file(relative):
+    if relative is None or not is_remediate_file(relative):
         return []
+    metadata = _is_role_metadata(relative)
     violations: set[Violation] = set()
     for document in documents:
-        if not isinstance(document, yaml.SequenceNode):
+        if isinstance(document, yaml.SequenceNode):
+            problems = _task_problems(document, allowed, root)
+        elif metadata:
+            problems = _dependency_problems(document)
+        else:
             continue
-        for task in task_mappings(document):
-            for node, name in _module_names(task):
-                problem = _name_problem(name, allowed, root)
-                if problem is not None:
-                    violations.add(Violation(path, node.start_mark.line + 1, problem))
+        for node, problem in problems:
+            violations.add(Violation(path, node.start_mark.line + 1, problem))
     return sorted(violations)

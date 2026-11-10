@@ -108,10 +108,17 @@ Rules:
 
 * Remediation runs only reviewed modules (FREES-203, ADR 0032 §1): in every YAML task file below
   ``roles/remediate/``, a task key that is not a task keyword of ansible-core (``TASK_KEYWORDS``,
-  plus the ``with_`` loops) and the module of an ``action`` or ``local_action`` must be an
-  ``ansible.builtin`` module, a ``freesecdev.linux_compliance`` module or a community module on
+  plus the ``with_`` loops) and the module of an ``action`` or ``local_action`` must be a
+  module of ``BUILTIN_MODULES``, a ``freesecdev.linux_compliance`` module or a community module on
   ``ALLOWED_COMMUNITY_MODULES`` of ``tools/lint/repo_rules/remediate_modules.py``, by its fully
-  qualified name; short, ``ansible.legacy`` and templated names are refused. The allow list is
+  qualified name; short, ``ansible.legacy`` and templated names are refused. ``BUILTIN_MODULES``
+  holds the module files of the pinned ansible-core that its ``plugin_routing`` neither redirects
+  nor removes, so ``ansible.builtin.make`` (``community.general.make``) and
+  ``ansible.builtin.sysctl`` (``ansible.posix.sysctl``) are refused; a collection module needs its
+  file in ``plugins/modules`` or ``plugins/action`` and no redirect or tombstone in
+  ``meta/runtime.yml``. ``include_role``, ``import_role`` and a dependency in
+  ``roles/remediate/meta/main.yml`` are refused, and ``include_tasks`` and ``import_tasks`` must
+  be task keys whose target is ``{{ role_path }}/tasks/<literal path>``. The allow list is
   empty, and an allow-listed module needs its collection pinned at one exact version in
   ``galaxy.yml``, ``extensions/molecule/requirements.yml`` and
   ``extensions/molecule/collections.pins``.

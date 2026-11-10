@@ -187,8 +187,9 @@ and on every form of scanner remediation stays either way.
 ## Amendment 2026-11-10: ADR 0032 accepted (FREES-203)
 
 ADR 0032 is accepted, and the widening of its §1 is in force. `tools/lint/repo_rules/remediate_modules.py` makes it a
-check: every module in a YAML task file below `roles/remediate` is an `ansible.builtin` module, a module of this
-collection or a module on `ALLOWED_COMMUNITY_MODULES`, by its fully qualified name, and an allow-listed module needs
+check: every module in a YAML task file below `roles/remediate` is an `ansible.builtin` module that ansible-core does
+not redirect to another collection, a module of this collection or a module on `ALLOWED_COMMUNITY_MODULES`, by its
+fully qualified name, and an allow-listed module needs
 its collection pinned at one exact version in `galaxy.yml`, `extensions/molecule/requirements.yml` and
 `extensions/molecule/collections.pins`. The allow list is empty, so in practice the module rule of this ADR still
 holds until a reviewed community module is listed. The ban on `shell`, `command`, `raw` and `script` and on every form

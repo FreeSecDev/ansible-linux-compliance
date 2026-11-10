@@ -9,6 +9,7 @@ collection pins.
 from __future__ import annotations
 
 import importlib
+import importlib.util
 from pathlib import Path
 from typing import cast
 
@@ -29,6 +30,7 @@ DIGEST = "0" * 64
 GALAXY = "---\ndependencies:\n  community.general: 10.1.0\n"
 REQUIREMENTS = "---\ncollections:\n  - name: community.general\n    version: 10.1.0\n"
 PINS = f"collection community.general 10.1.0 {DIGEST} 1234\n"
+ROUTED_BUILTINS = ("make", "at", "sysctl", "pam_limits")
 
 
 def documents(text: str) -> list[yaml.Node]:
@@ -82,7 +84,9 @@ ACCEPTED = [
         id="own-module",
     ),
     pytest.param(
-        "---\n- name: Include\n  ansible.builtin.include_tasks:\n    file: family.yml\n",
+        "---\n- name: Include\n  ansible.builtin.include_tasks:\n"
+        "    file: '{{ role_path }}/tasks/family.yml'\n"
+        "- name: Import\n  ansible.builtin.import_tasks: '{{ role_path }}/tasks/nested/x.yaml'\n",
         id="include",
     ),
     pytest.param(
@@ -156,6 +160,45 @@ REFUSED = [
     ),
     pytest.param(
         "---\n- name: Case\n  Ansible.Builtin.copy: {}\n", "Ansible.Builtin.copy", id="case"
+    ),
+    *[
+        pytest.param(
+            f"---\n- name: Routed\n  ansible.builtin.{module}:\n    name: x\n",
+            f"ansible.builtin.{module}",
+            id=f"builtin-routed-{module}",
+        )
+        for module in ROUTED_BUILTINS
+    ],
+    *[
+        pytest.param(
+            f"---\n- name: Routed\n  action: ansible.builtin.{module} name=x\n",
+            f"ansible.builtin.{module}",
+            id=f"builtin-routed-action-{module}",
+        )
+        for module in ROUTED_BUILTINS
+    ],
+    *[
+        pytest.param(
+            f"---\n- name: Routed\n  local_action:\n    module: ansible.builtin.{module}\n",
+            f"ansible.builtin.{module}",
+            id=f"builtin-routed-local-action-{module}",
+        )
+        for module in ROUTED_BUILTINS
+    ],
+    pytest.param(
+        "---\n- name: Removed\n  ansible.builtin.include: x.yml\n",
+        "ansible.builtin.include",
+        id="builtin-tombstone",
+    ),
+    pytest.param(
+        "---\n- name: Unknown\n  ansible.builtin.no_such_module: {}\n",
+        "ansible.builtin.no_such_module",
+        id="builtin-unknown",
+    ),
+    pytest.param(
+        "---\n- name: Missing\n  freesecdev.linux_compliance.no_such_module: {}\n",
+        "freesecdev.linux_compliance.no_such_module",
+        id="own-missing",
     ),
 ]
 
@@ -309,6 +352,26 @@ def test_allow_listed_module_needs_exact_equal_pins(
     assert "community.general" in messages[0]
 
 
+@pytest.mark.parametrize("version", [">=10.1.0", "*", "10.1", "10.1.0-rc1", "v10.1.0"])
+def test_three_pins_that_agree_on_an_inexact_version_pin_nothing(
+    tmp_path: Path, version: str
+) -> None:
+    root = write_pins(
+        tmp_path,
+        f"---\ndependencies:\n  community.general: '{version}'\n",
+        f"---\ncollections:\n  - name: community.general\n    version: '{version}'\n",
+        f"collection community.general {version} {DIGEST} 1\n",
+    )
+    sources = remediate.pin_sources("community.general", root)
+    assert all(entries == [version] for entries in sources.values()), sources
+    assert remediate.pinned_version(sources) is None
+    messages = check(
+        "---\n- name: Make\n  community.general.make: {}\n", allowed=frozenset({MAKE}), root=root
+    )
+    assert len(messages) == 1
+    assert NOT_PINNED in messages[0]
+
+
 @pytest.mark.parametrize(
     "relative",
     ["galaxy.yml", "extensions/molecule/requirements.yml", "extensions/molecule/collections.pins"],
@@ -346,7 +409,7 @@ def test_task_keywords_match_ansible_core() -> None:
 
 def test_allow_list_names_community_modules_only() -> None:
     for name in remediate.ALLOWED_COMMUNITY_MODULES:
-        match = remediate.COMMUNITY_MODULE.fullmatch(name)
+        match = remediate.QUALIFIED_NAME.fullmatch(name)
         assert match is not None, name
         assert match.group("collection") not in {
             "ansible.builtin",
@@ -357,7 +420,7 @@ def test_allow_list_names_community_modules_only() -> None:
 
 def test_allow_listed_modules_are_pinned_in_the_repository() -> None:
     for name in remediate.ALLOWED_COMMUNITY_MODULES:
-        match = remediate.COMMUNITY_MODULE.fullmatch(name)
+        match = remediate.QUALIFIED_NAME.fullmatch(name)
         assert match is not None, name
         sources = remediate.pin_sources(match.group("collection"))
         assert remediate.pinned_version(sources) is not None, sources
@@ -388,3 +451,302 @@ def test_the_remediate_role_passes() -> None:
             path, relative, documents(path.read_text(encoding="utf-8"))
         )
         assert found == [], found
+
+
+def ansible_core_root() -> Path:
+    spec = importlib.util.find_spec("ansible")
+    assert spec is not None
+    assert spec.origin is not None
+    return Path(spec.origin).parent
+
+
+def ansible_core_routing() -> dict[str, dict[str, dict[str, object]]]:
+    text = (ansible_core_root() / "config" / "ansible_builtin_runtime.yml").read_text("utf-8")
+    loaded = cast("dict[str, object]", yaml.safe_load(text))
+    return cast("dict[str, dict[str, dict[str, object]]]", loaded["plugin_routing"])
+
+
+def routed_builtin_names() -> set[str]:
+    routing = ansible_core_routing()
+    return {
+        name
+        for section in remediate.ROUTING_SECTIONS
+        for name, entry in routing[section].items()
+        if remediate.ROUTING_CHANGES & entry.keys()
+    }
+
+
+def test_builtin_modules_match_the_pinned_ansible_core() -> None:
+    files = {
+        path.stem
+        for path in (ansible_core_root() / "modules").glob("*.py")
+        if path.stem != "__init__"
+    }
+    assert files - routed_builtin_names() == remediate.BUILTIN_MODULES
+
+
+@pytest.mark.parametrize(
+    ("module", "target"),
+    [
+        ("make", "community.general.make"),
+        ("at", "ansible.posix.at"),
+        ("sysctl", "ansible.posix.sysctl"),
+        ("pam_limits", "community.general.pam_limits"),
+    ],
+)
+def test_ansible_core_sends_the_refused_builtin_names_elsewhere(module: str, target: str) -> None:
+    assert ansible_core_routing()["modules"][module] == {"redirect": target}
+    assert module not in remediate.BUILTIN_MODULES
+
+
+def test_the_tombstoned_include_is_not_a_builtin_module() -> None:
+    assert "tombstone" in ansible_core_routing()["action"]["include"]
+    assert "include" not in remediate.BUILTIN_MODULES
+
+
+OWN = "freesecdev.linux_compliance.example"
+ROUTING = "---\nplugin_routing:\n"
+REDIRECT = "      redirect: community.general.make\n"
+
+
+def own_root(
+    tmp_path: Path, directory: str = "plugins/modules", runtime: str | None = None
+) -> Path:
+    plugin = tmp_path / directory / "example.py"
+    plugin.parent.mkdir(parents=True)
+    plugin.write_text("", encoding="utf-8")
+    if runtime is not None:
+        target = tmp_path / "meta" / "runtime.yml"
+        target.parent.mkdir(parents=True)
+        target.write_text(runtime, encoding="utf-8")
+    return tmp_path
+
+
+@pytest.mark.parametrize(
+    ("directory", "runtime"),
+    [
+        pytest.param("plugins/modules", None, id="module-no-runtime"),
+        pytest.param("plugins/action", None, id="action-no-runtime"),
+        pytest.param("plugins/modules", "", id="empty-runtime"),
+        pytest.param("plugins/modules", "---\nrequires_ansible: '>=2.20.0'\n", id="no-routing"),
+        pytest.param(
+            "plugins/modules",
+            "---\nplugin_routing:\n  modules:\n    example:\n      deprecation:\n"
+            "        removal_version: 2.0.0\n",
+            id="deprecated-only",
+        ),
+        pytest.param(
+            "plugins/modules",
+            f"{ROUTING}  modules:\n    other:\n{REDIRECT}",
+            id="other-module-routed",
+        ),
+        pytest.param(
+            "plugins/modules",
+            f"{ROUTING}  lookup:\n    example:\n{REDIRECT}",
+            id="other-plugin-type-routed",
+        ),
+    ],
+)
+def test_own_module_with_its_file_and_no_routing_is_accepted(
+    tmp_path: Path, directory: str, runtime: str | None
+) -> None:
+    root = own_root(tmp_path, directory, runtime)
+    assert check(f"---\n- name: Own\n  {OWN}: {{}}\n", root=root) == []
+
+
+@pytest.mark.parametrize(
+    "runtime",
+    [
+        pytest.param(
+            f"{ROUTING}  modules:\n    example:\n{REDIRECT}",
+            id="module-redirect",
+        ),
+        pytest.param(
+            "---\nplugin_routing:\n  action:\n    example:\n      redirect: ansible.posix.at\n",
+            id="action-redirect",
+        ),
+        pytest.param(
+            "---\nplugin_routing:\n  modules:\n    example:\n      tombstone:\n"
+            "        removal_version: 1.0.0\n",
+            id="tombstone",
+        ),
+        pytest.param("---\nplugin_routing: [\n", id="invalid-yaml"),
+        pytest.param("---\n- plugin_routing\n", id="not-a-mapping"),
+        pytest.param(b"\xff\xfe", id="not-utf8"),
+    ],
+)
+def test_own_module_that_meta_runtime_may_route_is_refused(
+    tmp_path: Path, runtime: str | bytes
+) -> None:
+    root = own_root(tmp_path)
+    target = root / "meta" / "runtime.yml"
+    target.parent.mkdir(parents=True)
+    if isinstance(runtime, bytes):
+        target.write_bytes(runtime)
+    else:
+        target.write_text(runtime, encoding="utf-8")
+    for text in (f"---\n- name: Own\n  {OWN}: {{}}\n", f"---\n- name: Own\n  action: {OWN}\n"):
+        messages = check(text, root=root)
+        assert len(messages) == 1, messages
+        assert "meta/runtime.yml redirects or removes it" in messages[0]
+        assert OWN in messages[0]
+
+
+def test_own_module_without_its_file_is_refused(tmp_path: Path) -> None:
+    (tmp_path / "plugins" / "modules").mkdir(parents=True)
+    (tmp_path / "plugins" / "modules" / "example").mkdir()
+    messages = check(f"---\n- name: Own\n  {OWN}: {{}}\n", root=tmp_path)
+    assert len(messages) == 1
+    assert "no file example.py" in messages[0]
+
+
+def test_the_collection_routes_none_of_its_modules() -> None:
+    for path in sorted((REPOSITORY_ROOT / "plugins" / "modules").glob("*.py")):
+        assert not remediate.is_routed(REPOSITORY_ROOT, path.stem), path
+
+
+ROLE_INCLUDE = "the tasks of another role are not checked"
+INCLUDE_TARGET = "use {{ role_path }}/tasks/ followed by a literal relative path"
+INCLUDE_ACTION = "in action or local_action is not allowed"
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "---\n- name: Role\n  ansible.builtin.include_role:\n    name: other.collection.role\n",
+        pytest.param(
+            "---\n- name: Role\n  ansible.builtin.import_role:\n"
+            "    name: freesecdev.linux_compliance.audit\n",
+            id="own-role",
+        ),
+        "---\n- name: Role\n  ansible.builtin.include_role: name=other.collection.role\n",
+        pytest.param(
+            "---\n- name: Block\n  block:\n    - name: Role\n      ansible.builtin.import_role:\n"
+            "        name: x\n",
+            id="nested",
+        ),
+    ],
+)
+def test_role_includes_are_refused(text: str) -> None:
+    messages = check(text)
+    assert len(messages) == 1, messages
+    assert ROLE_INCLUDE in messages[0]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "---\n- name: Role\n  action: ansible.builtin.include_role name=x\n",
+        "---\n- name: Role\n  local_action:\n    module: ansible.builtin.import_role\n",
+    ],
+)
+def test_role_includes_in_action_are_refused(text: str) -> None:
+    messages = check(text)
+    assert len(messages) == 1, messages
+    assert ROLE_INCLUDE in messages[0]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "---\n- name: Include\n  action: ansible.builtin.include_tasks x.yml\n",
+        "---\n- name: Include\n  local_action:\n    module: ansible.builtin.import_tasks\n",
+    ],
+)
+def test_task_includes_in_action_are_refused(text: str) -> None:
+    messages = check(text)
+    assert len(messages) == 1, messages
+    assert INCLUDE_ACTION in messages[0]
+
+
+@pytest.mark.parametrize(
+    ("text", "target"),
+    [
+        pytest.param("---\n- name: I\n  ansible.builtin.include_tasks: family.yml\n", "family.yml"),
+        pytest.param(
+            "---\n- name: I\n  ansible.builtin.import_tasks:\n    file: tasks/family.yml\n",
+            "tasks/family.yml",
+        ),
+        pytest.param(
+            "---\n- name: I\n  ansible.builtin.include_tasks:\n    _raw_params: family.yml\n",
+            "family.yml",
+        ),
+        pytest.param(
+            "---\n- name: I\n  ansible.builtin.include_tasks: '{{ role_path }}/../x/tasks/a.yml'\n",
+            "{{ role_path }}/../x/tasks/a.yml",
+        ),
+        pytest.param(
+            "---\n- name: I\n  ansible.builtin.include_tasks: '{{ role_path }}/handlers/a.yml'\n",
+            "{{ role_path }}/handlers/a.yml",
+        ),
+        pytest.param(
+            "---\n- name: I\n  ansible.builtin.include_tasks: ' {{ role_path }}/tasks/a.yml'\n",
+            " {{ role_path }}/tasks/a.yml",
+        ),
+        pytest.param(
+            "---\n- name: I\n  ansible.builtin.include_tasks: '{{ playbook_dir }}/tasks/a.yml'\n",
+            "{{ playbook_dir }}/tasks/a.yml",
+        ),
+        pytest.param(
+            "---\n- name: I\n  ansible.builtin.include_tasks:\n    file: [a.yml]\n", "None"
+        ),
+        pytest.param("---\n- name: I\n  ansible.builtin.include_tasks: [a.yml]\n", "None"),
+        pytest.param(
+            "---\n- name: I\n  ansible.builtin.include_tasks:\n    apply:\n      tags: [x]\n",
+            "None",
+        ),
+    ],
+)
+def test_task_includes_outside_the_role_path_are_refused(text: str, target: str) -> None:
+    messages = check(text)
+    assert len(messages) == 1, messages
+    assert INCLUDE_TARGET in messages[0]
+    assert target in messages[0]
+
+
+META = "roles/remediate/meta/main.yml"
+DEPENDENCY = "role dependencies are not allowed"
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "---\ngalaxy_info:\n  role_name: remediate\ndependencies: []\n",
+        "---\ngalaxy_info:\n  role_name: remediate\n",
+        "---\n- not a mapping\n",
+        "---\nplain\n",
+    ],
+)
+def test_role_metadata_without_dependencies_is_accepted(text: str) -> None:
+    assert check(text, META) == []
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "---\ndependencies:\n  - role: other.collection.role\n",
+        "---\ndependencies:\n  - freesecdev.linux_compliance.audit\n",
+        "---\ndependencies:\n",
+        "---\ndependencies: other\n",
+        "---\n<<: {dependencies: [x]}\n",
+    ],
+)
+def test_role_metadata_with_dependencies_is_refused(text: str) -> None:
+    for relative in (META, "Roles/Remediate/Meta/main.yaml"):
+        messages = check(text, relative)
+        assert len(messages) == 1, messages
+        assert DEPENDENCY in messages[0]
+
+
+def test_dependencies_of_other_files_are_not_read() -> None:
+    text = "---\ndependencies:\n  - role: other.collection.role\n"
+    assert check(text, "roles/remediate/meta/argument_specs.yml") == []
+    assert check(text, "roles/audit/meta/main.yml") == []
+
+
+def test_the_role_metadata_of_the_repository_passes() -> None:
+    path = REPOSITORY_ROOT / META
+    found = remediate.check_remediate_modules(
+        path, Path(META), documents(path.read_text(encoding="utf-8"))
+    )
+    assert found == []

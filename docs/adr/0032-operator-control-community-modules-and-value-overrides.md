@@ -241,9 +241,22 @@ What is in force with the acceptance:
 - `tools/lint/repo_rules/remediate_modules.py`, run by `make lint-repo` for every YAML file below `roles/remediate/`
   whose document is a task list. A task key that is not a task keyword of ansible-core (the field attributes of
   `Task`, `Block` and `Handler`, plus the `with_` loops) names the module, and so do the first word of an `action` or
-  `local_action` string and the `module` key of their mapping form. That name must be `ansible.builtin.*`,
-  `freesecdev.linux_compliance.*` or on `ALLOWED_COMMUNITY_MODULES`. A short name, an `ansible.legacy` name and a
-  templated name are refused, because Ansible may resolve them to any module.
+  `local_action` string and the `module` key of their mapping form. That name must be an `ansible.builtin` module of
+  `BUILTIN_MODULES`, a `freesecdev.linux_compliance` module or a module on `ALLOWED_COMMUNITY_MODULES`. A short name,
+  an `ansible.legacy` name and a templated name are refused, because Ansible may resolve them to any module.
+- A fully qualified name does not fix the code that runs: a routing entry sends the name to another plugin before
+  Ansible looks for a file. ansible-core's `config/ansible_builtin_runtime.yml` redirects more than 3700
+  `ansible.builtin` module names to other collections (`ansible.builtin.make` to `community.general.make`,
+  `ansible.builtin.at` to `ansible.posix.at`, `ansible.builtin.sysctl` to `ansible.posix.sysctl`,
+  `ansible.builtin.pam_limits` to `community.general.pam_limits`) and removes others (`include`). So
+  `BUILTIN_MODULES` lists the module files of the pinned ansible-core that its routing neither redirects nor removes,
+  and a unit test keeps it equal to the installed ansible-core; every other `ansible.builtin` name is refused. A
+  `freesecdev.linux_compliance` name needs its file in `plugins/modules` or `plugins/action` and no `redirect` or
+  `tombstone` in `meta/runtime.yml`; a `meta/runtime.yml` that cannot be read refuses all of them.
+- The role runs no tasks that the rule does not read. `include_role`, `import_role` and a dependency in
+  `roles/remediate/meta/main.yml` are refused. `include_tasks` and `import_tasks` are accepted only as task keys whose
+  target is `{{ role_path }}/tasks/` followed by a literal relative path, because Ansible looks for any other relative
+  target in the playbook's directory too.
 - `ALLOWED_COMMUNITY_MODULES` is empty. `community.general.make` and `ansible.posix.at` are refused because they are
   not listed.
 - An allow-listed module is refused unless its collection is pinned at one exact version (see H below).
@@ -251,7 +264,10 @@ What is in force with the acceptance:
   fails the test instead of being read as a module name.
 
 Molecule scenarios, test playbooks and the other roles are outside the allow list; the banned modules apply to them as
-before. The value overrides of §2 to §5 are not implemented yet: until their pull requests merge,
+before. One limit is documented rather than enforced: `ansible.builtin.service`, which the `ssh` family uses to reload
+sshd, runs the module that the host's service manager fact names (its `use` parameter is refused, ADR 0004). On the
+supported platforms that is `systemd`, a module of ansible-core; on a host with another service manager it can be a
+community module, if that collection is installed on the controller. The value overrides of §2 to §5 are not implemented yet: until their pull requests merge,
 `linux_compliance_remediate_value_overrides` does not exist, and nothing in this section changes what the remediate
 role writes.
 

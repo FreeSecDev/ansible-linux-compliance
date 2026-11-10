@@ -34,8 +34,14 @@ remediation ([ADR 0025](adr/0025-own-ansible-remediation-only.md)).
 A task of `roles/remediate` names its module by the fully qualified name, and that module is one of these
 ([ADR 0032](adr/0032-operator-control-community-modules-and-value-overrides.md) §1):
 
-- an `ansible.builtin` module, never `shell`, `command`, `raw` or `script` (AGENTS.md rule 1);
-- a module or action plugin of this collection, `freesecdev.linux_compliance.*`;
+- an `ansible.builtin` module of `BUILTIN_MODULES`, never `shell`, `command`, `raw` or `script` (AGENTS.md rule 1).
+  The list holds the module files of the pinned ansible-core that its `plugin_routing` neither redirects nor removes,
+  and a unit test keeps it equal to the installed ansible-core. ansible-core sends thousands of `ansible.builtin`
+  names to other collections: `ansible.builtin.make` runs `community.general.make`, `ansible.builtin.at` runs
+  `ansible.posix.at` and `ansible.builtin.sysctl` runs `ansible.posix.sysctl`, so these names are refused like the
+  modules they reach;
+- a module or action plugin of this collection, `freesecdev.linux_compliance.*`, whose file is in `plugins/modules` or
+  `plugins/action` and which `meta/runtime.yml` neither redirects nor removes;
 - a module of a community collection that is on `ALLOWED_COMMUNITY_MODULES` in
   `tools/lint/repo_rules/remediate_modules.py`. **The list is empty today.**
 
@@ -56,6 +62,14 @@ listed. To list one, the same pull request:
 
 The family keeps the reader as the oracle, whichever module writes the file. Molecule scenarios, test playbooks and
 the other roles are not in scope of the allow list; the banned modules apply to them as everywhere.
+
+The allow list governs modules, so the role does not run tasks it does not own: `include_role`, `import_role` and a
+dependency in `roles/remediate/meta/main.yml` are refused, and `include_tasks` and `import_tasks` are task keys whose
+target is `{{ role_path }}/tasks/` followed by a literal path. Ansible looks for any other relative target in the
+playbook's directory as well, and the rule never reads that file. One limit stays: `ansible.builtin.service` (and
+`package`, which the role does not use) runs the module that the host's service manager fact names. On the supported
+platforms that is `systemd`, a module of ansible-core; on a host with another service manager it can be a community
+module, if that collection is installed on the controller.
 
 ## 1. Read what the content expects
 

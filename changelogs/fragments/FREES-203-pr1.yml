@@ -6,8 +6,13 @@ minor_changes:
     ``action`` or ``local_action``, must be an ``ansible.builtin`` module, a ``freesecdev.linux_compliance`` module or
     a community module on the allow list ``ALLOWED_COMMUNITY_MODULES``, by its fully qualified name. Short names,
     ``ansible.legacy`` names and templated names are refused. The allow list is empty, so modules such as
-    ``community.general.make`` or ``ansible.posix.at`` are refused. An allow-listed module also needs its collection
-    pinned at one exact version in ``galaxy.yml`` ``dependencies``, ``extensions/molecule/requirements.yml`` and
+    ``community.general.make`` or ``ansible.posix.at`` are refused, and so are the ``ansible.builtin`` names that
+    ansible-core redirects to them or removes (``ansible.builtin.make``, ``ansible.builtin.at``,
+    ``ansible.builtin.sysctl``): only the module files of the pinned ansible-core that its routing leaves in place are
+    accepted. A module of this collection needs its file and no redirect in ``meta/runtime.yml``. ``include_role``,
+    ``import_role`` and role dependencies are refused, and ``include_tasks`` and ``import_tasks`` must target
+    ``{{ role_path }}/tasks/``. An allow-listed module also needs its collection pinned at one exact version in
+    ``galaxy.yml`` ``dependencies``, ``extensions/molecule/requirements.yml`` and
     ``extensions/molecule/collections.pins``.
 trivial:
   - >-
