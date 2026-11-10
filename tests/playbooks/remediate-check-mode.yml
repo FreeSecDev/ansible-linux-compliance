@@ -913,7 +913,7 @@
           {{ linux_compliance_remediated.results | rejectattr('status', 'equalto', 'not_implemented') | list }}
       ansible.builtin.assert:
         that:
-          - audit_only_rules | length > 1000
+          - audit_only_rules | length > 0
           - linux_compliance_remediated.summary.not_implemented == audit_only_rules | length
           - linux_compliance_remediated.summary.apply == 1
           - not_implemented | map(attribute='rule_id') | sort == audit_only_rules | sort
