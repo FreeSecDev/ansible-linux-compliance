@@ -51,7 +51,11 @@ options:
     type: str
     required: true
   pam:
-    description: Every PAM file, with C(path) and C(content).
+    description:
+      - Every PAM file, with C(path) and C(content). The role passes every file of
+        C(/etc/pam.d), C(/usr/lib/pam.d) and C(/usr/share/pam.d), also one that libpam does not
+        open because a file of the same name comes first, so that an argument in any of them
+        refuses the rule (FREES-211).
     type: list
     elements: dict
     required: true

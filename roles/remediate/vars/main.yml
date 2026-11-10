@@ -7,9 +7,6 @@ __linux_compliance_remediate_prior_content_max_bytes: 3072
 __linux_compliance_remediate_pwquality_main: /etc/security/pwquality.conf
 __linux_compliance_remediate_pwquality_directory: /etc/security/pwquality.conf.d
 __linux_compliance_remediate_pwquality_marker: /etc/security/pwquality.conf.d/.freesecdev-created
-__linux_compliance_remediate_pwquality_pam_directories:
-  - /etc/pam.d
-  - /usr/lib/pam.d
 __linux_compliance_remediate_pwquality_line_start: '(?i)^[ \t\n\v\f\r]*'
 __linux_compliance_remediate_login_defs: /etc/login.defs
 __linux_compliance_remediate_login_defs_directory: /etc/login.defs.d

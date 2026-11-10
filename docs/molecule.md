@@ -800,7 +800,12 @@ platforms): with `minlen` and `enforce_for_root`, a main file with CRLF line end
 `minlen = 8` is applied (the line rewritten in place on Ubuntu, `overridden` by the main file on Rocky Linux, where the
 drop-ins are read first) and cleaned up byte for byte; then a PAM file that passes `minlen=8` to `pam_pwquality` makes
 `minlen` `overridden`, and a drop-in read first with `minlen == 14`, which stops libpwquality, makes
-`enforce_for_root` `unreadable_file`, with nothing written. It ends with the whole-instance comparison.
+`enforce_for_root` `unreadable_file`, with nothing written; then a service file that only the vendor directory
+`/usr/share/pam.d` holds (FREES-211; the directory is created for the test on Ubuntu, which does not ship it, and
+removed again), with `pam_pwquality.so minlen=8 enforcing=0`, makes `minlen` `overridden` by the argument and
+`enforce_for_root` by `enforcing=0`, with nothing written. The test declares `/usr/share/pam.d` as rewritten, so the
+whole-instance comparison leaves out the times of that directory and of `/usr/share`. It ends with the whole-instance
+comparison.
 
 The auditd topics ([ADR 0030](adr/0030-native-auditd-settings-and-audit-rules.md), FREES-110) select their rules
 with `profiles`: `auditd_conf` runs with `cis_level2_server` on Ubuntu and `stig` on Rocky Linux, `auditd_rules_time`

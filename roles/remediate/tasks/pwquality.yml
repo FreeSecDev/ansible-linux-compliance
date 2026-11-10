@@ -89,13 +89,13 @@
   tags:
     - always
 
-- name: Password quality | Inspect the PAM directories
+- name: Password quality | Inspect the PAM directories, the vendor directory included
   ansible.builtin.stat:
     path: "{{ __linux_compliance_remediate_pwq_path }}"
     get_checksum: false
     get_mime: false
     get_attributes: false
-  loop: "{{ __linux_compliance_remediate_pwquality_pam_directories }}"
+  loop: "{{ __linux_compliance_remediate_pam_directories }}"
   loop_control:
     loop_var: __linux_compliance_remediate_pwq_path
   register: __linux_compliance_remediate_pwq_pam_directories
