@@ -50,6 +50,10 @@ minor_changes:
     leaves it: a vendor line that cleanup writes back counts (new filter
     ``freesecdev.linux_compliance.sysctl_restored``), and in check mode so do the running values it would set back.
   - >-
+    remediate - the kernel parameter topics never edit or restore a line of a vendor file that holds a carriage return,
+    which ``lineinfile`` would turn into line feeds: such a rule is refused as ``unparsed_configuration`` and such a
+    cleanup stays ``cleanup_incomplete`` (new filter ``freesecdev.linux_compliance.sysctl_carriage_returns``).
+  - >-
     remediate - new variable ``linux_compliance_remediate_sysctl_runtime`` (default ``true``); with ``false`` the
     kernel parameter topics write only the persistent drop-ins and neither read nor change the running kernel.
   - >-

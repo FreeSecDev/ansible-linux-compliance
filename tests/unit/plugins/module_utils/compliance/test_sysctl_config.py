@@ -1180,3 +1180,58 @@ def test_the_restored_vendor_line_refuses_the_sample_rate() -> None:
         "systemd": setting,
         "procps": setting,
     }
+
+
+UFW_REDIRECTS = "net/ipv4/conf/all/send_redirects"
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        f"{UFW_REDIRECTS}=1\nnet/ipv4/tcp_syncookies=1\rkernel/kptr_restrict=0\n",
+        f"{UFW_REDIRECTS}=1\r\nnet/ipv4/tcp_syncookies=1\r\n",
+        f"{UFW_REDIRECTS}=1\n\r",
+    ],
+)
+def test_a_file_with_a_carriage_return_is_never_edited(text: str) -> None:
+    texts: dict[str, object] = {UFW: text, VENDOR: "kernel.kptr_restrict = 1\n"}
+    assert sysctl_config.carriage_return_files(texts, [UFW, VENDOR, UFW]) == [UFW]
+
+
+def test_a_file_without_a_carriage_return_or_unknown_is_not_named() -> None:
+    texts: dict[str, object] = {VENDOR: "kernel.kptr_restrict = 1\n", "/x": None}
+    assert sysctl_config.carriage_return_files(texts, [VENDOR, "/x", "/unknown"]) == []
+
+
+@pytest.mark.parametrize(
+    ("texts", "paths"),
+    [(None, []), ([], []), ({VENDOR: "a\r"}, [1]), ({VENDOR: "a"}, [None])],
+)
+def test_malformed_input_of_the_carriage_return_check_is_refused(
+    texts: object, paths: list[object]
+) -> None:
+    with pytest.raises(sysctl_config.ConfigError):
+        sysctl_config.carriage_return_files(cast("dict[str, object]", texts), paths)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        f"{UFW_REDIRECTS}=0\nnet/ipv4/tcp_syncookies=1\rkernel/kptr_restrict=0\n",
+        f"{UFW_REDIRECTS}=0\r\nnet/ipv4/tcp_syncookies=1\r\n",
+    ],
+)
+def test_a_restore_never_writes_into_a_file_with_a_carriage_return(text: str) -> None:
+    restores = [{"path": UFW, "written": f"{UFW_REDIRECTS}=0", "original": f"{UFW_REDIRECTS}=1"}]
+    assert sysctl_config.restore_lines({UFW: text}, restores) == {UFW: text}
+
+
+@pytest.mark.parametrize(
+    ("texts", "restores"),
+    [({}, ["x"]), ({}, None), ({}, "x"), (None, []), ([], []), ({}, [None])],
+)
+def test_malformed_input_of_a_restore_is_refused(texts: object, restores: object) -> None:
+    with pytest.raises(sysctl_config.ConfigError):
+        sysctl_config.restore_lines(
+            cast("dict[str, object]", texts), cast("list[object]", restores)
+        )

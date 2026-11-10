@@ -315,6 +315,21 @@ than the kernel:
   (`minimum`, `maximum`) as well, and a malformed entry, plan entry or restore raises an error instead of being
   guessed.
 
+**Amendment (eighth review).** `ansible.builtin.lineinfile`, which edits a vendor line and writes it back on cleanup
+(section 2a), reads the file in text mode, where a lone carriage return ends a line, and writes every line back
+ending in a line feed. In a file such as ufw's `/etc/ufw/sysctl.conf`, a line that procps reads as part of the one
+before it (`net/ipv4/tcp_syncookies=1<CR>kernel/kptr_restrict=0`) would become an assignment of its own, which neither
+the reader model nor the planned edit or restore accounts for. The collection therefore never edits or restores a
+line in a vendor file whose text holds a carriage return (a lone CR or CR LF line ends), as the auditd family does
+for `auditd.conf` (FREES-200): a rule that would edit one is refused as `unparsed_configuration` with the file named,
+and a cleanup that would write a line back into one stays `cleanup_incomplete` with the reason
+`unparsed_configuration`, writing nothing and keeping the ledger entry (`sysctl_config.carriage_return_files`, the
+filter `freesecdev.linux_compliance.sysctl_carriage_returns`). `restore_lines` leaves such a file alone too and
+refuses malformed input. `lineinfile` is the only module that edits a file in place in the kernel parameter families
+(the apply edit and the cleanup restore); the drop-ins are written whole with `ansible.builtin.copy`. The plan and
+cleanup tasks themselves are now rendered in check mode by `tests/unit/roles/test_sysctl_plan_render.py`, which runs
+the real tasks on local hosts with mocked inputs, so their Jinja is tested in CI.
+
 ### 2a. A conflicting line in a vendor file is set to the compliant value
 
 The pattern of ADR 0023, section 1a: a conflicting line in one of the files that Ubuntu's packages ship with settings

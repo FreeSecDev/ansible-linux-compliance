@@ -110,6 +110,7 @@ LINK_TARGETS: Final[frozenset[str]] = frozenset({"file", "null"})
 KERNEL_INTEGER: Final[str] = r"0|-?[1-9][0-9]{0,18}"
 KERNEL_VECTOR_SEPARATOR: Final[str] = r"[ \t]+"
 EDIT_FIELDS: Final[tuple[str, ...]] = ("path", "original", "written")
+CARRIAGE_RETURN: Final[str] = "\r"
 
 
 class ConfigError(ValueError):
@@ -872,31 +873,66 @@ def companion_check(
     }
 
 
-def restore_lines(
-    texts: Mapping[str, object], restores: Iterable[Mapping[str, object]]
-) -> dict[str, object]:
+def carriage_return_files(texts: object, paths: Iterable[object]) -> list[str]:
+    """Return, once each and in order, those of ``paths`` whose text holds a carriage return.
+
+    The collection edits a vendor line and writes it back on cleanup with
+    ``ansible.builtin.lineinfile``, which reads a file in text mode, so a lone carriage return
+    ends a line there, and writes every line back ending in a line feed. That turns a line that
+    procps reads as part of the one before it (after a lone carriage return) into an assignment of
+    its own, so such a file is never edited and never restored: the caller refuses the rule or the
+    cleanup instead. A path whose text is not known is not named.
+
+    Raises:
+        ConfigError: If ``texts`` is not a mapping or a path is not a string.
+    """
+    if not isinstance(texts, Mapping):
+        message = f"the texts must be a mapping of paths to texts: {texts!r}"
+        raise ConfigError(message)
+    known = cast("Mapping[str, object]", texts)
+    found: list[str] = []
+    for path in paths:
+        if not isinstance(path, str):
+            message = f"a path must be a string: {path!r}"
+            raise ConfigError(message)
+        text = known.get(path)
+        if isinstance(text, str) and CARRIAGE_RETURN in text and path not in found:
+            found.append(path)
+    return found
+
+
+def restore_lines(texts: object, restores: object) -> dict[str, object]:
     """Return ``texts`` as cleanup leaves them: each restore's one ``written`` line is ``original``.
 
     Cleanup writes the recorded original line of a vendor file back only where the file holds the
-    line that the collection wrote exactly once (``lineinfile`` with that line), so the same
-    happens here; a file whose text is not known, or that holds the line another number of times,
-    is left alone. The plan of the rules to apply then judges the files as they are after cleanup.
+    line that the collection wrote exactly once (``lineinfile`` with that line) and holds no
+    carriage return (:func:`carriage_return_files`), so the same happens here; a file whose text
+    is not known, that holds a carriage return, or that holds the line another number of times, is
+    left alone. The plan of the rules to apply then judges the files as they are after cleanup.
 
     Raises:
-        ConfigError: If a restore does not name a string ``path``, ``written`` and ``original``.
+        ConfigError: If ``texts`` is not a mapping, ``restores`` is not a list, or a restore does
+            not name a string ``path``, ``written`` and ``original``.
     """
-    result = dict(texts)
-    for restore in restores:
-        path, written, original = (restore.get(name) for name in ("path", "written", "original"))
+    if not isinstance(texts, Mapping) or not isinstance(restores, list):
+        message = f"the texts must be a mapping and the restores a list: {texts!r}, {restores!r}"
+        raise ConfigError(message)
+    result = dict(cast("Mapping[str, object]", texts))
+    for restore in cast("list[object]", restores):
+        if not isinstance(restore, Mapping):
+            message = f"a restore must be a mapping: {restore!r}"
+            raise ConfigError(message)
+        found = cast("Mapping[str, object]", restore)
+        path, written, original = (found.get(name) for name in ("path", "written", "original"))
         if (
             not isinstance(path, str)
             or not isinstance(written, str)
             or not isinstance(original, str)
         ):
-            message = f"a restore needs a string path, written and original line: {dict(restore)}"
+            message = f"a restore needs a string path, written and original line: {dict(found)}"
             raise ConfigError(message)
         text = result.get(path)
-        if not isinstance(text, str):
+        if not isinstance(text, str) or CARRIAGE_RETURN in text:
             continue
         lines = text.split("\n")
         if lines.count(written) == 1:

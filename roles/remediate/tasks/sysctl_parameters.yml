@@ -443,9 +443,20 @@
             else 'target_absent' -%}
       {%- set ns.detail = vendor ~ (' is not a regular file' if ns.reason == 'not_regular_file'
             else ' no longer exists') -%}
+      {%- elif lines | select('equalto', written) | list | length == 1 and written != original
+            and __linux_compliance_remediate_sc_texts
+                | freesecdev.linux_compliance.sysctl_carriage_returns([vendor]) | length > 0 -%}
+      {%- set ns.reason = 'unparsed_configuration' -%}
+      {%- set ns.detail = vendor ~ ' holds a carriage return, which ansible.builtin.lineinfile would turn into a line'
+            ~ ' feed and so change other lines; the collection does not write its line back' -%}
       {%- elif lines | select('equalto', written) | list | length == 1 and written != original -%}
       {%- set ns.restores = ns.restores + [{'path': vendor, 'written': written, 'original': original}] -%}
       {%- elif lines | select('equalto', original) | list | length == 1 -%}
+      {%- elif __linux_compliance_remediate_sc_texts
+            | freesecdev.linux_compliance.sysctl_carriage_returns([vendor]) | length > 0 -%}
+      {%- set ns.reason = 'unparsed_configuration' -%}
+      {%- set ns.detail = vendor ~ ' holds a carriage return, which ansible.builtin.lineinfile would turn into a line'
+            ~ ' feed and so change other lines; the collection does not write its line back' -%}
       {%- else -%}
       {%- set ns.reason = 'modified_since_apply' -%}
       {%- set ns.detail = vendor ~ ' no longer holds the line that the collection wrote' -%}
@@ -793,6 +804,11 @@
                      if integer else (current_normal is search(wanted.pattern)) if wanted.pattern is string
                      else current_normal in (wanted.accepted | map('split') | map('join', ' ') | list))) -%}
       {%- set exact = entry is not none and entry.isreg and entry.checksum == sha -%}
+      {%- set carriage = texts
+            | freesecdev.linux_compliance.sysctl_carriage_returns(ns.edits | map(attribute='path') | list) -%}
+      {%- set unparsed = planned_readers.unsupported + (carriage | map('regex_replace', '$',
+            ' holds a carriage return, which ansible.builtin.lineinfile would turn into a line feed and so change'
+            ~ ' other lines; the collection does not edit its line of ' ~ key) | list) -%}
       {%- set restorable = current is not string or current is match('^[\\t -~]{0,255}$') -%}
       {%- set status =
             'method_changed' if prior is mapping and prior.method | default('unknown') != 'dropin'
@@ -802,7 +818,7 @@
             else 'not_owned' if entry is not none and not exact and not text.startswith(header)
             else 'duplicate_setting' if ns.duplicate | length > 0
             else 'prior_too_large' if ns.large | length > 0
-            else 'unparsed_configuration' if planned_readers.unsupported | length > 0
+            else 'unparsed_configuration' if unparsed | length > 0
             else 'overridden' if ns.later | length > 0
             else 'conflicting_setting' if ns.earlier | length > 0
             else 'prior_unrestorable' if not runtime_ok and not restorable
@@ -820,7 +836,7 @@
             else (path ~ ' exists without the header of the collection') if status == 'not_owned'
             else (ns.duplicate | join('; ')) if status == 'duplicate_setting'
             else (ns.large | join('; ')) if status == 'prior_too_large'
-            else (planned_readers.unsupported | join('; ')) if status == 'unparsed_configuration'
+            else (unparsed | join('; ')) if status == 'unparsed_configuration'
             else ((ns.later + ns.earlier) | join('; ')) if status == 'overridden'
             else (ns.earlier | join('; ')) if status == 'conflicting_setting'
             else ('the running value of ' ~ key ~ ' cannot be written back on cleanup: it is longer than 255'
