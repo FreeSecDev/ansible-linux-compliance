@@ -44,6 +44,7 @@ from tools.lint.repo_rules.load_locations import (
 )
 from tools.lint.repo_rules.names import FILE_IO_IMPORTERS, SHEBANG_PREFIX
 from tools.lint.repo_rules.own_remediation import own_remediation_findings
+from tools.lint.repo_rules.remediate_modules import check_remediate_modules
 from tools.lint.repo_rules.rendered_files import NUL, rendered_file_findings
 from tools.lint.repo_rules.yaml_text import check_document_start, check_yaml_comments
 
@@ -115,7 +116,7 @@ def check_file(
     if suffix in PYTHON_SUFFIXES:
         found = _python_violations(path, root, data, relative, configured)
     elif suffix in YAML_SUFFIXES:
-        found = _yaml_violations(path, data, relative)
+        found = _yaml_violations(path, data, relative, root)
     else:
         found = _text_violations(path, data, relative)
     rendered = [
@@ -217,8 +218,12 @@ def _documents(text: str) -> list[yaml.Node]:
         loader.dispose()
 
 
-def _yaml_violations(path: Path, data: bytes, relative: Path | None) -> list[Violation]:
-    """Apply the document-start, comment, banned-module and load-path rules to YAML."""
+def _yaml_violations(path: Path, data: bytes, relative: Path | None, root: Path) -> list[Violation]:
+    """Apply the document-start, comment, banned-module, remediation-module and load-path rules.
+
+    The modules of ``roles/remediate`` are checked against the allow list of ADR 0032 §1, whose
+    pins are read below ``root``.
+    """
     try:
         text = data.decode("utf-8")
     except UnicodeDecodeError as error:
@@ -233,6 +238,7 @@ def _yaml_violations(path: Path, data: bytes, relative: Path | None) -> list[Vio
         *module_parameter_findings(path, documents, relative),
         *target_findings(path, relative, documents),
         *yaml_variable_findings(path, relative, documents),
+        *check_remediate_modules(path, relative, documents, root=root),
     ]
     if not executed:
         violations.extend(yaml_jinja_findings(path, documents))

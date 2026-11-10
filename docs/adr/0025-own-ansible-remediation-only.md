@@ -1,6 +1,6 @@
 # 0025. Remediation is our own Ansible only; scanner remediation content is never used
 
-- **Status:** accepted (to be widened by [ADR 0032](0032-operator-control-community-modules-and-value-overrides.md) once it is accepted)
+- **Status:** accepted (widened by [ADR 0032](0032-operator-control-community-modules-and-value-overrides.md))
 - **Date:** 2026-10-30
 - **Deciders:** lead architect; project owner (requirement of 2026-10-30: remediation is written in Ansible by this
   project, and the code of the scanner content is not trusted)
@@ -183,3 +183,13 @@ A change to the rule group or to its pinned exceptions changes the repository gu
 version in `galaxy.yml` and the requirements files, are on the allow list of a new repository rule, and run no
 process outside ADR 0004. Until then this ADR applies unchanged. The ban on `shell`, `command`, `raw` and `script`
 and on every form of scanner remediation stays either way.
+
+## Amendment 2026-11-10: ADR 0032 accepted (FREES-203)
+
+ADR 0032 is accepted, and the widening of its §1 is in force. `tools/lint/repo_rules/remediate_modules.py` makes it a
+check: every module in a YAML task file below `roles/remediate` is an `ansible.builtin` module, a module of this
+collection or a module on `ALLOWED_COMMUNITY_MODULES`, by its fully qualified name, and an allow-listed module needs
+its collection pinned at one exact version in `galaxy.yml`, `extensions/molecule/requirements.yml` and
+`extensions/molecule/collections.pins`. The allow list is empty, so in practice the module rule of this ADR still
+holds until a reviewed community module is listed. The ban on `shell`, `command`, `raw` and `script` and on every form
+of scanner remediation is unchanged.

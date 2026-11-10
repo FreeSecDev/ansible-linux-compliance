@@ -1,0 +1,16 @@
+---
+minor_changes:
+  - >-
+    Repository guard - ``make lint-repo`` checks the modules of every YAML task file below ``roles/remediate``
+    against ADR 0032 §1 (FREES-203): a task key that is not a task keyword of ansible-core, and the module of an
+    ``action`` or ``local_action``, must be an ``ansible.builtin`` module, a ``freesecdev.linux_compliance`` module or
+    a community module on the allow list ``ALLOWED_COMMUNITY_MODULES``, by its fully qualified name. Short names,
+    ``ansible.legacy`` names and templated names are refused. The allow list is empty, so modules such as
+    ``community.general.make`` or ``ansible.posix.at`` are refused. An allow-listed module also needs its collection
+    pinned at one exact version in ``galaxy.yml`` ``dependencies``, ``extensions/molecule/requirements.yml`` and
+    ``extensions/molecule/collections.pins``.
+trivial:
+  - >-
+    Documentation - ADR 0032 is accepted, with corrections to its context and the decisions of its implementation;
+    ADR 0003 and ADR 0025 are marked as widened by it; AGENTS.md rule 1, the native remediation guide and the
+    remediation families reference of the ``ansible-collection`` skill name the modules that remediation may use.

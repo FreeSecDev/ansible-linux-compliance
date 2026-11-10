@@ -106,6 +106,16 @@ Rules:
   (including ``usg fix``) or run a script that it provides, except the exact ``PINNED_EXCEPTIONS``
   of ``tools/lint/repo_rules/own_remediation.py``.
 
+* Remediation runs only reviewed modules (FREES-203, ADR 0032 §1): in every YAML task file below
+  ``roles/remediate/``, a task key that is not a task keyword of ansible-core (``TASK_KEYWORDS``,
+  plus the ``with_`` loops) and the module of an ``action`` or ``local_action`` must be an
+  ``ansible.builtin`` module, a ``freesecdev.linux_compliance`` module or a community module on
+  ``ALLOWED_COMMUNITY_MODULES`` of ``tools/lint/repo_rules/remediate_modules.py``, by its fully
+  qualified name; short, ``ansible.legacy`` and templated names are refused. The allow list is
+  empty, and an allow-listed module needs its collection pinned at one exact version in
+  ``galaxy.yml``, ``extensions/molecule/requirements.yml`` and
+  ``extensions/molecule/collections.pins``.
+
 Violations are printed as ``path:line: message`` and the exit status is 1. An
 ``--index-modes`` listing that cannot be read is reported with exit status 2.
 """

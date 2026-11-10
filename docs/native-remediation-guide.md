@@ -7,6 +7,7 @@ lifecycle in Molecule. Audience: family authors and reviewers. Jira: FREES-53 (n
 [ADR 0021](adr/0021-native-banners-pwquality-and-profile-values.md) (profile values, banners, password quality),
 [ADR 0023](adr/0023-native-ssh-server-configuration.md) (SSH server),
 [ADR 0025](adr/0025-own-ansible-remediation-only.md) (our own Ansible only),
+[ADR 0032](adr/0032-operator-control-community-modules-and-value-overrides.md) (allow-listed community modules),
 [ADR 0027](adr/0027-native-faillock-pwhistory.md) (account lock-out and password reuse),
 [ADR 0029](adr/0029-native-kernel-parameters.md) (kernel parameters) and
 [ADR 0030](adr/0030-native-auditd-settings-and-audit-rules.md) (auditd settings and audit rules).
@@ -28,6 +29,34 @@ an audit, never a source of remediation code. Take values only from the profile'
 refuses Python that reads `fix` elements, committed upstream remediation content and invocations of the scanner's
 remediation ([ADR 0025](adr/0025-own-ansible-remediation-only.md)).
 
+### Which modules a family may use
+
+A task of `roles/remediate` names its module by the fully qualified name, and that module is one of these
+([ADR 0032](adr/0032-operator-control-community-modules-and-value-overrides.md) §1):
+
+- an `ansible.builtin` module, never `shell`, `command`, `raw` or `script` (AGENTS.md rule 1);
+- a module or action plugin of this collection, `freesecdev.linux_compliance.*`;
+- a module of a community collection that is on `ALLOWED_COMMUNITY_MODULES` in
+  `tools/lint/repo_rules/remediate_modules.py`. **The list is empty today.**
+
+`make lint-repo` refuses every other module in every YAML task file below `roles/remediate`, including a short name
+(`copy:`), an `ansible.legacy` name and a templated name, in a task key as well as in `action` and `local_action`. A
+module of a community collection, such as `community.general.make` or `ansible.posix.at`, is refused because it is not
+listed. To list one, the same pull request:
+
+- records the security review of ADR 0032 §1: check mode and a truthful `changed`, how the module reads and writes the
+  files it manages (whole-file writes, CR and NUL handling, symbolic links), and every external process it runs. A
+  process call must meet AGENTS.md rule 2 and [ADR 0004](adr/0004-audited-process-execution.md), with a timeout among
+  other things; `ansible.posix.sysctl` runs `sysctl` with no timeout and is refused, which is why the kernel parameters
+  use their own drop-ins ([ADR 0029](adr/0029-native-kernel-parameters.md));
+- pins the collection at one exact version (`<major>.<minor>.<patch>`) in `galaxy.yml` `dependencies`,
+  `extensions/molecule/requirements.yml` and `extensions/molecule/collections.pins` (`make molecule-collections-lock`);
+  the rule refuses an allow-listed module whose collection is missing from one of them or pinned at different
+  versions.
+
+The family keeps the reader as the oracle, whichever module writes the file. Molecule scenarios, test playbooks and
+the other roles are not in scope of the allow list; the banned modules apply to them as everywhere.
+
 ## 1. Read what the content expects
 
 Never infer a rule from its name. Fetch the pinned content (`make content`) and read, for every rule of the topic in
@@ -42,8 +71,9 @@ both pinned datastreams of `content/manifest.yml`:
 
 Write the setting where the content's check reads it on each platform, so the audit agrees with the remediation;
 when the platforms differ, choose the method per benchmark and pin it with a golden test against the OVAL (as
-`pwquality` does with `main_file_benchmarks`). Decide per rule whether it can be implemented natively and safely: with `ansible.builtin` modules only (`copy`,
-`template`, `lineinfile`, `file`, `stat`, `slurp`, `find`; never `shell`, `command`, `raw` or `script`), without
+`pwquality` does with `main_file_benchmarks`). Decide per rule whether it can be implemented natively and safely: with the modules of
+[Which modules a family may use](#which-modules-a-family-may-use) (for example `ansible.builtin.copy`, `template`,
+`lineinfile`, `file`, `stat`, `slurp` and `find`; never `shell`, `command`, `raw` or `script`), without
 changing what another topic owns (the PAM stack belongs to `pam`, packages to the package topics), and with an exact
 revert. A rule that fails any of these stays `audit_only`; write the reason into the ADR of the topic and the
 [remediation guide](remediation.md#native-families).

@@ -1,6 +1,6 @@
 # 0032. Operator control: community modules, and value overrides reported as deviations
 
-- **Status:** proposed
+- **Status:** accepted
 - **Date:** 2026-11-09
 - **Deciders:** project owner (requirement of 2026-11-09: remediate only with native Ansible modules, community
   modules or this collection's own modules, never with a scanner's remediation; users who run the code must be able
@@ -228,3 +228,114 @@ process helper's refusals stay in force.
   - check mode reports the same statuses.
 - Forward-looking: the faillock bounds (at most 604800 for the times) and its values come from FREES-186 (#78). They
   join the override set when that family's comparison functions are in place.
+
+## Acceptance 2026-11-10 (FREES-203)
+
+This ADR is accepted through the pull request that implements the enforcement of §1, its first implementation. ADR
+0003 and ADR 0025 are widened from now on, and AGENTS.md rule 1 reads: missing functionality becomes a typed Python
+module, action plugin or `module_utils` code, or, **in a task file of `roles/remediate`**, a module of a community
+collection on the allow list of §1.
+
+What is in force with the acceptance:
+
+- `tools/lint/repo_rules/remediate_modules.py`, run by `make lint-repo` for every YAML file below `roles/remediate/`
+  whose document is a task list. A task key that is not a task keyword of ansible-core (the field attributes of
+  `Task`, `Block` and `Handler`, plus the `with_` loops) names the module, and so do the first word of an `action` or
+  `local_action` string and the `module` key of their mapping form. That name must be `ansible.builtin.*`,
+  `freesecdev.linux_compliance.*` or on `ALLOWED_COMMUNITY_MODULES`. A short name, an `ansible.legacy` name and a
+  templated name are refused, because Ansible may resolve them to any module.
+- `ALLOWED_COMMUNITY_MODULES` is empty. `community.general.make` and `ansible.posix.at` are refused because they are
+  not listed.
+- An allow-listed module is refused unless its collection is pinned at one exact version (see H below).
+- A unit test keeps the keyword list equal to the field attributes of the installed ansible-core, so a new keyword
+  fails the test instead of being read as a module name.
+
+Molecule scenarios, test playbooks and the other roles are outside the allow list; the banned modules apply to them as
+before. The value overrides of §2 to §5 are not implemented yet: until their pull requests merge,
+`linux_compliance_remediate_value_overrides` does not exist, and nothing in this section changes what the remediate
+role writes.
+
+## Corrections to the context (2026-11-10)
+
+`main` moved after the context above was written:
+
+1. **Two more families carry a catalogue `comparison`.** Next to `login_defs`, the `faillock` and `pwhistory` rules
+   (FREES-186, ADR 0027) have `comparison: at_least`, `at_most` or `present` in `content/catalogue.yml`. Their
+   decision, including the faillock special values (`0` or `never` for the unlock times, at most 604800 seconds), is
+   `satisfies` in `plugins/filter/pam_conf.py`, not yet in `module_utils`.
+2. **One XCCDF value is shared by two rules.** `var_password_pam_remember` is the `profile_value` of both
+   `accounts_password_pam_pwhistory_remember_password_auth` and `accounts_password_pam_pwhistory_remember_system_auth`.
+   The case of §2, "one override applies to all of them", is real, and its implementation needs a test for it.
+3. **Families with profile values.** Counted from the value rules of `roles/remediate/vars/rules.yml`: `login_defs` 6,
+   `pwquality` 13, `pwhistory` 2 (one value), `faillock` 4, `ssh` 8, `sudo` 2, `ipv4_parameters` 19,
+   `ipv6_parameters` 19 and `auditd_conf` 13. The 3 values of `banners` stay excluded (§2).
+
+## Decisions of the implementation (2026-11-10)
+
+These answer the questions that the decision above leaves open. Each one is implemented, with tests, by the pull
+request of FREES-203 that owns that part.
+
+- **A. Source of a deviation for the audit.** A deviation register in the ledger document on the host (`state.json`,
+  ledger schema 2), a top-level `deviations` list separate from the revert entries: a deviation where nothing was
+  written still needs a record, and no revert entry may exist for a change that was never made. The audit does not
+  judge the value again: the remediation judges it with the family's reader, and the scanner judges the check. A
+  missing ledger means no deviations. A corrupt or unsafe ledger makes `compliance_scan` fail before it scans, with
+  the error type `deviation_source_invalid` (fail closed, as remediation already refuses a corrupt ledger). A stale
+  record over-reports, which is the safe direction, until the next enabled remediation run corrects it.
+- **B. Findings schema version.** The version follows the content: `1.3` when a finding carries
+  `operator_deviation`, else `1.2` when a finding carries `control`, else `1.1` when the run is off-platform, else
+  `1.0`. A `1.3` document has `control` and `deviation` (object or null) on every finding, `off_platform` as in `1.2`,
+  and at least one deviation. Any other form is refused, so each document has one canonical form.
+- **C. Flags and outcomes.** `_FLAG_OUTCOMES` maps a flag to a set of outcomes: `fixed` to `pass`, `informational`
+  and `notselected` to `notchecked`, `operator_deviation` to `pass`, `fail` and `waived`. The flag is set exactly when
+  the finding's `deviation` is set.
+- **D. A deviated rule that scans `error`, `notchecked`, `notapplicable` or `disabled`** gets no flag, because the
+  model does not allow it there. None of these outcomes counts as a pass (ADR 0016). The audit result lists such rules
+  in `deviations.unflagged` with rule id and outcome, and the remediation result keeps the deviation. ADR 0013 and
+  `docs/audit.md` record this when it is implemented.
+- **E. Values without an order.** `exact` (sudo `logfile`, auditd `action_mail_acct`, every kernel parameter): any
+  difference is a deviation. `choice_set` (the auditd actions): the override is one keyword the reader accepts, and it
+  meets the profile when it is in the profile's `a|b|c` set. `algorithm_subset` (sshd `KexAlgorithms`, `MACs`): it
+  meets the profile when it is a subset of the profile's list, order ignored, and the `+`, `-` and `^` modifiers are
+  refused. Flags such as pwquality `dictcheck` and `enforcing` are ordered `0 < 1`. `MaxStartups` is compared per
+  component (`start` and `full` at most, `rate` at least), unless the golden test of its check shows otherwise.
+- **F. AGENTS.md rule 1** is worded as in the acceptance above.
+- **G. ADR 0029.** The kernel parameter design that §1 refers to is implemented on `main` (FREES-107). Its row in
+  `docs/adr/README.md` still says `proposed`; correcting that belongs to FREES-107, not to this ADR.
+- **H. The requirements files of §1** are `galaxy.yml` `dependencies`, `extensions/molecule/requirements.yml` and
+  `extensions/molecule/collections.pins` (with the SHA-256 and size of the artifact). An allow-listed module's
+  collection must be named once in each, at the same `<major>.<minor>.<patch>` version; the repository rule of §1
+  checks that they agree. FREES-160 adds the lock for installs and the Renovate policy on top, and remains a condition
+  for listing the first community module.
+- **I. Families that need comparison functions** before their values can be overridden: `pwquality`, `ssh`, `sudo`
+  and `auditd_conf`, and also `faillock`, `pwhistory`, `ipv4_parameters` and `ipv6_parameters`, whose comparisons are
+  in family code today (correction 1) or nowhere. `login_defs` moves into the same functions.
+- **J. Judged statuses.** `applied`, `compliant` and `notapplicable` are judged; a looser value turns `applied` or
+  `compliant` into `deviation`. The refusal statuses (`overridden`, `duplicate_setting`, `unreadable_*`,
+  `not_regular_file`, `modified_*`, `method_changed`) are not judged and keep an earlier register record. A successful
+  cleanup, or a plan action of `none`, removes the record.
+- **K. `unused_overrides`** is a list of `{value_id, reason}` with the reasons `not_in_profile`, `disabled_by_toggle`,
+  `disruptive_not_allowed`, `remediation_disabled` and `no_profile_value_for_content`. Keys are validated even when
+  `linux_compliance_remediate_enabled` is false, so a typo fails early.
+- **L. An override equal to the profile value** has `value_source: override`: it is the operator's input, and it is
+  judged as meeting the profile.
+- **M. Override value types.** A YAML integer (not a boolean) or a string, turned into canonical text by the
+  comparison function. A YAML integer for a umask is refused, because YAML 1.1 reads `027` as octal 23; it must be a
+  quoted string. Lists are refused; algorithm lists are comma-separated strings.
+- **N. A selected rule without a profile value for the content** still fails closed. An override does not stand in for
+  the missing profile value, because the classification needs it.
+- **O. Audit gate.** The audit `summary` gains a `deviation` count next to the outcome counts; `pass` stays the raw
+  outcome count there. The gate record gains `deviation`, and `linux_compliance_audit_fail_on_deviation` (default
+  `false`, like `linux_compliance_audit_fail_on_noncompliant`) lets CI fail on deviations.
+- **P. Report counting.** The summary gains `deviation` (every flagged rule) and `deviation_by_outcome` (`pass`,
+  `fail`, `waived`). A flagged pass leaves `counts.pass` but stays in `evaluated`, so the percentage drops and
+  `all_evaluated_passed` cannot be reached. Invariant: the sum of `counts` plus `deviation_by_outcome.pass` equals
+  `rules`. A rule rolled up from several scans is flagged when any of them is.
+- **Q. STIG checklist export.** A flagged `pass` exports as `Open`, with the deviation in `FINDING_DETAILS`: a
+  checklist status is a reviewer's verdict, and a weakened host never looks compliant.
+- **R. Which values are overridable.** A per-rule catalogue key `value_comparison: <name>` next to `profile_value`,
+  generated into `parameters.value_comparison`, names an entry of `values.COMPARATORS` in `module_utils`. A family
+  becomes overridable by changing only its catalogue entries and family files.
+- **S. Register writes when a run aborts.** The register record is written before the family writes, in the order the
+  ledger already uses, and only for rules whose deviation state changes. One final step in `tasks/main.yml` removes
+  the records of rules that were cleaned up or planned `none`.

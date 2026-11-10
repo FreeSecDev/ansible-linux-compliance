@@ -26,9 +26,9 @@ repository and is consumed here by digest only.
 
 1. Never use `ansible.builtin.shell`, `ansible.builtin.command`, `ansible.builtin.raw`,
    `ansible.builtin.script` or their aliases, anywhere, including Molecule and test playbooks.
-   Missing functionality becomes a typed Python module, action plugin or `module_utils` code, or, once
-   [ADR 0032](docs/adr/0032-operator-control-community-modules-and-value-overrides.md) is accepted, an allow-listed
-   community module.
+   Missing functionality becomes a typed Python module, action plugin or `module_utils` code, or, in a task file of
+   `roles/remediate`, a module of a community collection on the allow list of
+   [ADR 0032](docs/adr/0032-operator-control-community-modules-and-value-overrides.md) §1 (`make lint-repo`).
 2. External executables (for example `oscap`) are only run from Python with an explicit argument
    list, `shell=False`, a resolved absolute binary path, validated inputs and a timeout.
 3. Use fully qualified collection names for every module, role, plugin and collection reference.
