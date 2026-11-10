@@ -35,7 +35,7 @@ def test_the_filter_is_registered() -> None:
 
 @pytest.mark.parametrize("text", TEXTS)
 def test_the_restore_gives_back_every_byte_of_the_file_before_the_write(text: str) -> None:
-    decision = pam_conf.pam_conf_decision(text, DENY, {})
+    decision = pam_conf.pam_conf_decision(text, DENY, {}, ())
     assert decision["status"] == "applied"
     written = str(decision["new_text"])
     restore = pam_conf_restore.pam_conf_restore(

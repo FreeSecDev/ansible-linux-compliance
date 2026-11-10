@@ -391,7 +391,9 @@ def decide(case: Case, rule: tuple[str, str, str], text: str | None = None) -> d
         "required": required,
         "stack_checked": checked,
     }
-    return pam_conf.pam_conf_decision(case.text if text is None else text, rule_map, stack_of(case))
+    return pam_conf.pam_conf_decision(
+        case.text if text is None else text, rule_map, stack_of(case), ()
+    )
 
 
 def after_id(case: Case, rule: tuple[str, str, str]) -> str:

@@ -29,7 +29,7 @@ def test_the_filter_is_registered() -> None:
 @pytest.mark.parametrize(("text", "stack"), [(None, {}), ("", None), ("", ["x"])])
 def test_the_text_and_the_stack_must_be_a_string_and_a_mapping(text: object, stack: object) -> None:
     with pytest.raises(TypeError, match="text of the file"):
-        pam_conf.pam_conf_decision(text, DENY, stack)
+        pam_conf.pam_conf_decision(text, DENY, stack, ())
 
 
 @pytest.mark.parametrize(
@@ -54,12 +54,12 @@ def test_the_text_and_the_stack_must_be_a_string_and_a_mapping(text: object, sta
 )
 def test_an_invalid_rule_fails(rule: object) -> None:
     with pytest.raises(ValueError, match="needs a rule"):
-        pam_conf.pam_conf_decision("", rule, {})
+        pam_conf.pam_conf_decision("", rule, {}, ())
 
 
 def test_a_required_time_that_pam_faillock_ignores_is_never_written() -> None:
     rule = {**DENY, "setting": "unlock_time", "comparison": "at_least", "required": "604801"}
-    decision = pam_conf.pam_conf_decision("unlock_time = 900\n", rule, {})
+    decision = pam_conf.pam_conf_decision("unlock_time = 900\n", rule, {}, ())
     assert decision["status"] == "unsupported_value"
     assert "604800" in str(decision["reason"])
     assert decision["setting_line"] is None
@@ -99,7 +99,7 @@ def test_an_unchecked_rule_is_only_overridden_by_conf() -> None:
     assert pam_conf.stack_overrides(stack, "pwhistory", "enforce_for_root", checked=False) == [
         "/etc/pam.d/b"
     ]
-    decision = pam_conf.pam_conf_decision("enforce_for_root\n", ENFORCE, stack)
+    decision = pam_conf.pam_conf_decision("enforce_for_root\n", ENFORCE, stack, ())
     assert decision["status"] == "overridden"
     assert "/etc/pam.d/b" in str(decision["reason"])
 

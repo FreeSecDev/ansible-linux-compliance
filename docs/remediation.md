@@ -173,8 +173,11 @@ would not be.
 The family registry is in `roles/remediate/vars/rules.yml`, generated from `content/catalogue.yml`. Its order is the
 dispatch order: non-disruptive families first, so that a failure in a disruptive family leaves the harmless changes
 applied, then the families in order of growing lock-out risk, with the bootloader last because it takes effect only on
-the next boot. The [control family reference](control-families.md) lists all 21 families with the reason for each
-disruptive flag and their rules per profile.
+the next boot. The [control family reference](control-families.md) lists all 58 families with the reason for each
+disruptive flag and their rules per profile. The table names the 21 top-level topics, in registry order: the families
+that no umbrella groups and the umbrellas, with the flag of the families that each umbrella groups.
+`tests/unit/tools/test_docs_counts.py` fails when the table or the counts on this page differ from the registry
+(FREES-206).
 
 | Disruptive | Families |
 |---|---|
@@ -310,6 +313,22 @@ must:
     pass these checks, but cannot do so without the opt-in.
 12. **Include helpers from the role.** Use `file: "{{ role_path }}/tasks/<family>_<purpose>.yml"`, never a bare file
     name, so a missing helper fails instead of resolving against the playbook directory.
+13. **Name internal variables with the family's own prefix.** Every fact, registered result, task variable, loop
+    variable, `index_var`, `apply.vars` key and `include_vars` `name` that the family's files define (with `set_fact`
+    as `ansible.builtin.`, `ansible.legacy.` or short, also as the `module` of an `action` or `local_action` mapping
+    and through `args`) is `__linux_compliance_remediate_<xx>_*` (or
+    `__linux_compliance_remediate_<xx>`), with one short `<xx>` for the family file, its helpers and the families that
+    share them (`kp` for the kernel parameter topics, `sc` for `faillock` and `pwhistory`), which no other family uses
+    and which is not the first component of a constant of `vars/` or of a name of `main.yml` or `dispatch.yml`. Files
+    belong together when a task of one includes or imports the other from `{{ role_path }}/tasks/`, subdirectories
+    included. A family may set only two names of the role: `__linux_compliance_remediate_results` and
+    `__linux_compliance_remediate_rule`; every other name of `main.yml` and `dispatch.yml` (the plan, the ledger, the
+    family) belongs to the role. A templated `set_fact` key is refused, because its name cannot be checked. `make
+    lint-repo` refuses anything else (`tools/lint/repo_rules/family_prefixes.py`, FREES-208), so two pull requests
+    cannot both choose one prefix and only collide after both have merged. The rule does not see an `include_vars`
+    without `name` (its keys are constants, which `make lint-role-guards` checks), a module called in the string form
+    of `action` or with `key=value` arguments, or variables that a module sets at run time, and the pre-commit hook reports it only for the task files of a commit: a commit that changes only a
+    constant of `vars/` is checked by `make lint-repo`, which reads every file.
 
 ### Reference family: `file_permissions`
 
@@ -386,7 +405,7 @@ statuses that refuse to act, with nothing changed and the entry kept:
 | `not_directory` | `pwquality.conf.d` exists but is not a directory, for example a symbolic link; nothing is written through it |
 | `not_regular_file` | The main file or a drop-in is a symbolic link or another non-regular file |
 | `not_owned` | A file at the drop-in's path does not carry the collection's header, with or without a ledger entry |
-| `overridden` (apply) | A file that libpwquality reads later sets another value, or a `pam_pwquality` argument in any file of `/etc/pam.d`, `/usr/lib/pam.d` or the vendor directory `/usr/share/pam.d` sets the setting to another value (FREES-200, FREES-211); the reason names the file and the line or the argument. Also every rule other than `_enforcing` when `enforcing` is 0 in the files or in a `pam_pwquality` argument, in any form that the library reads as 0 (`enforcing=0`, `enforcing=00`, `enforcing=+00`, `enforcing=-0`), because libpwquality then only warns; and every rule when a PAM line includes a path with a `/` (`@include /etc/site/password`, `password include ../security/x`), which Linux-PAM opens outside the PAM files that the collection reads (a relative target is looked up in each PAM directory in turn, as a service name is) |
+| `overridden` (apply) | A file that libpwquality reads later sets another value, or a `pam_pwquality` argument in any file of `/etc/pam.d`, `/usr/lib/pam.d` or the vendor directory `/usr/share/pam.d` sets the setting to another value (FREES-200, FREES-211); the reason names the file and the line or the argument. Also every rule other than `_enforcing` when `enforcing` is 0 in the files or in a `pam_pwquality` argument, in any form that the library reads as 0 (`enforcing=0`, `enforcing=00`, `enforcing=+00`, `enforcing=-0`), because libpwquality then only warns; every rule when a PAM line includes a path with a `/` (`@include /etc/site/password`, `password include ../security/x`), which Linux-PAM opens outside the PAM files that the collection reads (a relative target is looked up in each PAM directory in turn, as a service name is); and every rule when an entry of a PAM directory is a symbolic link to nothing, a link to something that is neither a regular file nor a directory (a FIFO, a device), a link that `stat` cannot follow (a loop, or a path through something that is not a directory), or neither a regular file, a directory nor a link, or when `find` could not list a PAM directory or inspect one of its entries or `stat` could not inspect a PAM directory (a loop), which libpam may open but the collection does not read (FREES-213); the reason names the entry |
 | `modified_since_read` | The main file changed between the read and the write, of an apply or of a cleanup (its SHA-256 is read again right before the write); nothing is written, and the next run reads it again |
 | `write_mismatch` (cleanup) | After the main file was written back, its SHA-256 is not that of the text written; unlike the other reasons, the file was written, and the entry is kept so that the next run checks it again |
 | `unreadable_file` (apply) | libpwquality stops reading at a line before the rule's value (an unknown setting, a value that is not an integer, a NUL, a line of 1023 bytes or more, also in a drop-in read before the main file), a drop-in that it reads is a symbolic link or not a regular file, or the main file is not UTF-8 text or holds a NUL |
@@ -402,10 +421,15 @@ occurrence wins, and the first line it cannot read stops the whole configuration
 `pwquality_restore` reproduce that reader, which `tests/fixtures/pwquality_readers/verdicts.json` checks against the
 real library of both Molecule images (ADR 0021, amendment of FREES-200). A rule is `applied` or `compliant` only when
 the library would take the profile's value from what the rule writes. The `pam_pwquality` arguments are searched in
-every file of the three PAM directories that the `faillock` and `pwhistory` families also read, `/etc/pam.d`,
+every regular file of the three PAM directories that the `faillock` and `pwhistory` families also read, `/etc/pam.d`,
 `/usr/lib/pam.d` and `/usr/share/pam.d` (FREES-211), all together: a file is searched even when libpam does not open
 it, because a file of the same name comes first or, on Ubuntu, because libpam is built without the vendor directory,
-so the family may refuse more than libpam would read but never less. With the main file, a setting that is set on
+so the family may refuse more than libpam would read but never less. A symbolic link there that resolves to a regular
+file, such as the `system-auth` that authselect links into `/etc/authselect`, is read through the link under its name
+in the PAM directory, and a PAM directory that is a link to a directory is read through it (FREES-213). A directory
+entry, or a link to one, is left out, because libpam reads no line from it; libpam still stops its lookup of that name
+there, so a service named like the directory falls back to `other`, while the family still reads a regular file of the
+name in a lower PAM directory, which can only add a refusal. With the main file, a setting that is set on
 more than one line, in any case or spacing, is `duplicate_setting` and not touched. With drop-ins, a rule is
 `overridden`, with nothing changed and the overriding file named, when the main file or a later drop-in sets another
 value; a file at the
@@ -558,11 +582,12 @@ The statuses that refuse to act, each with a reason, nothing changed and the led
 | `prior_unrestorable` (apply) | The running value is longer than 255 characters or holds a character other than printable ASCII and tab, so cleanup could not write it back |
 | `runtime_unavailable` (apply) | The running value must change but `/proc/sys` cannot be written, as in an unprivileged container; set `linux_compliance_remediate_sysctl_runtime` to `false` to write only the persistent value |
 | `notapplicable` (apply) | With the running values on, the kernel has no such parameter, for example IPv6 disabled at boot |
-| `not_directory`, `not_regular_file`, `not_owned` | `/etc/sysctl.d` is not a directory (a symbolic link included), the drop-in path is not a regular file, or a file there lacks the collection's header |
+| `not_directory`, `not_regular_file`, `not_owned` | `/etc/sysctl.d` is not a directory (a symbolic link included), the drop-in path or a vendor file to edit or to write back is not a regular file (a symbolic link included; the collection never writes through it), or a file there lacks the collection's header |
 | `method_changed` | The ledger entry records another method, or none |
 | `modified_since_apply` (cleanup) | The drop-in, a changed vendor line or the running value is no longer what the collection wrote (and not the recorded value before either); an administrator's change is never overwritten |
 | `invalid_record`, `target_absent` (cleanup) | The record is malformed, a changed vendor file is gone, or the kernel no longer has the parameter |
 | `unparsed_configuration` (cleanup) | The recorded line would be written back into a vendor file that holds a carriage return, which `lineinfile` would turn into line feeds; nothing is written and the ledger entry is kept until the file has none |
+| `modified_since_read` (apply and cleanup) | A file changed between the read and the write: before the first write of the cleanup, every vendor file to write back is read again (SHA-256); before the first write of the apply, every file that the rules were decided on. A cleanup writes nothing into a changed file and keeps the rule's ledger entry; an apply refuses every rule that is `applied` or `compliant` when any of those files changed, or a vendor file that the cleanup found changed, because each rule is decided on the texts of all the files together, and writes nothing of the family. This narrows the window to the tasks between the re-check and the write; it does not close it. The next run reads the files again (FREES-208) |
 
 With `linux_compliance_remediate_sysctl_runtime: false`, `applied` and `compliant` carry the reason
 `running_value_not_read`: only the persistent value was decided. With it on, a rule of `net.ipv4.conf.all.X` or
@@ -700,7 +725,8 @@ no exact revert, and immediate expiry of existing passwords).
 and that the content's check reads on that platform; `tests/unit/tools/test_content_golden_pam_conf.py` checks this
 against the OVAL of both datastreams. The PAM stack is only read, never edited. The filter
 `freesecdev.linux_compliance.pam_conf_decision` decides each rule the way `pam_faillock`, `pam_pwhistory` and libpam
-read the file and the service files of `/etc/pam.d`, `/usr/lib/pam.d` and `/usr/share/pam.d`, and computes the exact
+read the file and the service files of `/etc/pam.d`, `/usr/lib/pam.d` and `/usr/share/pam.d` (a symbolic link that
+resolves to a regular file read through the link under its name there, FREES-213), and computes the exact
 new text, which the role writes with `ansible.builtin.copy` after a SHA-256 re-check, every other byte unchanged;
 `pam_conf_restore` computes the text of the cleanup the same way. `tests/unit/tools/test_pam_conf_oracle.py` checks
 the filter against what the real readers of both images read (`make pam-reader-verdicts`).
@@ -716,7 +742,11 @@ The statuses that refuse to act, with nothing changed and the entry kept, each w
 does not exist), `not_regular_file` (a symbolic link or not a regular file), `unsupported_value` (the profile requires a
 time above 604800 seconds, which `pam_faillock` ignores, or a `deny` above 65535), `unreadable_stack` (libpam reads a
 service file that the collection does not read as it does: an include of a file outside the PAM directories, a NUL
-byte or a line of 1023 bytes or more), `overridden` (a `pam_faillock` or `pam_pwhistory` line of a service file that
+byte or a line of 1023 bytes or more, or an entry of a PAM directory that is a symbolic link to nothing, a link to
+something that is neither a regular file nor a directory, a link that `stat` cannot follow, such as a loop, or neither
+a regular file, a directory nor a link, or a PAM directory or entry that `find` or `stat` could not inspect, FREES-213;
+an entry that is a directory, or a link to one, is left out, and a regular file of its name in a lower PAM directory is
+still read, which can only add a refusal), `overridden` (a `pam_faillock` or `pam_pwhistory` line of a service file that
 libpam opens, in any case, across continued lines and split as `_pam_StrTok` splits it, carries `conf=` or sets the
 option, which pam takes over the file), `unreadable_file` (a NUL byte or a line of 1023 bytes or more, on which
 `pam_faillock` fails, or a file that is not UTF-8), `unreadable_value` (`deny` above 65535, which pam wraps at 16
@@ -796,6 +826,27 @@ The role publishes `linux_compliance_remediated`:
 | `disabled_rules` | Rules switched off by a toggle (`rule_id`, `disabled_by`), restricted to the profile when remediation is enabled. The audit role computes the same list itself from the same toggles, so it does not depend on this fact |
 | `orphaned` | Ledger entries for rules that the catalogue no longer contains; nothing is done to them |
 | `notices` | Operator messages |
+
+### Ledger versions and the deviation register
+
+The state ledger has two schema versions ([ADR 0011, FREES-203
+amendment](adr/0011-control-toggles-and-cleanup.md#amendment-2026-11-10-ledger-version-2-and-the-deviation-register-frees-203)).
+Version 1 is written while no entry records a value and the deviation register is empty, so an existing ledger
+keeps its bytes and older collection versions can still read it. Version 2 adds:
+
+- an optional `value` record per entry (`value_id`, `value_source` `profile` or `override`, `profile_value`,
+  `target`). `control_state` returns `value_source` for every entry; an entry without a record reads as `profile`;
+- the deviation register, `deviations`: the rules whose value in force is looser than the profile's, each with
+  `value_id`, `profile_value`, `effective_value`, `recorded_at` and `collection_version`. A deviation is recorded
+  whether or not the rule wrote anything, so a looser value that the host already had is remembered without a revert
+  entry. `control_state` `record_deviation` and `remove_deviation` maintain it and `list` returns it.
+
+The role does not record values or deviations yet: that starts with `linux_compliance_remediate_value_overrides`
+([ADR 0032](adr/0032-operator-control-community-modules-and-value-overrides.md)). Until then every ledger stays version 1.
+A collection version from before FREES-203 refuses a version 2 ledger as `corrupt`, because its reader does not know
+the `deviations` key, and changes nothing. The file is not damaged: do not delete it, since it holds the revert record
+of every applied rule. Going back to such a version needs a ledger without value records and deviations, or a backup
+from before.
 
 ### A lost ledger cannot be detected
 
@@ -882,6 +933,8 @@ already controls the host. A remediated rule is not proof that the control passe
 | `tests/unit/tools/test_content_golden_pam_conf.py` | With the pinned content: every line that a native faillock or pwhistory rule writes satisfies the object and the comparison of every check that reads `faillock.conf` or `pwhistory.conf` on both platforms, the commented line does not, the compared value is the catalogue's, `stack_checked` is true exactly when the check reads the module line of the PAM stack and the filter's stack detector finds every module line that the check finds, every stack file of a check is a file of `/etc/pam.d`, which the role reads whole, no other catalogued rule reads either file, and the Ubuntu pwhistory rules read only `common-password` | `make test-content-golden`, CI job `test-suites` |
 | `tests/unit/tools/test_pam_conf_oracle.py`, `test_pam_reader_corpus.py`, `tests/unit/plugins/filter/test_pam_conf.py` | Against `tests/fixtures/pam_conf/reader_verdicts.json`, which `make pam-reader-verdicts` builds from the readers of the pam source packages that the Molecule images install: the filter reads all 1506 cases (CR, VT, FF and NUL, case, duplicates, long lines, continued and bracketed module lines, `conf=`, a fuzz corpus and the file after each change) exactly as both readers do, the module lines yield the arguments that libpam passes, and no decision is `compliant` or `applied` while a real reader reads the file looser than the profile requires; the reviewed refusals; the table is exactly what the generator assembles. 100% line and branch coverage | `make test-coverage`, CI job `test-suites` |
 | `tests/playbooks/remediate-pam-conf-check.yml` | Against localhost in check mode with the Ubuntu 24.04 STIG and the RHEL 9 CIS workstation level 2 rules of `faillock` and `pwhistory` allow-listed: every rule gets exactly one result, `changed` exactly when it is `applied`, every refusal has a reason and both files are unchanged; a rule without its profile value fails before any change; the family files and the three `pam_conf_*` helpers refuse to run without the opt-in | `make test-remediate-check`, CI job `test-playbooks-remediate` |
+| `tests/unit/roles/test_sysctl_plan_render.py` | The role's own Jinja of the kernel parameter families, rendered in check mode on local hosts with mocked inputs: value resolution from the profile or the catalogue, the drop-in and the ledger record, the cleanup plan, the reverted rules, the texts and running values after cleanup and the plan of the rules to apply, for the companion of the sample rate, ufw, carriage returns and the port range; and the refusals `modified_since_read` of a cleanup restore and of every rule to apply when a file's bytes on the disk differ from those read or the file is gone, including a vendor file that only the cleanup found changed, a cleanup restore and an apply edit of one file in check mode, a drop-in path that is masked or a directory next to a rule that stays `applied`, a run whose rules are all `compliant`, a real-mode play (without check mode, every task only setting facts) whose cleanup removed a drop-in, and `not_regular_file` for a vendor file that is a symbolic link (the role's `stat` tasks replaced by their registered result, built over the role's own loop). Skipped without `ansible-playbook` or the collection link, and failed then when `CI` is set | `make test-coverage` |
+| `tests/unit/tools/test_check_repo_rules_family_prefixes.py` | The repository rule of the internal variable prefixes on a copy of the role's task files with mutation cases: the prefix of the PAM helpers in the kernel parameter helper; another family's prefix set as a fact (`ansible.builtin.`, `ansible.legacy.` and short `set_fact`, through `args`, an `action` or a `local_action` mapping), a registered result, a task variable, an `apply.vars` key, an `include_vars` `name`, a loop variable, an `index_var`, in a nested block, `rescue` or `always`; a helper with a prefix of its own, also in a subdirectory; two new families with one prefix; a prefix of a constant or of a name of `main.yml` or `dispatch.yml`; a family that sets such a name (with the exact message); a templated `set_fact` key; includes read from the tasks in every form, not from the text; `.yml` and `.yaml`; the reported line. The role's files, a new family with its own prefix, the two shared names, names outside the role's prefix, the role's entry files and files outside `roles/remediate/tasks` pass. 100% line and branch coverage | `make test-coverage` |
 | `tests/unit/tools/test_content_golden_sysctl.py` | With the pinned content: for every native kernel parameter rule on both platforms, the definition is the static and the runtime half (and the IPv6 alternative), the runtime object names the rule's key, the static objects read exactly the files and directories of `__linux_compliance_remediate_sysctl_checked` with the line pattern of the role, the accepted values are exactly the check's states or its exported value, the written value is accepted and its own drop-in line is captured with it, every drop-in sorts after the vendor names, and the `audit_only` rules of the three families are the documented ones | `make test-content-golden`, CI job `test-suites` |
 | `tests/unit/plugins/modules/test_sysctl_runtime.py`, `tests/unit/plugins/module_utils/compliance/test_sysctl.py` | The `sysctl_runtime` module and its helper against a fake `/proc/sys`: names and wildcards, values, absent parameters, symbolic links, other file systems, oversized and unreadable files, writes that are read back, a value that the kernel does not keep is written back, each value read just before it is set, check mode. 100% line and branch coverage of the helper | `make test-coverage` |
 | `tests/unit/plugins/module_utils/compliance/test_sysctl_config.py`, `tests/unit/plugins/filter/test_sysctl_effective.py`, `tests/unit/tools/test_sysctl_reader.py` | The model of `systemd-sysctl` and `sysctl --system` against `tests/fixtures/sysctl_reader/verdicts.json`: the values that systemd 255, procps-ng 4.0.4 and procps-ng 3.3.17 of the Molecule images wrote into a private tmpfs over `/proc/sys` for each of the 72 cases of `cases.json` (file order and name precedence, masking by a directory or a link to `/dev/null`, hidden files, `/etc/sysctl.conf`, key forms with `..`, `/./`, repeated, leading and trailing separators, globs and their order, `-key` lines, `-` prefixes, comments, white space, CR, form feed, vertical tab, NUL, long lines, no line continuation, ufw's file while ufw is disabled), every key with every reader, and what the model does not follow (file names that procps expands, procps keys with `..`, a line over 1 MiB for systemd, ufw settings other than plain ones) reported as unsupported; unit tests without a recorded verdict yet for the refusals of the third review (a second `-` on a procps key, procps globs that are not canonical, glob components that start with `.`, globs the model cannot translate, pattern names on directories and FIFOs), C white space for procps and ufw's `ENABLED=YES` and file order, and of the fourth review (integer values only in the plain decimal form that the kernel reads as written, shell forms in ufw's files, an unclosed `[`, FIFOs, devices and links to them); `tests/unit/plugins/filter/test_sysctl_integer.py` for the integer filter; the generator's case writer and tree reader; regenerate the table with `make sysctl-reader-verdicts` | `make test-coverage` |

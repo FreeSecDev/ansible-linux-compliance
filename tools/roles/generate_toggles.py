@@ -42,6 +42,7 @@ import yaml
 from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance import (
     toggles,
 )
+from tools import yaml_loader
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -221,7 +222,7 @@ def is_generated(name: str) -> bool:
 
 def _load_yaml(path: Path) -> object:
     try:
-        return cast("object", yaml.load(path.read_text(encoding="utf-8"), Loader=yaml.CSafeLoader))
+        return yaml_loader.safe_load(path.read_text(encoding="utf-8"))
     except (OSError, yaml.YAMLError) as error:
         message = f"{path}: cannot be read as YAML: {error}"
         raise GenerationError(message) from error

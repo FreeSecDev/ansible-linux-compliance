@@ -908,7 +908,10 @@ def restore_lines(texts: object, restores: object) -> dict[str, object]:
     line that the collection wrote exactly once (``lineinfile`` with that line) and holds no
     carriage return (:func:`carriage_return_files`), so the same happens here; a file whose text
     is not known, that holds a carriage return, or that holds the line another number of times, is
-    left alone. The plan of the rules to apply then judges the files as they are after cleanup.
+    left alone. ``lineinfile`` ends the line that it writes with a line feed, so a written line at
+    the end of a file without a final line feed gets one as well. The plan of the rules to apply
+    then judges the files as they are after cleanup, and the check before a vendor file is edited
+    compares the file's SHA-256 with these bytes (FREES-208).
 
     Raises:
         ConfigError: If ``texts`` is not a mapping, ``restores`` is not a list, or a restore does
@@ -936,6 +939,9 @@ def restore_lines(texts: object, restores: object) -> dict[str, object]:
             continue
         lines = text.split("\n")
         if lines.count(written) == 1:
-            lines[lines.index(written)] = original
+            index = lines.index(written)
+            lines[index] = original
+            if index == len(lines) - 1:
+                lines.append("")
             result[path] = "\n".join(lines)
     return result

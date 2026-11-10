@@ -12,7 +12,15 @@ description:
   - Maintains the state ledger C(/var/lib/freesecdev/linux_compliance/state.json), which records for
     every remediated rule what is needed to revert it when the rule is disabled.
   - Each entry holds the rule identifier, control family, revert strategy, prior values, collection
-    version and the time the rule was applied.
+    version and the time the rule was applied, and optionally where the value the rule wrote came
+    from (the profile or an operator override, ADR 0032).
+  - The ledger also holds the deviation register, which lists the rules whose value in force is
+    looser than the selected profile's. A deviation is recorded whether or not the rule wrote
+    anything, and is kept apart from the entries, which say what to revert.
+  - The ledger is written as schema version 1 while no entry records a value and the register is
+    empty, so an existing ledger keeps its bytes, and as version 2 otherwise. A collection version
+    from before version 2 refuses a version 2 ledger as C(corrupt), because it does not know the
+    C(deviations) key. The file is not damaged and must not be deleted.
   - The ledger is owned by root with mode C(0600) in a C(0700) directory, is written atomically and
     is serialised between concurrent runs with a lock. The module needs C(become).
   - A corrupt, oversized or unsafe ledger (symbolic link, wrong owner, group or world permission
@@ -24,15 +32,17 @@ options:
   action:
     description:
       - C(get) returns the entry of a rule, C(record) adds or replaces it, C(remove) deletes it and
-        C(list) returns all entries.
+        C(list) returns all entries and deviations.
+      - C(record_deviation) adds or replaces the deviation of a rule and C(remove_deviation)
+        deletes it.
     type: str
     required: true
-    choices: [get, record, remove, list]
+    choices: [get, record, remove, list, record_deviation, remove_deviation]
   rule_id:
     description:
       - Full XCCDF rule identifier, for example
         C(xccdf_org.ssgproject.content_rule_sshd_disable_root_login).
-      - Required for C(get), C(record) and C(remove).
+      - Required for C(get), C(record), C(remove), C(record_deviation) and C(remove_deviation).
     type: str
   family:
     description:
@@ -77,18 +87,76 @@ options:
         type: str
   collection_version:
     description:
-      - Version of the collection that applied the rule (for example C(0.1.0)). Required for
-        C(record).
+      - Version of the collection that applied the rule or recorded the deviation (for example
+        C(0.1.0)). Required for C(record) and C(record_deviation).
     type: str
   applied_at:
     description:
       - Time the rule was applied, as UTC C(YYYY-MM-DDTHH:MM:SSZ). Defaults to the current time.
       - An existing identical entry keeps its original time.
     type: str
+  value:
+    description:
+      - Where the value that the rule wrote came from, for C(record) (ADR 0032).
+      - Omit it for a rule that writes no value from an XCCDF C(Value); such an entry reads as
+        C(value_source=profile).
+      - An existing entry whose O(value) differs is replaced only with O(replace).
+      - Any other action fails when it is set.
+    type: dict
+    suboptions:
+      value_id:
+        description: Short identifier of the XCCDF value, for example C(var_password_pam_minlen).
+        type: str
+        required: true
+      value_source:
+        description:
+          - C(profile) when the target is the profile's value, C(override) when the operator chose
+            it.
+        type: str
+        required: true
+        choices: [profile, override]
+      profile_value:
+        description: The selected profile's value.
+        type: str
+        required: true
+      target:
+        description: The value that the rule aimed at.
+        type: str
+        required: true
+  deviation:
+    description:
+      - The deviation to record, for C(record_deviation). Required for it.
+      - An existing record of the rule with the same content keeps its time; a different one is
+        replaced.
+      - Any other action fails when it is set.
+    type: dict
+    suboptions:
+      value_id:
+        description: Short identifier of the XCCDF value.
+        type: str
+        required: true
+      profile_value:
+        description: The selected profile's value.
+        type: str
+        required: true
+      effective_value:
+        description:
+          - The value in force on the host after the run, which is looser than
+            O(deviation.profile_value).
+        type: str
+        required: true
+  recorded_at:
+    description:
+      - Time the deviation was recorded, as UTC C(YYYY-MM-DDTHH:MM:SSZ), for C(record_deviation).
+        Defaults to the current time.
+      - Any other action fails when it is set.
+    type: str
   replace:
     description:
       - Replace an existing entry that differs. Without it, a differing entry is an error
         (C(conflict)), so the original prior values cannot be overwritten by accident.
+      - C(record_deviation) and C(remove_deviation) fail when it is true, because a changed
+        deviation is always replaced.
     type: bool
     default: false
   reveal_sensitive:
@@ -103,7 +171,7 @@ attributes:
     description: Reports what would change, creates and writes nothing.
   diff_mode:
     support: full
-    description: Shows the entry before and after, with sensitive values redacted.
+    description: Shows the entry or the deviation before and after, with sensitive values redacted.
 notes:
   - Requires root. The ledger directory and file must be owned by uid 0.
   - Sensitive values are stored in the root-only ledger, because reverting needs them.
@@ -153,6 +221,37 @@ EXAMPLES = r"""
     family: ssh
   become: true
   register: applied_ssh_rules
+
+- name: Record a drop-in that writes an operator's value
+  freesecdev.linux_compliance.control_state:
+    action: record
+    rule_id: xccdf_org.ssgproject.content_rule_accounts_password_pam_minlen
+    family: pwquality
+    revert_strategy: owned_dropin
+    value:
+      value_id: var_password_pam_minlen
+      value_source: override
+      profile_value: "14"
+      target: "8"
+    collection_version: "0.1.0"
+  become: true
+
+- name: Record that the value in force is looser than the profile
+  freesecdev.linux_compliance.control_state:
+    action: record_deviation
+    rule_id: xccdf_org.ssgproject.content_rule_accounts_password_pam_minlen
+    deviation:
+      value_id: var_password_pam_minlen
+      profile_value: "14"
+      effective_value: "8"
+    collection_version: "0.1.0"
+  become: true
+
+- name: Forget the deviation once the value meets the profile again
+  freesecdev.linux_compliance.control_state:
+    action: remove_deviation
+    rule_id: xccdf_org.ssgproject.content_rule_accounts_password_pam_minlen
+  become: true
 """
 
 RETURN = r"""
@@ -167,9 +266,11 @@ action:
   returned: always
   sample: get
 found:
-  description: Whether an entry exists for O(rule_id).
+  description:
+    - Whether an entry exists for O(rule_id), or for O(action=remove_deviation) whether a deviation
+      existed.
   type: bool
-  returned: when O(action=get) or O(action=remove)
+  returned: when O(action=get), O(action=remove) or O(action=remove_deviation)
   sample: true
 entry:
   description:
@@ -203,8 +304,55 @@ entry:
       description: UTC time the rule was applied.
       type: str
       sample: "2026-10-25T12:00:00Z"
+    value:
+      description:
+        - The value record (C(value_id), C(value_source), C(profile_value), C(target)), or null when
+          the entry records none.
+      type: dict
+      sample: null
+    value_source:
+      description: C(override) or C(profile); an entry without a value record reads as C(profile).
+      type: str
+      sample: profile
 entries:
   description: All entries sorted by rule identifier, redacted like C(entry).
+  type: list
+  elements: dict
+  returned: when O(action=list)
+  sample: []
+deviation:
+  description: The deviation record.
+  type: dict
+  returned: when O(action=record_deviation)
+  contains:
+    rule_id:
+      description: Full XCCDF rule identifier.
+      type: str
+      sample: xccdf_org.ssgproject.content_rule_accounts_password_pam_minlen
+    value_id:
+      description: Short identifier of the XCCDF value.
+      type: str
+      sample: var_password_pam_minlen
+    profile_value:
+      description: The selected profile's value.
+      type: str
+      sample: "14"
+    effective_value:
+      description: The value in force on the host.
+      type: str
+      sample: "8"
+    recorded_at:
+      description: UTC time the deviation was first recorded with this content.
+      type: str
+      sample: "2026-11-10T12:00:00Z"
+    collection_version:
+      description: Collection version that recorded the deviation.
+      type: str
+      sample: 0.1.0
+deviations:
+  description:
+    - Every deviation of the register sorted by rule identifier, like C(deviation). O(family)
+      does not filter it.
   type: list
   elements: dict
   returned: when O(action=list)
@@ -236,10 +384,13 @@ from typing import TYPE_CHECKING, Final, cast
 from ansible.module_utils.basic import AnsibleModule
 
 from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance.ledger import (
+    VALUE_SOURCES,
+    DeviationRecord,
     Ledger,
     LedgerEntry,
     LedgerError,
     PriorValue,
+    ValueRecord,
     check_family,
 )
 from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance.model import (
@@ -250,12 +401,28 @@ from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compli
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-ACTIONS: Final[tuple[str, ...]] = ("get", "record", "remove", "list")
+ACTIONS: Final[tuple[str, ...]] = (
+    "get",
+    "record",
+    "remove",
+    "list",
+    "record_deviation",
+    "remove_deviation",
+)
 STRATEGIES: Final[tuple[str, ...]] = tuple(strategy.value for strategy in RevertStrategy)
+SOURCES: Final[tuple[str, ...]] = tuple(sorted(VALUE_SOURCES, reverse=True))
+ONLY_WITH: Final[dict[str, str]] = {
+    "value": "record",
+    "deviation": "record_deviation",
+    "recorded_at": "record_deviation",
+}
+WITHOUT_REPLACE: Final[frozenset[str]] = frozenset({"record_deviation", "remove_deviation"})
 REQUIRED_IF: Final[list[tuple[str, str, tuple[str, ...]]]] = [
     ("action", "get", ("rule_id",)),
     ("action", "remove", ("rule_id",)),
     ("action", "record", ("rule_id", "family", "revert_strategy", "collection_version")),
+    ("action", "record_deviation", ("rule_id", "deviation", "collection_version")),
+    ("action", "remove_deviation", ("rule_id",)),
 ]
 
 
@@ -271,6 +438,10 @@ def _prior_value_spec(*, sensitive: bool) -> dict[str, object]:
     }
 
 
+def _required_text() -> dict[str, object]:
+    return {"type": "str", "required": True}
+
+
 def argument_spec() -> dict[str, object]:
     """Return the Ansible argument specification."""
     return {
@@ -282,6 +453,24 @@ def argument_spec() -> dict[str, object]:
         "sensitive_prior_values": _prior_value_spec(sensitive=True),
         "collection_version": {"type": "str"},
         "applied_at": {"type": "str"},
+        "value": {
+            "type": "dict",
+            "options": {
+                "value_id": _required_text(),
+                "value_source": {"type": "str", "required": True, "choices": list(SOURCES)},
+                "profile_value": _required_text(),
+                "target": _required_text(),
+            },
+        },
+        "deviation": {
+            "type": "dict",
+            "options": {
+                "value_id": _required_text(),
+                "profile_value": _required_text(),
+                "effective_value": _required_text(),
+            },
+        },
+        "recorded_at": {"type": "str"},
         "replace": {"type": "bool", "default": False},
         "reveal_sensitive": {"type": "bool", "default": False},
     }
@@ -302,10 +491,25 @@ def _prior_values(raw: object, *, sensitive: bool) -> list[PriorValue]:
     ]
 
 
+def _now_or(value: object) -> str:
+    if value is None:
+        return datetime.now(timezone.utc).strftime(TIMESTAMP_FORMAT)
+    return _text(value)
+
+
+def _value_from(raw: object) -> ValueRecord | None:
+    if raw is None:
+        return None
+    fields = cast("dict[str, object]", raw)
+    return ValueRecord(
+        _text(fields["value_id"]),
+        _text(fields["value_source"]),
+        _text(fields["profile_value"]),
+        _text(fields["target"]),
+    )
+
+
 def _entry_from(params: Mapping[str, object]) -> LedgerEntry:
-    applied_at = params["applied_at"]
-    if applied_at is None:
-        applied_at = datetime.now(timezone.utc).strftime(TIMESTAMP_FORMAT)
     values = _prior_values(params["prior_values"], sensitive=False) + _prior_values(
         params["sensitive_prior_values"], sensitive=True
     )
@@ -315,17 +519,33 @@ def _entry_from(params: Mapping[str, object]) -> LedgerEntry:
         RevertStrategy(params["revert_strategy"]),
         tuple(values),
         _text(params["collection_version"]),
-        _text(applied_at),
+        _now_or(params["applied_at"]),
+        _value_from(params["value"]),
     )
 
 
-def _render(entry: LedgerEntry | None) -> str:
-    if entry is None:
+def _deviation_from(params: Mapping[str, object]) -> DeviationRecord:
+    fields = cast("dict[str, object]", params["deviation"])
+    return DeviationRecord(
+        _text(params["rule_id"]),
+        _text(fields["value_id"]),
+        _text(fields["profile_value"]),
+        _text(fields["effective_value"]),
+        _now_or(params["recorded_at"]),
+        _text(params["collection_version"]),
+    )
+
+
+def _render(item: LedgerEntry | DeviationRecord | None) -> str:
+    if item is None:
         return ""
-    return json.dumps(entry.view(), indent=2, sort_keys=True) + "\n"
+    view = item.view() if isinstance(item, LedgerEntry) else item.to_dict()
+    return json.dumps(view, indent=2, sort_keys=True) + "\n"
 
 
-def _diff(before: LedgerEntry | None, after: LedgerEntry | None) -> dict[str, str]:
+def _diff(
+    before: LedgerEntry | DeviationRecord | None, after: LedgerEntry | DeviationRecord | None
+) -> dict[str, str]:
     return {"before": _render(before), "after": _render(after)}
 
 
@@ -375,9 +595,10 @@ def _list(module: AnsibleModule, ledger: Ledger) -> None:
     if family is not None:
         check_family(family)
     reveal = bool(params["reveal_sensitive"])
+    document = ledger.document()
     entries = [
         entry.view(reveal=reveal)
-        for entry in ledger.entries()
+        for entry in document.entries
         if family is None or entry.family == family
     ]
     module.exit_json(
@@ -386,11 +607,44 @@ def _list(module: AnsibleModule, ledger: Ledger) -> None:
         ledger_path=ledger.path,
         entries=entries,
         count=len(entries),
+        deviations=[item.to_dict() for item in document.deviations],
     )
 
 
-def run(module: AnsibleModule, ledger: Ledger) -> None:
-    """Run the requested action against ``ledger`` and exit through ``module``."""
+def _record_deviation(module: AnsibleModule, ledger: Ledger) -> None:
+    outcome = ledger.record_deviation(_deviation_from(module.params), dry_run=module.check_mode)
+    module.exit_json(
+        changed=outcome.changed,
+        action="record_deviation",
+        ledger_path=ledger.path,
+        deviation=outcome.record.to_dict(),
+        diff=_diff(outcome.previous, outcome.record),
+    )
+
+
+def _remove_deviation(module: AnsibleModule, ledger: Ledger) -> None:
+    outcome = ledger.remove_deviation(_text(module.params["rule_id"]), dry_run=module.check_mode)
+    module.exit_json(
+        changed=outcome.changed,
+        action="remove_deviation",
+        ledger_path=ledger.path,
+        found=outcome.previous is not None,
+        diff=_diff(outcome.previous, None),
+    )
+
+
+def misplaced_option(params: Mapping[str, object]) -> str | None:
+    """Return why an option is set that ``params["action"]`` does not use, or None."""
+    action = params["action"]
+    for name, owner in ONLY_WITH.items():
+        if params[name] is not None and action != owner:
+            return f"{name} is only used with action={owner}"
+    if params["replace"] and action in WITHOUT_REPLACE:
+        return f"replace is not used with action={action}"
+    return None
+
+
+def _dispatch(module: AnsibleModule, ledger: Ledger) -> None:
     action = module.params["action"]
     try:
         if action == "get":
@@ -399,10 +653,27 @@ def run(module: AnsibleModule, ledger: Ledger) -> None:
             _record(module, ledger)
         elif action == "remove":
             _remove(module, ledger)
+        elif action == "record_deviation":
+            _record_deviation(module, ledger)
+        elif action == "remove_deviation":
+            _remove_deviation(module, ledger)
         else:
             _list(module, ledger)
     except LedgerError as error:
         module.fail_json(msg=str(error), error_type=error.error_type, path=ledger.path)
+
+
+def run(module: AnsibleModule, ledger: Ledger) -> None:
+    """Run the requested action against ``ledger`` and exit through ``module``.
+
+    ``value``, ``deviation`` or ``recorded_at`` with an action that does not use it, and
+    ``replace`` with a deviation action, fail the task before the ledger is read.
+    """
+    misplaced = misplaced_option(module.params)
+    if misplaced is None:
+        _dispatch(module, ledger)
+    else:
+        module.fail_json(msg=misplaced)
 
 
 def main() -> None:

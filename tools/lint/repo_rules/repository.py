@@ -24,6 +24,7 @@ from tools.lint.repo_rules.exec_variables import (
     text_setting_findings,
     yaml_variable_findings,
 )
+from tools.lint.repo_rules.family_prefixes import Findings, analyse, family_prefix_findings
 from tools.lint.repo_rules.imports import file_io_import_findings
 from tools.lint.repo_rules.isolation import check_process_isolation, is_process_scope
 from tools.lint.repo_rules.jinja_calls import is_template_file, yaml_jinja_findings
@@ -80,6 +81,7 @@ def check_file(
     root: Path = REPO_ROOT,
     configured: frozenset[Path] | None = None,
     index: Mapping[Path, str] | None = None,
+    prefixes: Findings | None = None,
 ) -> list[Violation]:
     """Apply every rule that matches the suffix and location of ``path``.
 
@@ -92,7 +94,8 @@ def check_file(
     through. ``configured`` holds the load directories that an ``ansible.cfg`` names;
     without it they are looked up for ``path`` alone (FREES-156). ``index`` maps
     repository paths to their Git index mode, so a link or executable bit that only the
-    index records is refused too.
+    index records is refused too. ``prefixes`` holds the analysis of the remediate role's task
+    files (``family_prefixes.analyse``); without it the files are analysed for ``path`` alone.
     """
     suffix = path.suffix.lower()
     if suffix in COMPILED_MODULE_SUFFIXES:
@@ -130,8 +133,9 @@ def check_file(
         if violation not in found
     ]
     own = own_remediation_findings(path, relative, data)
+    family = family_prefix_findings(path, relative, root, prefixes)
     role = role_file_findings(path, relative, data)
-    return [*violations, *found, *rendered, *own, *role]
+    return [*violations, *found, *rendered, *own, *family, *role]
 
 
 def _is_executed(relative: Path | None) -> bool:
@@ -279,10 +283,14 @@ def check_paths(
 ) -> list[Violation]:
     """Check every path and return the violations in sorted order.
 
-    The load directories that an ``ansible.cfg`` names are looked up once for all paths.
+    The load directories that an ``ansible.cfg`` names are looked up, and the remediate role's
+    task files analysed, once for all paths.
     """
     files = list(paths)
     configured = configured_load_directories(files, root)
+    prefixes = analyse(root)
     return sorted(
-        violation for path in files for violation in check_file(path, root, configured, index)
+        violation
+        for path in files
+        for violation in check_file(path, root, configured, index, prefixes)
     )

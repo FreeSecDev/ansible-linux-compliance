@@ -230,6 +230,23 @@ def test_every_internal_variable_of_a_role_is_classified(tmp_path: Path) -> None
     )
 
 
+@pytest.mark.parametrize(
+    "module", ["ansible.builtin.set_fact", "ansible.legacy.set_fact", "set_fact"]
+)
+def test_every_form_of_set_fact_defines_a_fact(tmp_path: Path, module: str) -> None:
+    role = make_role(
+        tmp_path,
+        {
+            "main.yml": (
+                f"---\n- {module}:\n    __linux_compliance_demo_fact: 1\n    cacheable: true\n"
+            )
+        },
+    )
+    found = gen.role_variables(role, {})
+    assert found.facts == {"__linux_compliance_demo_fact"}
+    assert found.cacheable == {"__linux_compliance_demo_fact"}
+
+
 def test_generated_task_files_replace_the_files_on_disk(tmp_path: Path) -> None:
     role = make_role(tmp_path, {"main.yml": "---\n[]\n"})
     generated = {
