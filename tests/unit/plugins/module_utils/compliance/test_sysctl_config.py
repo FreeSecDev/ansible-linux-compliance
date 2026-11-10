@@ -1152,6 +1152,14 @@ def test_a_restore_leaves_a_file_without_exactly_one_written_line_alone(text: st
     assert sysctl_config.restore_lines({VENDOR: text}, restores) == {VENDOR: text}
 
 
+def test_a_restore_of_the_last_line_without_a_line_feed_ends_it_as_lineinfile_does() -> None:
+    texts: dict[str, object] = {VENDOR: f"kernel.kptr_restrict = 1\n{CPU_TIME} = 1"}
+    restores = [{"path": VENDOR, "written": f"{CPU_TIME} = 1", "original": f"{CPU_TIME} = 0"}]
+    assert sysctl_config.restore_lines(texts, restores) == {
+        VENDOR: f"kernel.kptr_restrict = 1\n{CPU_TIME} = 0\n"
+    }
+
+
 def test_a_restore_of_an_unknown_file_changes_nothing() -> None:
     restores = [{"path": VENDOR, "written": "a", "original": "b"}]
     assert sysctl_config.restore_lines({}, restores) == {}

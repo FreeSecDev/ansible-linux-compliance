@@ -81,6 +81,7 @@ SENTINEL: Final[str] = "__linux_compliance_unset__"
 SECOND_SENTINEL: Final[str] = "__linux_compliance_unset_again__"
 NESTED: Final[tuple[str, ...]] = ("block", "rescue", "always")
 SET_FACT: Final[str] = "ansible.builtin.set_fact"
+SET_FACT_FORMS: Final[tuple[str, ...]] = (SET_FACT, "ansible.legacy.set_fact", "set_fact")
 INCLUDE_VARS: Final[str] = "ansible.builtin.include_vars"
 FACT_OPTIONS: Final[frozenset[str]] = frozenset({"cacheable"})
 ROLE_PATH_FILE: Final[re.Pattern[str]] = re.compile(r"\{\{ role_path \}\}(/[A-Za-z0-9_./-]+)")
@@ -207,11 +208,15 @@ def _include_vars(task: dict[str, object], role_dir: Path, found: RoleVariables)
 
 
 def _task_variables(task: dict[str, object], found: RoleVariables) -> None:
-    options = task.get(SET_FACT)
-    facts = [key for key in _keys(options) if key not in FACT_OPTIONS]
-    found.facts.update(facts)
-    if isinstance(options, dict) and cast("dict[str, object]", options).get("cacheable") is True:
-        found.cacheable.update(facts)
+    for form in SET_FACT_FORMS:
+        options = task.get(form)
+        facts = [key for key in _keys(options) if key not in FACT_OPTIONS]
+        found.facts.update(facts)
+        if (
+            isinstance(options, dict)
+            and cast("dict[str, object]", options).get("cacheable") is True
+        ):
+            found.cacheable.update(facts)
     register = task.get("register")
     if isinstance(register, str):
         found.facts.add(register)
