@@ -1399,7 +1399,7 @@ class TestImportTimePolicy:
         fields = {field.name for field in dataclasses.fields(process.ExecutablePolicy)}
         assert fields - copied == {"name", "fixed_path", "term_grace_seconds"}
 
-    @pytest.mark.parametrize("grace", [math.nan, math.inf, -1.0, 30.5, 1e9, True, "5"])
+    @pytest.mark.parametrize("grace", [math.nan, math.inf, -1.0, 30.5, 1e9, 10**400, True, "5"])
     def test_an_invalid_grace_is_refused_when_bound(self, grace: object) -> None:
         policy = process.ExecutablePolicy(
             "sh", command_prefixes=(("-c",),), term_grace_seconds=cast("float", grace)

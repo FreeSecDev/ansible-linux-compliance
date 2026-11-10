@@ -496,12 +496,12 @@ def _check_policy_grace(policy: ExecutablePolicy) -> None:
     if (
         isinstance(grace, bool)
         or not isinstance(grace, (int, float))
-        or not math.isfinite(grace)
         or not 0 <= grace <= MAX_TERM_GRACE_SECONDS
     ):
+        shown = repr(grace) if isinstance(grace, float) else type(grace).__name__
         _deny(
-            f"term_grace_seconds of {_safe(policy.name)} must be between 0 and "
-            f"{MAX_TERM_GRACE_SECONDS}: {_safe(grace)}"
+            f"term_grace_seconds of {_safe(policy.name)} must be a number from 0 to "
+            f"{MAX_TERM_GRACE_SECONDS}: {_safe(shown)}"
         )
 
 
