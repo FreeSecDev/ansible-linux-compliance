@@ -574,3 +574,90 @@ Rejected alternatives:
 | A family field on the finding only | Topic, tags and the mapped rules are needed to explain the grouping and the partial disables |
 | Placing findings in the report from the catalogue | The report has no STIG mapping of the scanned DISA content; the audit has it, and the evidence should carry what the run was told |
 | Always writing `control: null` | Changes the bytes of every existing run for no information |
+
+## Amendment 2026-11-10: operator deviations and schema 1.3 (FREES-203)
+
+[ADR 0032](0032-operator-control-community-modules-and-value-overrides.md) lets an operator override the value that a
+native rule writes. A value in force that is looser than the profile value is applied and reported as a deviation,
+never as compliant. This amendment adds the model part (ADR 0032 §5); the role, the audit and the report follow in
+their own changes.
+
+### Entities
+
+| Entity | Fields |
+|---|---|
+| Deviation | `value_id` (the short id of the XCCDF `Value`, `[a-z0-9][a-z0-9_]{0,127}`), `profile_value`, `effective_value` |
+| ValueSource | `profile`, `override` |
+
+- **Values are canonical text.** `profile_value` and `effective_value` are non-empty, at most 4096 characters, without
+  surrounding whitespace and without any character of category Cc, Cf, Zl or Zp. They are the text that the family's
+  comparison function produces, so equal values are never a deviation and the model refuses them.
+- **`RemediationStatus`** gains `deviation`. It may report a change, like `applied`.
+- **`RemediationResult`** gains `value_source`, `profile_value`, `effective_value` and `deviation`, all `None` by
+  default:
+  - without `value_source`, none of the other three is set;
+  - with it, `profile_value` is required and `effective_value` is optional (a rule that failed or was skipped has no
+    value in force);
+  - `deviation` is set exactly for the status `deviation`, needs `value_source: override` and repeats the profile
+    value and the value in force of the result.
+- **`ResultFlag`** gains `operator_deviation`. **`Finding`** gains an optional `deviation`. The flag is set exactly when
+  `deviation` is.
+- **Flags and outcomes.** The table of allowed outcomes now maps a flag to a set:
+
+  | Flag | Outcomes |
+  |---|---|
+  | `fixed` | `pass` |
+  | `informational`, `notselected` | `notchecked` |
+  | `operator_deviation` | `pass`, `fail`, `waived` |
+
+  The scanner's outcome is never changed. A flagged `fail` that an active exception turns into `waived` keeps the
+  flag and the deviation, because exceptions rebuild findings with `dataclasses.replace`: a deviation is not a waiver.
+- **Outcomes that cannot carry the flag.** A deviated rule whose next scan is `error`, `notchecked`, `notapplicable`
+  or `disabled` gets no flag; the model refuses it there. None of those outcomes ever counts as a pass
+  ([ADR 0016](0016-report-schema-and-summary-semantics.md)), so nothing looks compliant. The remediation result still
+  records the deviation; listing such rules in the audit result is part of the audit change of FREES-203, not of this
+  one.
+
+### Sibling modules
+
+`model.py` is held to the module line limit of 1500 lines (a unit test pins the limit). The new fields took it past
+the limit, so, as for the placement:
+
+- `Deviation`, `ValueSource` and the consistency check of the value fields of a remediation result live in
+  `plugins/module_utils/compliance/deviations.py`, which raises `DeviationError` (a `ValueError`) when an entity is
+  built;
+- the enumerations and their tables (classes and evaluation methods, flags and outcomes, unchanged statuses) moved
+  unchanged to `plugins/module_utils/compliance/vocabulary.py`.
+
+`model.py` re-exports every moved name (`model.Outcome`, `model.RemediationStatus`, `model.Deviation`,
+`model.ValueSource`, …), so callers are unchanged. Both modules import only the standard library and use the
+Python 3.9 grammar; `model.py` imports the standard library, `deviations`, `placement` and `vocabulary`. When a
+document is read, the model turns a `DeviationError` into `ModelError`.
+
+### Schema version 1.3
+
+- **Which version is written.** A run in which any finding carries a deviation, or a remediation result with value
+  fields, serializes as `"1.3"`. Every finding then holds `control` and `deviation`, each an object or `null`, and
+  `off_platform` is on the run and every finding exactly when the run is marked, as in 1.2. A remediation result
+  without `value_source` keeps its four keys; one with it has eight. Every other run serializes exactly as before
+  (`"1.0"`, `"1.1"` or `"1.2"`), so evidence bundles, exceptions evaluations and their digests are unchanged. A unit
+  test pins the SHA-256 of runs built from every XCCDF fixture in each earlier form, recorded before this change.
+- **What readers accept.** `SUPPORTED_SCHEMA_VERSIONS` is `{"1.0", "1.1", "1.2", "1.3"}`. A `1.0`, `1.1` or `1.2`
+  document must not hold `deviation`, and its remediation results must have four keys. A `1.3` document must hold
+  `control` and `deviation` on every finding and must need 1.3; a document whose content serializes as another
+  version is refused, so every document has one canonical form.
+- **Readers come first.** The report (schema 2.3) cannot count a flagged pass apart from a pass, so until report
+  schema 2.4 reads the flag, a 1.3 scan run is an input error on every path into the compliance section: `--scan-run`,
+  `--exceptions-evaluation` and evidence bundles ([reporting data model](../reporting-data-model.md#operator-deviations)).
+  Raw XCCDF and ARF results carry no flag at all, so results next to a 1.3 `scan-run.json` (in the same directory or
+  the one above) are refused too, and stay refused once the report reads 1.3. No writer emits 1.3 yet.
+
+Rejected alternatives:
+
+| Alternative | Reason rejected |
+|---|---|
+| A deviation outcome | The outcome is what the scanner decided; a check that does not test the value may pass, and that stays visible |
+| Allowing the flag on every outcome | An `error` or `notapplicable` finding with the flag would suggest that the deviation was evaluated |
+| Keeping the deviation only in the remediation result | The finding of the next scan is what the report counts; a pass must carry the flag itself |
+| Always writing `deviation: null` | Changes the bytes and digests of every existing run for no information |
+| Raising the module line limit | A unit test pins it; the placement set the precedent of a sibling module |

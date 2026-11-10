@@ -89,28 +89,30 @@
   tags:
     - always
 
-- name: Password quality | Inspect the PAM directories
+- name: Password quality | Inspect the PAM directories, the vendor directory included, through a symbolic link
   ansible.builtin.stat:
     path: "{{ __linux_compliance_remediate_pwq_path }}"
+    follow: true
     get_checksum: false
     get_mime: false
     get_attributes: false
-  loop: "{{ __linux_compliance_remediate_pwquality_pam_directories }}"
+  loop: "{{ __linux_compliance_remediate_pam_directories }}"
   loop_control:
     loop_var: __linux_compliance_remediate_pwq_path
   register: __linux_compliance_remediate_pwq_pam_directories
+  failed_when: false
   when: __linux_compliance_remediate_family.apply | length > 0
   tags:
     - always
 
-- name: Password quality | List the PAM files, through symbolic links, whose pam_pwquality arguments override the files
+- name: Password quality | List every entry of the PAM directories, symbolic links included, without following them
   ansible.builtin.find:
     paths: >-
       {{ __linux_compliance_remediate_pwq_pam_directories.results | selectattr('stat', 'defined')
          | selectattr('stat.isdir', 'defined') | selectattr('stat.isdir')
          | map(attribute='__linux_compliance_remediate_pwq_path') | list }}
-    file_type: file
-    follow: true
+    file_type: any
+    follow: false
     hidden: true
     recurse: false
   register: __linux_compliance_remediate_pwq_pam_found
@@ -122,18 +124,52 @@
   tags:
     - always
 
-- name: Password quality | Read every PAM file
+- name: Password quality | Inspect every PAM entry that is a symbolic link through the link, as libpam opens it
+  ansible.builtin.stat:
+    path: "{{ __linux_compliance_remediate_pwq_link }}"
+    follow: true
+    get_checksum: false
+    get_mime: false
+    get_attributes: false
+  loop: >-
+    {{ __linux_compliance_remediate_pwq_pam_found.files | default([]) | selectattr('islnk')
+       | map(attribute='path') | sort | list }}
+  loop_control:
+    loop_var: __linux_compliance_remediate_pwq_link
+  register: __linux_compliance_remediate_pwq_pam_links
+  failed_when: false
+  tags:
+    - always
+
+- name: Password quality | Sort the PAM entries into the files to read and those that the collection cannot read
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_pwq_pam_entries: >-
+      {{ __linux_compliance_remediate_pwq_pam_found.files | default([])
+         | freesecdev.linux_compliance.pam_service_files(
+             dict(__linux_compliance_remediate_pwq_pam_links.results | default([])
+                  | map(attribute='__linux_compliance_remediate_pwq_link')
+                  | zip(__linux_compliance_remediate_pwq_pam_links.results | default([])
+                        | map(attribute='stat', default={}))),
+             __linux_compliance_remediate_pwq_pam_found.skipped_paths | default({}),
+             dict(__linux_compliance_remediate_pwq_pam_directories.results | default([])
+                  | selectattr('skipped', 'undefined')
+                  | map(attribute='__linux_compliance_remediate_pwq_path')
+                  | zip(__linux_compliance_remediate_pwq_pam_directories.results | default([])
+                        | selectattr('skipped', 'undefined') | map(attribute='stat', default={})))) }}
+  tags:
+    - always
+
+- name: Password quality | Read every PAM file, a symbolic link through the link
   ansible.builtin.slurp:
     src: "{{ __linux_compliance_remediate_pwq_source }}"
-  loop: >-
-    {{ __linux_compliance_remediate_pwq_pam_found.files | default([]) | map(attribute='path') | sort | list }}
+  loop: "{{ __linux_compliance_remediate_pwq_pam_entries.read }}"
   loop_control:
     loop_var: __linux_compliance_remediate_pwq_source
   register: __linux_compliance_remediate_pwq_pam_read
   tags:
     - always
 
-- name: Password quality | Keep every drop-in entry with its type and text, and the text of every PAM file
+- name: Password quality | Keep every drop-in entry with its type and text, and every PAM file with its text or kind
   vars:
     __linux_compliance_remediate_pwq_texts: >-
       {{ dict(__linux_compliance_remediate_pwq_read.results | default([])
@@ -164,7 +200,7 @@
       {%- set _ = files.append({'path': item.__linux_compliance_remediate_pwq_source,
                                 'content': item.content | b64decode}) -%}
       {%- endfor -%}
-      {{ files }}
+      {{ files + __linux_compliance_remediate_pwq_pam_entries.unreadable }}
   tags:
     - always
 

@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from typing import TYPE_CHECKING, cast
 
 from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance import (
+    pam_files,
     pwquality,
 )
 
@@ -51,7 +52,19 @@ options:
     type: str
     required: true
   pam:
-    description: Every PAM file, with C(path) and C(content).
+    description:
+      - Every PAM file, with C(path) and C(content). The role passes every regular file of
+        C(/etc/pam.d), C(/usr/lib/pam.d) and C(/usr/share/pam.d), also one that libpam does not
+        open because a file of the same name comes first, so that an argument in any of them
+        refuses the rule (FREES-211), and every symbolic link there that resolves to a regular
+        file, read through the link under its name in the PAM directory (FREES-213). A PAM
+        directory that is itself a symbolic link to a directory is read through the link.
+      - An entry with C(path) and C(kind) instead of C(content) is one that the collection
+        cannot read, as the C(pam_service_files) filter returns it, for example a link that
+        resolves to nothing or to something that is neither a regular file nor a directory.
+        Any such entry makes the rule C(overridden) before anything else is decided, because
+        libpam may open it and a C(pam_pwquality) argument there could override the file
+        (FREES-213).
     type: list
     elements: dict
     required: true
@@ -111,6 +124,25 @@ def _text(value: object, what: str) -> str:
     return value
 
 
+def _pam(pam: list[object]) -> tuple[list[tuple[str, str]], list[str]]:
+    """Return the PAM files with their text and the description of every unreadable entry."""
+    files: list[tuple[str, str]] = []
+    unreadable: list[object] = []
+    for item in pam:
+        if not isinstance(item, Mapping):
+            message = "every PAM file must be a mapping"
+            raise DecisionInputError(message)
+        found = cast("Mapping[str, object]", item)
+        if "kind" in found:
+            unreadable.append(dict(found))
+            continue
+        files.append((_text(found.get("path"), "path"), _text(found.get("content"), "content")))
+    try:
+        return files, pam_files.describe(unreadable)
+    except pam_files.PamEntryError as error:
+        raise DecisionInputError(str(error)) from error
+
+
 def pwquality_decide(
     rule: object, dropins: object, main: object, pam: object, directory: object = "directory"
 ) -> dict[str, object]:
@@ -136,13 +168,10 @@ def pwquality_decide(
             message = "every drop-in must be a mapping"
             raise DecisionInputError(message)
         entries.append(cast("Mapping[str, object]", entry))
-    files: list[tuple[str, str]] = []
-    for item in cast("list[object]", pam):
-        if not isinstance(item, Mapping):
-            message = "every PAM file must be a mapping"
-            raise DecisionInputError(message)
-        found = cast("Mapping[str, object]", item)
-        files.append((_text(found.get("path"), "path"), _text(found.get("content"), "content")))
+    files, described = _pam(cast("list[object]", pam))
+    refused = pwquality.unreadable_refusal(planned, described)
+    if refused is not None:
+        return refused
     return pwquality.decide(planned, entries, main, files, _text(directory, "directory"))
 
 

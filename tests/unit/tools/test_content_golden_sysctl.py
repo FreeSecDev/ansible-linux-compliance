@@ -3,12 +3,11 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING, cast
 
-import yaml
-
 from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance import (
     toggles,
     xmlsafe,
 )
+from tests.unit import yaml_cache
 from tests.unit.tools.test_content_golden_native import (
     REPOSITORY_ROOT,
     pinned_benchmarks,
@@ -120,13 +119,12 @@ def oval(path: str) -> dict[str, Node]:
 
 
 def catalogue() -> dict[str, object]:
-    path = REPOSITORY_ROOT / generate_toggles.CATALOGUE
-    return cast("dict[str, object]", yaml.safe_load(path.read_text(encoding="utf-8")))
+    return cast("dict[str, object]", yaml_cache.load(REPOSITORY_ROOT / generate_toggles.CATALOGUE))
 
 
 def role_vars() -> dict[str, object]:
     path = REPOSITORY_ROOT / "roles" / "remediate" / "vars" / "main.yml"
-    return cast("dict[str, object]", yaml.safe_load(path.read_text(encoding="utf-8")))
+    return cast("dict[str, object]", yaml_cache.load(path))
 
 
 def native_rules() -> dict[str, dict[str, object]]:

@@ -1,0 +1,11 @@
+---
+bugfixes:
+  - >-
+    remediate - the ``pwquality`` topic also reads the vendor PAM directory ``/usr/share/pam.d`` for the arguments of
+    ``pam_pwquality`` (FREES-211, ADR 0021). It now reads the same three directories as ``faillock`` and
+    ``pwhistory`` (``/etc/pam.d``, ``/usr/lib/pam.d`` and ``/usr/share/pam.d``), from which libpam opens a service on
+    Rocky Linux 9, so a rule is no longer reported ``compliant`` or ``applied`` while a service file that only the
+    vendor directory holds passes a looser argument such as ``minlen=8`` or ``enforcing=0``; such a rule is
+    ``overridden`` with the file and the argument in the reason, and nothing is written. Every file of the three
+    directories is searched, also one that libpam does not open, so the topic may refuse more than libpam reads but
+    never less. The internal variable ``__linux_compliance_remediate_pwquality_pam_directories`` is removed.

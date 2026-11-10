@@ -23,6 +23,13 @@ collection's control families (ADR 0019, amendment of FREES-170). A run in which
 any finding carries one serializes as schema version ``1.2``, with ``control`` on
 every finding (``null`` where there is none) and ``off_platform`` on the run and
 every finding exactly when the run is marked.
+
+A finding of a rule whose value in force is looser than the profile because of
+an operator override carries a :class:`deviations.Deviation` and the flag
+``operator_deviation`` (ADR 0032, FREES-203). A run in which any finding carries
+one, or a remediation result with value fields, serializes as schema version
+``1.3``: ``control`` and ``deviation`` on every finding (``null`` where there is
+none) and ``off_platform`` as in ``1.2``. Every other run keeps its bytes.
 """
 
 from __future__ import annotations
@@ -37,7 +44,9 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING, Final, NoReturn, TypeVar, cast
 
 from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance import (
+    deviations,
     placement,
+    vocabulary,
 )
 
 if TYPE_CHECKING:
@@ -46,8 +55,9 @@ if TYPE_CHECKING:
 SCHEMA_VERSION: Final[str] = "1.0"
 OFF_PLATFORM_SCHEMA_VERSION: Final[str] = "1.1"
 CONTROL_SCHEMA_VERSION: Final[str] = "1.2"
+DEVIATION_SCHEMA_VERSION: Final[str] = "1.3"
 SUPPORTED_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
-    {SCHEMA_VERSION, OFF_PLATFORM_SCHEMA_VERSION, CONTROL_SCHEMA_VERSION}
+    {SCHEMA_VERSION, OFF_PLATFORM_SCHEMA_VERSION, CONTROL_SCHEMA_VERSION, DEVIATION_SCHEMA_VERSION}
 )
 OFF_PLATFORM_KEY: Final[str] = "off_platform"
 
@@ -90,141 +100,19 @@ class ModelError(ValueError):
     """Raised when a value or document violates the findings model."""
 
 
-_XCCDF_RESULT_OK: Final[str] = "pass"
-
-
-class Outcome(Enum):
-    """Platform outcome of evaluating one rule on one host."""
-
-    PASS = _XCCDF_RESULT_OK
-    FAIL = "fail"
-    NOTAPPLICABLE = "notapplicable"
-    NOTCHECKED = "notchecked"
-    ERROR = "error"
-    WAIVED = "waived"
-    DISABLED = "disabled"
-
-
-class ResultFlag(Enum):
-    """Qualifier retained when an XCCDF result is folded into an outcome."""
-
-    FIXED = "fixed"
-    INFORMATIONAL = "informational"
-    NOTSELECTED = "notselected"
-
-
-class Severity(Enum):
-    """Rule severity as published by the benchmark content."""
-
-    UNKNOWN = "unknown"
-    INFO = "info"
-    LOW = "low"
-    MEDIUM = "medium"
-    HIGH = "high"
-
-
-class ControlClass(Enum):
-    """Classification of a control by what the platform can do with it."""
-
-    DIRECTLY_AUDITABLE = "directly_auditable"
-    AUTOMATABLE_REMEDIATION = "automatable_remediation"
-    EVIDENCE_ONLY = "evidence_only"
-    MANUAL_ORGANIZATIONAL = "manual_organizational"
-    UNSUPPORTED = "unsupported"
-
-
-class EvaluationMethod(Enum):
-    """How the scanner evaluates a rule."""
-
-    OVAL = "oval"
-    SCE = "sce"
-    OCIL = "ocil"
-    EVIDENCE = "evidence"
-    MANUAL = "manual"
-    NONE = "none"
-
-
-class RemediationMethod(Enum):
-    """How the platform remediates a rule."""
-
-    NATIVE_MODULE = "native_module"
-    NONE = "none"
-
-
-class RevertStrategy(Enum):
-    """How a remediation is reverted when the rule is disabled (ADR 0011)."""
-
-    OWNED_DROPIN = "owned_dropin"
-    RECORDED_VALUE = "recorded_value"
-    RECORDED_STATE = "recorded_state"
-    IRREVERSIBLE = "irreversible"
-
-
-class FrameworkId(Enum):
-    """Compliance frameworks referenced by rules."""
-
-    CIS = "cis"
-    STIG = "stig"
-    NIST_800_53 = "nist_800_53"
-    NIST_800_171 = "nist_800_171"
-    PCI_DSS = "pci_dss"
-    ANSSI = "anssi"
-
-
-class ExceptionState(Enum):
-    """State of the exception record that applies to a finding."""
-
-    NONE = "none"
-    ACTIVE = "active"
-    EXPIRED = "expired"
-
-
-class RemediationStatus(Enum):
-    """Result of a remediation or cleanup attempt for one rule."""
-
-    APPLIED = "applied"
-    ALREADY_COMPLIANT = "already_compliant"
-    SKIPPED = "skipped"
-    FAILED = "failed"
-    REVERTED = "reverted"
-    CLEANUP_INCOMPLETE = "cleanup_incomplete"
-    NOT_REMEDIATED = "not_remediated"
-
-
-class ScanStatus(Enum):
-    """Whether the scanner itself ran to completion."""
-
-    COMPLETED = "completed"
-    FAILED = "failed"
-    TIMED_OUT = "timed_out"
-
-
-_AUDITABLE_METHODS: Final[frozenset[EvaluationMethod]] = frozenset(
-    {EvaluationMethod.OVAL, EvaluationMethod.SCE, EvaluationMethod.OCIL}
-)
-_CLASS_EVALUATION: Final[Mapping[ControlClass, frozenset[EvaluationMethod]]] = MappingProxyType(
-    {
-        ControlClass.DIRECTLY_AUDITABLE: _AUDITABLE_METHODS,
-        ControlClass.AUTOMATABLE_REMEDIATION: _AUDITABLE_METHODS,
-        ControlClass.EVIDENCE_ONLY: frozenset({EvaluationMethod.EVIDENCE}),
-        ControlClass.MANUAL_ORGANIZATIONAL: frozenset({EvaluationMethod.MANUAL}),
-        ControlClass.UNSUPPORTED: frozenset({EvaluationMethod.NONE}),
-    }
-)
-_FLAG_OUTCOMES: Final[Mapping[ResultFlag, Outcome]] = MappingProxyType(
-    {
-        ResultFlag.FIXED: Outcome.PASS,
-        ResultFlag.INFORMATIONAL: Outcome.NOTCHECKED,
-        ResultFlag.NOTSELECTED: Outcome.NOTCHECKED,
-    }
-)
-_UNCHANGED_STATUSES: Final[frozenset[RemediationStatus]] = frozenset(
-    {
-        RemediationStatus.ALREADY_COMPLIANT,
-        RemediationStatus.SKIPPED,
-        RemediationStatus.NOT_REMEDIATED,
-    }
-)
+Outcome = vocabulary.Outcome
+ResultFlag = vocabulary.ResultFlag
+Severity = vocabulary.Severity
+ControlClass = vocabulary.ControlClass
+EvaluationMethod = vocabulary.EvaluationMethod
+RemediationMethod = vocabulary.RemediationMethod
+RevertStrategy = vocabulary.RevertStrategy
+FrameworkId = vocabulary.FrameworkId
+ExceptionState = vocabulary.ExceptionState
+RemediationStatus = vocabulary.RemediationStatus
+ScanStatus = vocabulary.ScanStatus
+ValueSource = deviations.ValueSource
+Deviation = deviations.Deviation
 
 
 @dataclass(frozen=True)
@@ -713,7 +601,7 @@ class Rule:
         object.__setattr__(self, "references", tuple(sorted(references, key=Reference.sort_key)))
 
     def _check_consistency(self) -> None:
-        if self.evaluation_method not in _CLASS_EVALUATION[self.control_class]:
+        if self.evaluation_method not in vocabulary.CLASS_EVALUATION[self.control_class]:
             _fail("rule.evaluation_method does not match rule.control_class")
         remediable = self.control_class is ControlClass.AUTOMATABLE_REMEDIATION
         if remediable != (self.remediation_method is RemediationMethod.NATIVE_MODULE):
@@ -1080,12 +968,21 @@ class ExceptionStatus:
 
 @dataclass(frozen=True)
 class RemediationResult:
-    """The result of a remediation or cleanup attempt for one rule."""
+    """The result of a remediation or cleanup attempt for one rule.
+
+    A rule whose target is an XCCDF value may also carry ``value_source``, the
+    profile value, the value in force and, exactly for the status ``deviation``,
+    the deviation (ADR 0032, checked by :func:`deviations.check_result_values`).
+    """
 
     rule_id: str
     status: RemediationStatus
     changed: bool
     message: str | None
+    value_source: deviations.ValueSource | None = None
+    profile_value: str | None = None
+    effective_value: str | None = None
+    deviation: deviations.Deviation | None = None
 
     def __post_init__(self) -> None:
         """Validate the remediation result."""
@@ -1093,27 +990,57 @@ class RemediationResult:
         _enum(self.status, "remediation.status", RemediationStatus)
         _flag(self.changed, "remediation.changed")
         _optional_text(self.message, "remediation.message", max_length=4096)
-        if self.changed and self.status in _UNCHANGED_STATUSES:
+        if self.changed and self.status in vocabulary.UNCHANGED_STATUSES:
             _fail(f"remediation.status {self.status.value} cannot report a change")
+        values = (self.value_source, self.profile_value, self.effective_value, self.deviation)
+        try:
+            deviations.check_result_values(
+                *values, deviated=self.status is RemediationStatus.DEVIATION
+            )
+        except deviations.DeviationError as error:
+            _fail(str(error))
 
     def to_dict(self) -> dict[str, object]:
-        """Return a JSON-compatible mapping."""
-        return {
+        """Return a JSON-compatible mapping, with the value keys only when it has a source."""
+        result: dict[str, object] = {
             "changed": self.changed,
             "message": self.message,
             "rule_id": self.rule_id,
             "status": self.status.value,
         }
+        if self.value_source is not None:
+            result[deviations.VALUE_SOURCE_KEY] = self.value_source.value
+            result["profile_value"] = self.profile_value
+            result["effective_value"] = self.effective_value
+            result[deviations.DEVIATION_KEY] = _deviation_dict(self.deviation)
+        return result
 
     @classmethod
     def from_dict(cls, data: object) -> RemediationResult:
-        """Build a result from a mapping, rejecting unknown and missing keys."""
-        reader = _Reader(data, "remediation", ("rule_id", "status", "changed", "message"))
+        """Build a result from a mapping, rejecting unknown and missing keys.
+
+        The mapping holds the four keys of a result without a value, or those and
+        the four value keys with a ``value_source`` string.
+        """
+        keys = ("rule_id", "status", "changed", "message")
+        valued = _holds(data, deviations.VALUE_SOURCE_KEY)
+        reader = _Reader(data, "remediation", keys + deviations.RESULT_KEYS if valued else keys)
+        values = (
+            (
+                reader.enum(deviations.VALUE_SOURCE_KEY, deviations.ValueSource),
+                reader.optional_text("profile_value"),
+                reader.optional_text("effective_value"),
+                reader.optional_nested(deviations.DEVIATION_KEY, _deviation),
+            )
+            if valued
+            else (None, None, None, None)
+        )
         return cls(
             reader.text("rule_id"),
             reader.enum("status", RemediationStatus),
             reader.flag("changed"),
             reader.optional_text("message"),
+            *values,
         )
 
 
@@ -1133,10 +1060,12 @@ class Finding:
     flags: tuple[ResultFlag, ...]
     off_platform: OffPlatform | None = None
     control: placement.ControlPlacement | None = None
+    deviation: deviations.Deviation | None = None
 
     def __post_init__(self) -> None:
         """Validate and canonically order the finding."""
         _optional_instance(self.control, "finding.control", placement.ControlPlacement)
+        _optional_instance(self.deviation, "finding.deviation", deviations.Deviation)
         _xccdf_id(self.rule_id, "finding.rule_id", "rule")
         _enum(self.outcome, "finding.outcome", Outcome)
         _enum(self.evaluated_outcome, "finding.evaluated_outcome", Outcome)
@@ -1169,16 +1098,21 @@ class Finding:
         if self.remediation is not None and self.remediation.rule_id != self.rule_id:
             _fail("finding.remediation belongs to a different rule")
         for flag in self.flags:
-            if self.outcome is not _FLAG_OUTCOMES[flag]:
+            if self.outcome not in vocabulary.FLAG_OUTCOMES[flag]:
                 _fail(f"finding.flags {flag.value} does not match outcome {self.outcome.value}")
+        if (ResultFlag.OPERATOR_DEVIATION in self.flags) != (self.deviation is not None):
+            _fail("finding.flags operator_deviation requires exactly finding.deviation")
 
-    def to_dict(self, *, with_control: bool = False) -> dict[str, object]:
+    def to_dict(
+        self, *, with_control: bool = False, with_deviation: bool = False
+    ) -> dict[str, object]:
         """Return a JSON-compatible mapping.
 
         ``off_platform`` is present exactly when the finding carries the marker.
         ``control`` is present when the finding carries a placement, and, as
         ``null``, without one when ``with_control`` asks for the key (a finding of
-        a schema 1.2 scan run).
+        a schema 1.2 or 1.3 scan run). ``deviation`` follows the same rule with
+        ``with_deviation`` (a finding of a schema 1.3 scan run).
         """
         result: dict[str, object] = {
             "disabled_by": self.disabled_by,
@@ -1196,16 +1130,21 @@ class Finding:
             result[OFF_PLATFORM_KEY] = self.off_platform.to_dict()
         if with_control or self.control is not None:
             result[placement.CONTROL_KEY] = None if self.control is None else self.control.to_dict()
+        if with_deviation or self.deviation is not None:
+            result[deviations.DEVIATION_KEY] = _deviation_dict(self.deviation)
         return result
 
     @classmethod
-    def from_dict(cls, data: object, *, marked: bool = False, controlled: bool = False) -> Finding:
+    def from_dict(
+        cls, data: object, *, marked: bool = False, controlled: bool = False, deviated: bool = False
+    ) -> Finding:
         """Build a finding from a mapping, rejecting unknown and missing keys.
 
         With ``marked`` the mapping must hold ``off_platform``, the marker of a
         finding of a marked scan run; without it the key is refused. With
         ``controlled`` the mapping must hold ``control``, an object or ``null``, as
-        every finding of a schema 1.2 scan run does; without it the key is refused.
+        every finding of a schema 1.2 or 1.3 scan run does; without it the key is
+        refused. ``deviated`` does the same for ``deviation`` (schema 1.3).
         """
         keys = (
             "rule_id",
@@ -1219,8 +1158,10 @@ class Finding:
             "disabled_by",
             "flags",
         )
-        extra = ((OFF_PLATFORM_KEY,) if marked else ()) + (
-            (placement.CONTROL_KEY,) if controlled else ()
+        extra = (
+            ((OFF_PLATFORM_KEY,) if marked else ())
+            + ((placement.CONTROL_KEY,) if controlled else ())
+            + ((deviations.DEVIATION_KEY,) if deviated else ())
         )
         reader = _Reader(data, "finding", (*keys, *extra))
         return cls(
@@ -1238,6 +1179,9 @@ class Finding:
             control=(
                 reader.optional_nested(placement.CONTROL_KEY, _placement) if controlled else None
             ),
+            deviation=(
+                reader.optional_nested(deviations.DEVIATION_KEY, _deviation) if deviated else None
+            ),
         )
 
 
@@ -1246,6 +1190,26 @@ def _placement(data: object) -> placement.ControlPlacement:
         return placement.ControlPlacement.from_dict(data)
     except placement.PlacementError as error:
         _fail(str(error))
+
+
+def _deviation(data: object) -> deviations.Deviation:
+    try:
+        return deviations.Deviation.from_dict(data)
+    except deviations.DeviationError as error:
+        _fail(str(error))
+
+
+def _deviation_dict(value: deviations.Deviation | None) -> dict[str, object] | None:
+    return None if value is None else value.to_dict()
+
+
+def _needs_deviation_schema(finding: Finding) -> bool:
+    result = finding.remediation
+    return finding.deviation is not None or (result is not None and result.value_source is not None)
+
+
+def _holds(data: object, key: str) -> bool:
+    return isinstance(data, dict) and key in cast("dict[str, object]", data)
 
 
 def _declared_version(data: object) -> object:
@@ -1259,7 +1223,7 @@ def _declares_marker(data: object) -> bool:
         return False
     document = cast("dict[str, object]", data)
     version = _declared_version(document)
-    if version == CONTROL_SCHEMA_VERSION:
+    if version in (CONTROL_SCHEMA_VERSION, DEVIATION_SCHEMA_VERSION):
         return OFF_PLATFORM_KEY in document
     return version == OFF_PLATFORM_SCHEMA_VERSION
 
@@ -1351,9 +1315,13 @@ class ScanRun:
     def schema_version(self) -> str:
         """Return the schema version that the run serializes as.
 
-        ``1.2`` when any finding carries a control placement, otherwise ``1.1`` for
-        a run with an off-platform marker and ``1.0`` for every other run.
+        ``1.3`` when any finding carries a deviation or a remediation result with
+        value fields, otherwise ``1.2`` when any finding carries a control
+        placement, ``1.1`` for a run with an off-platform marker and ``1.0`` for
+        every other run.
         """
+        if any(_needs_deviation_schema(finding) for finding in self.findings):
+            return DEVIATION_SCHEMA_VERSION
         if any(finding.control is not None for finding in self.findings):
             return CONTROL_SCHEMA_VERSION
         return SCHEMA_VERSION if self.off_platform is None else OFF_PLATFORM_SCHEMA_VERSION
@@ -1362,20 +1330,26 @@ class ScanRun:
         """Return a JSON-compatible mapping that includes the schema version.
 
         ``off_platform`` is present exactly when the run carries the marker. In a
-        schema 1.2 document every finding holds ``control``.
+        schema 1.2 document every finding holds ``control``, and in a schema 1.3
+        document ``control`` and ``deviation``.
         """
-        controlled = self.schema_version == CONTROL_SCHEMA_VERSION
+        version = self.schema_version
+        deviated = version == DEVIATION_SCHEMA_VERSION
+        controlled = deviated or version == CONTROL_SCHEMA_VERSION
         result: dict[str, object] = {
             "benchmark_id": self.benchmark_id,
             "content": self.content.to_dict(),
             "error_message": self.error_message,
             "finished_at": self.finished_at,
-            "findings": [item.to_dict(with_control=controlled) for item in self.findings],
+            "findings": [
+                item.to_dict(with_control=controlled, with_deviation=deviated)
+                for item in self.findings
+            ],
             "host": self.host.to_dict(),
             "profile_id": self.profile_id,
             "run_id": self.run_id,
             "scanner": self.scanner.to_dict(),
-            "schema_version": self.schema_version,
+            "schema_version": version,
             "started_at": self.started_at,
             "status": self.status.value,
         }
@@ -1391,10 +1365,13 @@ class ScanRun:
         ``1.1`` documents must hold it, as an object, on the run and on every
         finding. Version ``1.2`` documents hold ``control`` on every finding, at
         least one of them an object, and ``off_platform`` either on the run and
-        every finding or nowhere.
+        every finding or nowhere. Version ``1.3`` documents hold ``control`` and
+        ``deviation`` on every finding and need a deviation or a remediation
+        result with value fields; ``off_platform`` is as in ``1.2``.
         """
         marked = _declares_marker(data)
-        controlled = _declared_version(data) == CONTROL_SCHEMA_VERSION
+        deviated = _declared_version(data) == DEVIATION_SCHEMA_VERSION
+        controlled = deviated or _declared_version(data) == CONTROL_SCHEMA_VERSION
         keys = (
             "schema_version",
             "run_id",
@@ -1426,7 +1403,9 @@ class ScanRun:
             error_message=reader.optional_text("error_message"),
             findings=reader.objects(
                 "findings",
-                lambda item: Finding.from_dict(item, marked=marked, controlled=controlled),
+                lambda item: Finding.from_dict(
+                    item, marked=marked, controlled=controlled, deviated=deviated
+                ),
             ),
             off_platform=reader.nested(OFF_PLATFORM_KEY, OffPlatform.from_dict) if marked else None,
         )

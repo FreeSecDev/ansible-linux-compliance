@@ -23,6 +23,7 @@ import yaml
 from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance import (
     toggles,
 )
+from tools import yaml_loader
 from tools.roles import affected_topics as affected
 from tools.roles import check_lifecycle_topics, generate_toggles, molecule_matrix
 
@@ -41,7 +42,7 @@ SPECS = "roles/remediate/meta/argument_specs.yml"
 
 
 def load_yaml(text: str) -> object:
-    return cast("object", yaml.load(text, Loader=yaml.CSafeLoader))
+    return yaml_loader.safe_load(text)
 
 
 class Trees:

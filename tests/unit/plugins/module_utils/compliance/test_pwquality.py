@@ -233,3 +233,31 @@ def test_a_pam_include_of_a_path_with_a_slash_is_refused(line: str, target: str)
 )
 def test_a_pam_include_of_a_name_in_the_pam_directory_is_read(line: str) -> None:
     assert pwquality.pam_unread_includes([("/etc/pam.d/sshd", line + "\n")]) == []
+
+
+@pytest.mark.parametrize(
+    ("pam", "reason"),
+    [
+        (
+            [("/usr/share/pam.d/vendor-only", "password requisite pam_pwquality.so minlen=8\n")],
+            "pam_pwquality arguments override the file: /usr/share/pam.d/vendor-only: minlen=8",
+        ),
+        (
+            [
+                ("/etc/pam.d/passwd", "password requisite pam_pwquality.so\n"),
+                ("/usr/share/pam.d/passwd", "password requisite pam_pwquality.so minlen=8\n"),
+            ],
+            "pam_pwquality arguments override the file: /usr/share/pam.d/passwd: minlen=8",
+        ),
+        (
+            [("/usr/share/pam.d/vendor-only", "password requisite pam_pwquality.so enforcing=0\n")],
+            "enforcing is 0 in /usr/share/pam.d/vendor-only: enforcing=0",
+        ),
+    ],
+)
+def test_an_argument_in_any_file_of_the_vendor_directory_refuses_the_rule(
+    pam: list[tuple[str, str]], reason: str
+) -> None:
+    decision = pwquality.decide(rule(), [], "minlen = 14\n", pam)
+    assert decision["status"] == "overridden"
+    assert str(decision["reason"]).startswith(reason)

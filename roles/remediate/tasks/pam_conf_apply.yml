@@ -80,7 +80,8 @@
            'comparison': __linux_compliance_remediate_rule.parameters.comparison,
            'required': __linux_compliance_remediate_sc_values[__linux_compliance_remediate_rule.rule_id],
            'stack_checked': __linux_compliance_remediate_rule.parameters.stack_checked},
-           __linux_compliance_remediate_sc_stack_texts) }}
+           __linux_compliance_remediate_sc_stack_texts,
+           __linux_compliance_remediate_sc_stack_entries.unreadable) }}
   tags:
     - always
 
