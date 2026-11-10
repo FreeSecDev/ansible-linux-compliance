@@ -1,0 +1,17 @@
+---
+bugfixes:
+  - >-
+    remediate - the ``pwquality``, ``faillock`` and ``pwhistory`` families now read a PAM service file that is a
+    symbolic link, such as the ``/etc/pam.d/system-auth`` and ``password-auth`` that authselect links into
+    ``/etc/authselect``, through the link; ``ansible.builtin.find`` with ``file_type: file`` kept only regular files,
+    so a ``pam_pwquality``, ``pam_faillock`` or ``pam_pwhistory`` argument there was missed and the rule could be
+    reported ``compliant`` or ``applied`` while the module used another value. The ``pwquality`` family also reads a
+    PAM directory that is a link to a directory. Every rule of the family is refused (``overridden`` for
+    ``pwquality``, ``unreadable_stack`` for ``faillock`` and ``pwhistory``), with the entry named and nothing read
+    through it, when a PAM directory holds a link to nothing, a link to something that is neither a regular file nor
+    a directory, a link that ``stat`` cannot follow (a loop, or a path through something that is not a directory),
+    or an entry that is neither a regular file, a directory nor a link, or when ``find`` could not list a PAM
+    directory or inspect one of its entries, or ``stat`` could not inspect a PAM directory (a link to itself, for
+    example). Such a link or directory does not stop the run. The new filter
+    ``freesecdev.linux_compliance.pam_service_files`` sorts the entries (FREES-213, ADR 0021 and ADR 0027
+    amendments).

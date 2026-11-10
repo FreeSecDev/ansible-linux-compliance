@@ -611,6 +611,7 @@
       - unparsed_configuration
       - prior_unrestorable
       - runtime_unavailable
+      - modified_since_read
   tasks:
     - name: Refuse to run outside check mode
       ansible.builtin.assert:

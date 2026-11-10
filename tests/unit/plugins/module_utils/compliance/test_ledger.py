@@ -368,10 +368,10 @@ def test_a_corrupt_ledger_is_an_error_and_is_never_reset(store: ledger.Ledger, s
 def test_an_unsupported_schema_is_never_rewritten(store: ledger.Ledger, state: Path) -> None:
     state.mkdir(parents=True, mode=0o700)
     target = state / "state.json"
-    target.write_bytes(document(schema_version=2))
+    target.write_bytes(document(schema_version=3))
     target.chmod(0o600)
     assert error_type(store.record, make_entry()) == "unsupported_schema"
-    assert target.read_bytes() == document(schema_version=2)
+    assert target.read_bytes() == document(schema_version=3)
 
 
 def test_an_oversized_ledger_is_refused_without_reading_it_all(
@@ -620,7 +620,7 @@ def test_concurrent_record_and_remove_keep_the_ledger_valid(state: Path) -> None
     assert [entry.rule_id for entry in seed.entries()] == [PREFIX + "keep"]
 
 
-@pytest.mark.parametrize("version", [0, 2, -1])
+@pytest.mark.parametrize("version", [0, 3, -1])
 def test_loads_rejects_unsupported_schema_versions(version: Any) -> None:
     assert error_type(ledger.loads, document(schema_version=version)) == "unsupported_schema"
 

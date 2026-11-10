@@ -460,8 +460,16 @@ def pam_unread_includes(files: Sequence[tuple[str, str]]) -> list[str]:
     ``/etc/pam.d``, ``/usr/lib/pam.d`` and, where libpam is built with a vendor directory (Rocky
     Linux 9), ``/usr/share/pam.d`` that has it. ``../security/x`` therefore opens a file outside
     the PAM directories, and ``site/x`` one below them that the collection does not list. A
-    ``pam_pwquality`` line in such a file is not among the files that the collection reads; only a
-    bare name is, because the collection reads every file of the three directories (FREES-211).
+    ``pam_pwquality`` line in such a file is not among the files that the collection reads; a bare
+    name is, because the collection reads every regular file of the three directories and every
+    symbolic link there that resolves to a regular file (FREES-211, FREES-213), and refuses the rule
+    on an entry that it cannot read.
+
+    Each physical line is checked on its own: the type and ``include`` or ``substack`` and the
+    target, or ``@include`` and the target, must be on one line. libpam joins a line that ends in a
+    backslash with the next one before it splits the words, so an include whose target is on a
+    continued line is not found here, and the rule is not refused for it. That is an open gap,
+    tracked as FREES-212.
     """
     found: list[str] = []
     for path, text in files:
@@ -546,6 +554,28 @@ def decide(
     if loose is not None:
         return decided | {"status": "overridden", "reason": loose, "text": None}
     return decided | {"note": note}
+
+
+def unreadable_refusal(rule: Rule, unreadable: Sequence[str]) -> dict[str, object] | None:
+    """Return the decision that refuses the rule on PAM entries that the collection cannot read.
+
+    ``unreadable`` describes every entry of the PAM directories that libpam may open but the
+    collection does not read: a symbolic link that resolves to nothing, a link to something that
+    is neither a regular file nor a directory, or an entry that is none of those (FREES-213). A
+    ``pam_pwquality`` argument there could override the file, so the rule is ``overridden``, as
+    for an include that the collection does not read. Returns ``None`` when there is none.
+    """
+    if not unreadable:
+        return None
+    return {
+        "line": rule.line,
+        "found": None,
+        "text": None,
+        "note": None,
+        "status": "overridden",
+        "reason": "; ".join(unreadable) + ", which libpam may open but the collection does not"
+        " read, so a pam_pwquality argument there could override the file",
+    }
 
 
 def _refusal(

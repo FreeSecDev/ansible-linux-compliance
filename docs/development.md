@@ -73,7 +73,7 @@ overriding them.
 | `lint-python` | implemented | Ruff lint, Ruff format check, Pylint (`tools`, `tests`, `plugins`) |
 | `lint-yaml` | implemented | `yamllint --strict` |
 | `lint-actions` | implemented | actionlint |
-| `lint-repo` | implemented | `tools/lint/check_repo_rules.py` on every tracked and new file, including symbolic links and files without a suffix; it refuses compiled module files (`.so`, `.pyd`, `.pyc`, `.pyo`, `.fwork`, any case) and code outside `plugins/` in a location from which Ansible loads code (FREES-156), and anything that would use the scanner's remediation: Python outside `tests/unit/`, `docs/` and `changelogs/` that names XCCDF `fix` elements, committed ComplianceAsCode or OpenSCAP remediation content, and invocations of the scanner's remediation or of scripts it provides ([ADR 0025](adr/0025-own-ansible-remediation-only.md), FREES-188) |
+| `lint-repo` | implemented | `tools/lint/check_repo_rules.py` on every tracked and new file, including symbolic links and files without a suffix; it refuses compiled module files (`.so`, `.pyd`, `.pyc`, `.pyo`, `.fwork`, any case) and code outside `plugins/` in a location from which Ansible loads code (FREES-156), and anything that would use the scanner's remediation: Python outside `tests/unit/`, `docs/` and `changelogs/` that names XCCDF `fix` elements, committed ComplianceAsCode or OpenSCAP remediation content, and invocations of the scanner's remediation or of scripts it provides ([ADR 0025](adr/0025-own-ansible-remediation-only.md), FREES-188); and a remediation family whose task files do not have an internal variable prefix of their own (`__linux_compliance_remediate_<xx>_`, one per family and its helpers, used by no other family; FREES-208) |
 | `lint-skills` | implemented | `tools/skills/validate_skills.py` |
 | `security` | implemented | Bandit (`tools`, `plugins`), Checkov on `infra/`, gitleaks history scan, zizmor (pedantic persona) |
 | `aws-bootstrap` | implemented | Renders and runs the one-time interactive AWS account bootstrap ([docs/aws/bootstrap.md](aws/bootstrap.md)); never run by CI |
@@ -148,7 +148,14 @@ a copy in a temporary root is parsed again, and it returns a deep copy on every 
 another reads. The YAML loaders of `tools/roles` that the tests call most use the libyaml safe loader as well. Before
 FREES-199 the pure Python parser took most of the time of the slowest tests: the unit suite took 532 seconds serially
 and 186 on four workers on a workstation, and 330 and 92 after it, with the same tests and the same covered lines and
-branches.
+branches. Both parse through `tools/yaml_loader.py`, which falls back to PyYAML's pure Python safe loader when PyYAML
+was built without libyaml, so invalid YAML still raises `yaml.YAMLError` there and not an `AttributeError` (FREES-206).
+
+`tests/unit/roles/test_login_defs_readers.py` runs the login.defs decision tasks of the remediate role in
+`ansible-playbook`, about a third of a second per case. It decides the cases in eight interleaved shards, one test per
+shard, so the pytest-xdist workers share them and each shard is decided once. On a 16-CPU workstation the former
+module-scoped fixture, which decided every case in one run, took 105 seconds of setup; after the split the module took
+30 seconds on four workers, about 15 seconds per shard (FREES-206).
 
 ## Pre-commit stages
 

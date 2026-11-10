@@ -27,6 +27,9 @@ Counting rules:
   percentage and the assessment ``off_platform_benchmark``, and it never enters a
   rule list, a group, a pooled figure or a section summary; the report lists it
   separately (:func:`off_platform_inputs`).
+* A scan run of findings model schema 1.3 can carry operator deviations (ADR 0032),
+  which this report schema neither counts nor holds, so it is an input error, never
+  a pass (:func:`check_findings_version`).
 """
 
 from dataclasses import dataclass, replace
@@ -37,7 +40,7 @@ from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compli
     model,
     placement,
 )
-from tools.reporting.common import to_json
+from tools.reporting.common import InvalidInputError, to_json
 
 COMPLETED: Final[str] = model.ScanStatus.COMPLETED.value
 NOT_COMPLETED: Final[str] = "not_completed"
@@ -192,6 +195,27 @@ def is_expired_waiver(finding: model.Finding, lapsed: frozenset[str]) -> bool:
     controller time; their findings carry no exception data (ADR 0013).
     """
     return finding.exception.state is model.ExceptionState.EXPIRED or finding.rule_id in lapsed
+
+
+UNREADABLE_FINDINGS_VERSIONS: Final[frozenset[str]] = frozenset({model.DEVIATION_SCHEMA_VERSION})
+
+
+def check_findings_version(run: model.ScanRun) -> None:
+    """Refuse a scan run whose findings schema version this report cannot represent.
+
+    Findings model schema 1.3 carries operator deviations (ADR 0032, FREES-203). A
+    flagged pass must never count as a pass, and report schema 2.3 has no count and no
+    field for the flag, so such a run is an input error until the report reads it.
+
+    Raises:
+        InvalidInputError: If the run serializes as an unreadable version.
+    """
+    if run.schema_version in UNREADABLE_FINDINGS_VERSIONS:
+        message = (
+            f"scan run rejected: findings schema {run.schema_version} (operator deviations) "
+            "is not supported by this report schema"
+        )
+        raise InvalidInputError(message)
 
 
 def tally_findings(

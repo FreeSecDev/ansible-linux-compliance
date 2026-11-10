@@ -60,8 +60,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Final, cast
 
-import yaml
-
+from tools import yaml_loader
 from tools.roles import generate_toggles, run_start
 
 if TYPE_CHECKING:
@@ -82,6 +81,7 @@ SENTINEL: Final[str] = "__linux_compliance_unset__"
 SECOND_SENTINEL: Final[str] = "__linux_compliance_unset_again__"
 NESTED: Final[tuple[str, ...]] = ("block", "rescue", "always")
 SET_FACT: Final[str] = "ansible.builtin.set_fact"
+SET_FACT_FORMS: Final[tuple[str, ...]] = (SET_FACT, "ansible.legacy.set_fact", "set_fact")
 INCLUDE_VARS: Final[str] = "ansible.builtin.include_vars"
 FACT_OPTIONS: Final[frozenset[str]] = frozenset({"cacheable"})
 ROLE_PATH_FILE: Final[re.Pattern[str]] = re.compile(r"\{\{ role_path \}\}(/[A-Za-z0-9_./-]+)")
@@ -174,11 +174,7 @@ def _keys(value: object) -> list[str]:
 
 def _variables_file(role_dir: Path, source: str) -> dict[str, object]:
     path = role_dir / source.lstrip("/")
-    loaded = (
-        cast("object", yaml.load(path.read_text(encoding="utf-8"), Loader=yaml.CSafeLoader))
-        if path.is_file()
-        else None
-    )
+    loaded = yaml_loader.safe_load(path.read_text(encoding="utf-8")) if path.is_file() else None
     if not isinstance(loaded, dict):
         message = f"{path} must exist and hold a mapping"
         raise GenerationError(message)
@@ -212,11 +208,15 @@ def _include_vars(task: dict[str, object], role_dir: Path, found: RoleVariables)
 
 
 def _task_variables(task: dict[str, object], found: RoleVariables) -> None:
-    options = task.get(SET_FACT)
-    facts = [key for key in _keys(options) if key not in FACT_OPTIONS]
-    found.facts.update(facts)
-    if isinstance(options, dict) and cast("dict[str, object]", options).get("cacheable") is True:
-        found.cacheable.update(facts)
+    for form in SET_FACT_FORMS:
+        options = task.get(form)
+        facts = [key for key in _keys(options) if key not in FACT_OPTIONS]
+        found.facts.update(facts)
+        if (
+            isinstance(options, dict)
+            and cast("dict[str, object]", options).get("cacheable") is True
+        ):
+            found.cacheable.update(facts)
     register = task.get("register")
     if isinstance(register, str):
         found.facts.add(register)
@@ -249,7 +249,7 @@ def role_variables(role_dir: Path, generated: dict[str, str]) -> RoleVariables:
     referenced: set[str] = set()
     for text in texts.values():
         referenced.update(re.findall(re.escape(prefix(role)) + r"[a-z0-9_]+", text))
-        for task in _tasks(yaml.load(text, Loader=yaml.CSafeLoader)):
+        for task in _tasks(yaml_loader.safe_load(text)):
             if INCLUDE_VARS in task:
                 _include_vars(task, role_dir, found)
             _task_variables(task, found)
@@ -496,7 +496,7 @@ def role_outputs(roles_dir: Path) -> set[str]:
     """Return every public ``linux_compliance_*`` fact that a role below ``roles_dir`` sets."""
     found: set[str] = set()
     for path in sorted(roles_dir.glob("*/tasks/*.yml")):
-        for task in _tasks(yaml.load(path.read_text(encoding="utf-8"), Loader=yaml.CSafeLoader)):
+        for task in _tasks(yaml_loader.safe_load(path.read_text(encoding="utf-8"))):
             found.update(key for key in _keys(task.get(SET_FACT)) if key.startswith(PUBLIC_PREFIX))
     return found
 

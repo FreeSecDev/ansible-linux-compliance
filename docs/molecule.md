@@ -782,7 +782,10 @@ sorts after the drop-ins (`zz-…`) makes its rule `overridden` and one that sor
 restores, the vendor file byte for byte; a drop-in removed by hand is `restored` without a write; a file without the
 header at a drop-in path is `not_owned`; with the running values on, a rule whose running value the container cannot
 set is `runtime_unavailable` with nothing written or recorded; and on Rocky Linux, where `/etc/sysctl.d` is missing as
-built, a symbolic link in its place makes every rule `not_directory` with nothing written through it. `runtime`
+built, a symbolic link in its place makes every rule `not_directory` with nothing written through it; on Ubuntu,
+one run that cleans up `all.rp_filter` and applies `default.rp_filter` in the same vendor file, whose last line has no
+line feed, restores the one line and edits the other instead of refusing the edit as `modified_since_read`: the bytes
+that the cleanup leaves are the ones that the apply decided on (FREES-208). `runtime`
 requires libvirt and is described in the [libvirt guide](molecule-libvirt.md#driver-requirements-of-a-topic).
 
 `shared/tasks/lifecycle_ssh_vendor_regressions.yml`, the `vendor` group, adds
@@ -831,9 +834,14 @@ drop-ins are read first) and cleaned up byte for byte; then a PAM file that pass
 `enforce_for_root` `unreadable_file`, with nothing written; then a service file that only the vendor directory
 `/usr/share/pam.d` holds (FREES-211; the directory is created for the test on Ubuntu, which does not ship it, and
 removed again), with `pam_pwquality.so minlen=8 enforcing=0`, makes `minlen` `overridden` by the argument and
-`enforce_for_root` by `enforcing=0`, with nothing written. The test declares `/usr/share/pam.d` as rewritten, so the
-whole-instance comparison leaves out the times of that directory and of `/usr/share`. It ends with the whole-instance
-comparison.
+`enforce_for_root` by `enforcing=0`, with nothing written. Then (FREES-213) the same arguments in
+`/etc/pam.d/freesecdev-readers-linked`, a relative symbolic link into `/etc/security` as authselect links
+`system-auth`, refuse both rules with the link named; the vendor directory made a link to a directory that holds such a
+file refuses both rules with the file below `/usr/share/pam.d` named (the empty directory of Rocky Linux is put back
+with its mode); and a link to nothing next to a link to `/dev/null` and a link to itself refuses both rules with all
+three named; and the vendor directory made a link to itself refuses both rules with `/usr/share/pam.d` named; nothing
+is written in any of them. The test declares `/usr/share/pam.d` as rewritten, so the whole-instance comparison leaves out
+the times and the inode of that directory and the times of `/usr/share`. It ends with the whole-instance comparison.
 
 The auditd topics ([ADR 0030](adr/0030-native-auditd-settings-and-audit-rules.md), FREES-110) select their rules
 with `profiles`: `auditd_conf` runs with `cis_level2_server` on Ubuntu and `stig` on Rocky Linux, `auditd_rules_time`
@@ -937,7 +945,10 @@ on the `pam_faillock` preauth line `deny` is `overridden` with that file named a
 `conf=` on that line both rules are `overridden`; and a service file of its own, `/etc/pam.d/fsd-regression-faillock`,
 with an upper-case `AUTH` type and `deny=3` on a continued line, and one with `auth [default=die]pam_faillock.so
 deny=3`, make `deny` `overridden` with that file named; an include of `/etc/security/fsd-site-auth`, which the
-collection does not read, makes both rules `unreadable_stack` (the order of `/etc/pam.d`, `/usr/lib/pam.d` and
+collection does not read, makes both rules `unreadable_stack`; `deny=3` in a service file that is a symbolic link to
+a file in `/etc/security`, as authselect links them (FREES-213), makes `deny` `overridden` with the link named, and a
+service file that is a link to nothing, and one that is a link to itself, make both rules `unreadable_stack` with the
+link named (the order of `/etc/pam.d`, `/usr/lib/pam.d` and
 `/usr/share/pam.d` is unit-tested only, because the whole-instance record keeps the times of `/usr`, which a file
 written there changes for good); no
 scan runs, because both contents put the faillock rules below a group limited to `system_with_kernel`, so a container
@@ -1006,7 +1017,7 @@ Since FREES-182 the images are built once per run and every leg loads them
 ([built once per run](#images-and-collections-built-once-per-run)). A leg that
 approaches 20 minutes should be split further, for example per pre-state, rather than given a longer limit, so that
 no required job comes near the merge queue's 30 minutes. The `test` job, 21 minutes at 6628b92, was split the same way: `test` keeps
-the coverage, audit-exception, golden-content and browser tests, and `test-playbooks` runs the check-mode playbooks
+the coverage, audit-exception, golden-content and browser tests, and `test-playbooks` ran the check-mode playbooks
 (`test-evidence`, `test-remediate-check`, `test-role-guards`, `test-verify`).
 
 By 9be18b4 `test` was close to its limit again: in four of the eight latest runs it took 18.0 to 18.6 minutes, 13.8
@@ -1038,7 +1049,8 @@ a half times its longest 6.6 minutes. Neither has a condition or `needs`, and on
 runners. Since FREES-214 its playbooks are split across two jobs that run alongside each other, by two `Makefile`
 targets that `make test-remediate-check` runs both of. `test-playbooks-remediate` runs `make test-remediate-check-role`
 (with `test-remediate-disruptive`): the two runs of `remediate-check-mode.yml` and `remediate-skip-always.yml`, 5.2 to
-7.6 minutes of those runs (disruptive 12 to 18 seconds, each check-mode run 140 to 223). It keeps its timeout.
+7.6 minutes of those runs (disruptive 12 to 18 seconds, each check-mode run 140 to 223). It keeps
+its timeout of 20 minutes (below).
 `test-playbooks-native` runs `make test-remediate-check-native`: `remediate-native-check.yml`,
 `remediate-login-defs-check.yml` and `remediate-pam-conf-check.yml`, 4.4 to 7.1 minutes of those runs (173 to 276, 46 to
 76 and 47 to 77 seconds), with a timeout of 12 minutes: one and a half times its longest share and the setup. Neither
@@ -1046,25 +1058,53 @@ has a condition or `needs`, and `ci-gate` needs both; `tests/unit/tools/test_ci_
 targets together run exactly the former six playbook runs, and every `remediate-*.yml` playbook. The native share grows
 with every native topic; the next split is per playbook.
 
+The timeout of `test-playbooks-remediate` is 20 minutes since FREES-213. Over the ten latest runs on `main` before it
+(4e50d0a to e5006f2) the job took 8.9 to 14.5 minutes, and the first run of FREES-213 was cancelled at 15 with every
+playbook about 30 percent slower than on `main`, also the ones that do not touch PAM (the disruptive play took 19
+seconds instead of 14), so the runner was slower; on the same worker the playbooks took no longer on the branch than on
+`main`. One and a half times 14.5 minutes is above the 20 minutes that `tests/unit/tools/test_ci_test_jobs.py` allows a
+test job, so the job gets those 20, and keeps them after the split above.
+
 With `sudo` (FREES-175) the regressions moved out of the cycle legs: `make molecule-matrix` adds one leg per regression
 group that a declaration lists and platform it runs on, with the mode `regressions-<group>`, after the two toggle
-modes of the topic, so 40 cycle legs and 37 regression legs (`pwquality` `changes`, `ssh` `changes` and
-`vendor`, `sudo` `changes` and `profiles`, `login_defs` `changes`, `refusals`, `values`, `profiles` and `bytes`,
-`filesystem_modules` `changes`, `faillock` `changes`, `readers`, `bytes`, `stack` and `profiles` on both platforms,
-`sudo` `files` on Ubuntu, `login_defs` `readers` and `pwhistory` `changes`, `readers` and `stack` on Rocky Linux;
-`wireless_modules` runs on Rocky Linux only). The kernel parameter topics (FREES-107) add 12 cycle legs and the two
-`ipv4_parameters` `changes` legs to the Docker matrix, and the `ipv4_parameters` `runtime` group, which requires
-libvirt, a leg per platform to the libvirt matrix. A topic skips
-the platforms that its declaration lists under `unselected_platforms` (`pwhistory` on Ubuntu), which get no leg.
-`tests/unit/tools/test_molecule_matrix.py` checks that every declared group
-gets its legs with the drivers it requires, `make lint-lifecycle` checks the groups, and the harness fails a regression leg whose
+modes of the topic. The full Docker matrix has 60 cycle legs and 47 regression legs. The full libvirt matrix has 24
+cycle legs, 2 regression legs and 3 legs without a topic (`libvirt-ubuntu`, `libvirt-rhel-compatible` and
+`libvirt-selftest`). Per native topic, the platforms of its cycle legs (`both` is Ubuntu 24.04 and Rocky Linux 9) and
+its regression groups, which run on the platforms of the topic's cycles of that driver unless the table names others:
+
+| Topic | Docker cycles | Docker regression groups | libvirt cycles | libvirt regression groups |
+|---|---|---|---|---|
+| `file_permissions` | both | none | both | none |
+| `sysctl` | both | none | both | none |
+| `banners` | both | none | none | none |
+| `auditd_rules_time` | both | `changes` | both | none |
+| `auditd_conf` | both | `changes` | both | none |
+| `ipv4_parameters` | both | `changes` | both | `runtime` |
+| `ipv6_parameters` | both | none | both | none |
+| `filesystem_modules` | both | `changes` | none | none |
+| `protocol_modules` | both | none | none | none |
+| `wireless_modules` | Rocky Linux | none | none | none |
+| `ssh` | both | `changes`, `readers`, `vendor` | none | none |
+| `pwquality` | both | `changes`, `readers` | none | none |
+| `pwhistory` | Rocky Linux | `changes`, `readers`, `stack` | none | none |
+| `faillock` | both | `bytes`, `changes`, `profiles`, `readers`, `stack` | none | none |
+| `login_defs` | both | `bytes`, `changes`, `profiles`, `readers` (Rocky Linux), `refusals`, `values` | none | none |
+| `sudo` | both | `changes`, `files` (Ubuntu), `profiles` | none | none |
+
+Each cycle runs in both toggle modes, so a topic has two cycle legs per platform and driver. The libvirt cycle legs
+run the cycles whose pre-state or topic requires libvirt. A topic skips the platforms that its declaration lists under
+`unselected_platforms` (`pwhistory` and `wireless_modules` on Ubuntu), which get no leg.
+`tests/unit/tools/test_docs_counts.py` derives the numbers and the table above from `make molecule-matrix`
+(`molecule_matrix.legs`) and fails when this text differs (FREES-206). `tests/unit/tools/test_molecule_matrix.py`
+checks that every declared group gets its legs with the drivers it requires, `make lint-lifecycle` checks the groups, and the harness fails a regression leg whose
 group did not run. Before the split the `sudo` cycle legs carried up to four minutes of regressions each and took 14 to
 19 minutes on slow runners.
 
 ### Affected legs on pull requests
 
-With five native topics the full plan has 31 Docker lifecycle legs and 7 libvirt legs, and a run about 60 jobs, which
-is all that the organisation runs at a time. Every new topic adds four to nine legs. On `pull_request` and
+With five native topics the full plan had 31 Docker lifecycle legs and 7 libvirt legs, and a run about 60 jobs, which
+is all that the organisation runs at a time. Every new topic adds two legs per platform, one per toggle mode, and one
+more per regression group and platform ([above](#ci-legs) for the current matrix). On `pull_request` and
 `merge_group`, `molecule-plan` therefore keeps only the lifecycle legs of the topics that the change can affect, and
 always the legs without a topic: the libvirt base scenarios `libvirt-<platform>` and `libvirt-selftest`. The standard
 scenarios of `molecule-docker` run as before. A push to `main`, the nightly schedule and `workflow_dispatch` always run
@@ -1282,9 +1322,10 @@ No topic can gain a native rule without its lifecycle test:
 
 ### Disruptive topics
 
-`pwquality`, `ssh`, `sudo`, `pwhistory`, `faillock` and the kernel module topics (`filesystem_modules`,
-`protocol_modules`, `wireless_modules`) are the disruptive families with native rules; the others (`pam`, `sssd` and
-the rest that the registry flags) have none yet. A disruptive topic is opted in by its declaration:
+`auditd_rules_time`, `auditd_conf`, `ipv4_parameters`, `ipv6_parameters`, `filesystem_modules`, `protocol_modules`,
+`wireless_modules`, `ssh`, `pwquality`, `pwhistory`, `faillock`, `login_defs` and `sudo` are the disruptive families with
+native rules, in registry order; the others (`pam`, `sssd` and the rest that the registry flags) have none yet, and
+`tests/unit/tools/test_docs_counts.py` fails when this list differs from the registry (FREES-206). A disruptive topic is opted in by its declaration:
 `disruptive: true`, which must match the registry, and a `containment` note. The harness then passes `linux_compliance_remediate_allow_disruptive` with
 that one family, for that topic's runs only, both for apply and for cleanup (ADR 0011). The breakage stays in the
 container:
@@ -1304,10 +1345,12 @@ container:
 - The lifecycle is the last step before `destroy`, which removes only the containers that carry this scenario's
   labels, and runs even after a failure. The container is never reused.
 
-A disruptive topic that cannot be applied meaningfully in a container (boot loader, mounts, kernel parameters,
-firewall, auditd) declares `requires: [libvirt]` and runs in the [libvirt scenarios](molecule-libvirt.md), where the
-connection is SSH as root to a disposable virtual machine; its `containment` note must then say why a broken SSH, PAM
-or network configuration still cannot reach the host.
+A disruptive topic that cannot be applied meaningfully in a container (boot loader, mounts, firewall) declares
+`requires: [libvirt]` and runs in the [libvirt scenarios](molecule-libvirt.md), where the connection is SSH as root to
+a disposable virtual machine; its `containment` note must then say why a broken SSH, PAM or network configuration still
+cannot reach the host. A topic that a container can apply only in part declares `requires: [libvirt]` on the pre-states
+that need the virtual machine instead, as the kernel parameter topics do for the running values and the auditd topics
+for a running auditd ([CI legs](#ci-legs)).
 
 ## Container-meaningful and not
 

@@ -9,6 +9,10 @@ decision tasks (``roles/remediate/tasks/login_defs_decide.yml``) decide every ca
 no decision may claim a compliant setting that a reader reads as looser, write a value that a
 reader does not read, or write one looser than what a reader read before. A case whose state or
 written text the table lacks fails until the table is regenerated.
+
+Each decision run starts ansible-playbook and takes about a third of a second per case, so the
+cases are decided in ``SHARDS`` interleaved shards, one test per shard, which pytest-xdist spreads
+over its workers (FREES-206). Each shard is decided exactly once, and both checks read it.
 """
 
 from __future__ import annotations
@@ -40,6 +44,7 @@ LOGIN_DEFAULT_DELAY: Final[int] = 5
 C_SPACE: Final[str] = " \t\n\v\f\r"
 CASE_GROUPS: Final[tuple[str, ...]] = ("values", "control", "review", "readers")
 BYTES: Final[tuple[str, ...]] = ("\r", "\v", "\f", "\x00")
+SHARDS: Final[int] = 8
 
 Case = dict[str, object]
 
@@ -56,14 +61,18 @@ def states() -> dict[str, dict[str, dict[str, object]]]:
     return cast("dict[str, dict[str, dict[str, object]]]", load("verdicts.json")["states"])
 
 
-@pytest.fixture(scope="module")
-def decisions(tmp_path_factory: pytest.TempPathFactory) -> dict[str, dict[str, object]]:
-    """Decide every case with the role's decision tasks, on the controller and in memory only."""
-    output = tmp_path_factory.mktemp("login_defs_readers") / "decisions.json"
+def shard(index: int) -> list[Case]:
+    """Return every ``SHARDS``-th case from ``index`` on, so that each shard mixes the groups."""
+    return cases()[index::SHARDS]
+
+
+def decide(chosen: list[Case], directory: Path) -> dict[str, dict[str, object]]:
+    """Decide the chosen cases with the role's decision tasks, on the controller, in memory only."""
+    selection = directory / "cases.json"
+    selection.write_text(json.dumps({"cases": chosen}), encoding="utf-8")
+    output = directory / "decisions.json"
     collections = os.environ.get("ANSIBLE_COLLECTIONS_PATH")
-    login_defs_readers.decide(
-        FIXTURES / "cases.json", output, Path(collections) if collections else None
-    )
+    login_defs_readers.decide(selection, output, Path(collections) if collections else None)
     return cast("dict[str, dict[str, object]]", json.loads(output.read_text(encoding="utf-8")))
 
 
@@ -168,29 +177,39 @@ def problems_of(case: Case, decision: Mapping[str, object]) -> list[str]:
     return found
 
 
-def test_the_table_holds_every_case_and_every_text_that_the_role_writes(
-    decisions: dict[str, dict[str, object]],
-) -> None:
+def missing_from_table(case: Case, decision: Mapping[str, object]) -> list[str]:
+    """Return the states of a case and of its written text that the table lacks."""
     table = states()
-    missing: list[str] = []
-    for case in cases():
-        decision = decisions[str(case["name"])]
-        keys = [login_defs_readers.state_key(login_defs_readers.case_state(case))]
-        written = decision.get("written")
-        if isinstance(written, str):
-            keys.append(login_defs_readers.state_key(login_defs_readers.case_state(case, written)))
-        missing += [f"{case['name']}: {key}" for key in keys if key not in table]
+    keys = [login_defs_readers.state_key(login_defs_readers.case_state(case))]
+    written = decision.get("written")
+    if isinstance(written, str):
+        keys.append(login_defs_readers.state_key(login_defs_readers.case_state(case, written)))
+    return [f"{case['name']}: {key}" for key in keys if key not in table]
+
+
+def test_the_shards_hold_every_case_exactly_once() -> None:
+    names = [str(case["name"]) for index in range(SHARDS) for case in shard(index)]
+    assert sorted(names) == sorted(str(case["name"]) for case in cases())
+    assert len(names) == len(set(names))
+    assert all(shard(index) for index in range(SHARDS))
+
+
+@pytest.mark.parametrize("index", range(SHARDS))
+def test_every_decision_is_in_the_table_and_neither_looser_nor_ineffective_for_a_real_reader(
+    index: int, tmp_path: Path
+) -> None:
+    chosen = shard(index)
+    decisions = decide(chosen, tmp_path)
+    assert sorted(decisions) == sorted(str(case["name"]) for case in chosen)
+    missing = [
+        entry for case in chosen for entry in missing_from_table(case, decisions[str(case["name"])])
+    ]
     assert missing == [], "regenerate with tools/lint/login_defs_readers.sh: " + "; ".join(
         missing[:5]
     )
-
-
-def test_no_decision_is_looser_or_ineffective_for_a_real_reader(
-    decisions: dict[str, dict[str, object]],
-) -> None:
     problems = [
         f"{case['name']} ({decisions[str(case['name'])]['status']}): {problem}"
-        for case in cases()
+        for case in chosen
         for problem in problems_of(case, decisions[str(case["name"])])
     ]
     assert problems == []

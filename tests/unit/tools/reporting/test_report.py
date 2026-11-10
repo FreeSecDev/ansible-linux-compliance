@@ -736,6 +736,7 @@ def anchored_text(pattern: str) -> str:
     return "^" + pattern + "$"
 
 
+REPORT_2_3_FLAGS = frozenset(model.ResultFlag) - {model.ResultFlag.OPERATOR_DEVIATION}
 LIMIT_RULES: list[tuple[str, Any]] = [
     (r"/(then|else)/.*/maxItems$", STRUCTURAL),
     (
@@ -765,7 +766,7 @@ LIMIT_RULES: list[tuple[str, Any]] = [
     (r"/\$defs/exceptionScope/properties/\w+/maxItems$", exceptions.MAX_SCOPE_ITEMS),
     (r"/properties/findings/maxItems$", model.MAX_FINDINGS),
     (r"/properties/evidence/maxItems$", model.MAX_EVIDENCE_ITEMS),
-    (r"/properties/flags/maxItems$", len(model.ResultFlag)),
+    (r"/properties/flags/maxItems$", len(REPORT_2_3_FLAGS)),
     (r"/properties/rules/maxItems$", report.MAX_RULES),
     (r"/\$defs/complianceSection/properties/off_platform/maxItems$", report.MAX_INPUTS),
     (r"/properties/(groups|aggregates)/maxItems$", report.MAX_GROUPS),
