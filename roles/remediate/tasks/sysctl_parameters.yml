@@ -444,6 +444,11 @@
       {%- set ns.detail = vendor ~ (' is not a regular file' if ns.reason == 'not_regular_file'
             else ' no longer exists') -%}
       {%- elif lines | select('equalto', written) | list | length == 1 and written != original
+            and not (__linux_compliance_remediate_kp_entries[vendor].isreg | default(false)) -%}
+      {%- set ns.reason = 'not_regular_file' -%}
+      {%- set ns.detail = vendor ~ ' is not a regular file (a symbolic link), and the collection does not write its'
+            ~ ' line back through it' -%}
+      {%- elif lines | select('equalto', written) | list | length == 1 and written != original
             and __linux_compliance_remediate_kp_texts
                 | freesecdev.linux_compliance.sysctl_carriage_returns([vendor]) | length > 0 -%}
       {%- set ns.reason = 'unparsed_configuration' -%}
@@ -510,9 +515,9 @@
   tags:
     - always
 
-- name: Kernel parameters | Refuse the cleanup of the rules whose vendor file changed since it was read
-  vars:
-    __linux_compliance_remediate_kp_stale: >-
+- name: Kernel parameters | Name the vendor files to write back that changed since they were read
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_kp_cleanup_stale: >-
       {%- set stale = [] -%}
       {%- for result in __linux_compliance_remediate_kp_restore_stats.results | default([]) -%}
       {%- set path = result.__linux_compliance_remediate_kp_restore_path -%}
@@ -523,12 +528,16 @@
       {%- endif -%}
       {%- endfor -%}
       {{ stale }}
+  tags:
+    - always
+
+- name: Kernel parameters | Refuse the cleanup of the rules whose vendor file changed since it was read
   ansible.builtin.set_fact:
     __linux_compliance_remediate_kp_cleanup_plan: >-
       {%- set plan = {} -%}
       {%- for rule_id, planned in __linux_compliance_remediate_kp_cleanup_plan.items() -%}
       {%- set changed = planned.restores | map(attribute='path')
-            | select('in', __linux_compliance_remediate_kp_stale) | list -%}
+            | select('in', __linux_compliance_remediate_kp_cleanup_stale) | list -%}
       {%- if planned.reason is none and changed | length > 0 -%}
       {%- set _ = plan.update({rule_id: {'reason': 'modified_since_read',
             'detail': changed | join(', ') ~ ' changed after the collection read it, so it would no longer write'
@@ -539,7 +548,7 @@
       {%- endif -%}
       {%- endfor -%}
       {{ plan }}
-  when: __linux_compliance_remediate_kp_stale | length > 0
+  when: __linux_compliance_remediate_kp_cleanup_stale | length > 0
   tags:
     - always
 
@@ -746,7 +755,7 @@
       {%- set content = __linux_compliance_remediate_kp_contents[rule.rule_id] -%}
       {%- set sha = content | hash('sha256') -%}
       {%- set ns = namespace(user=[], package=[], edits=[], duplicate=[], large=[], earlier=[], later=[],
-                             now_ok=true) -%}
+                             irregular=[], now_ok=true) -%}
       {%- for other in user_files if other != path and other not in removed and other in texts -%}
       {%- set found = texts[other] | regex_findall(pattern, multiline=true) -%}
       {%- set bad = [] -%}
@@ -767,6 +776,9 @@
       {%- set ns.duplicate = ns.duplicate + [other ~ ' sets ' ~ key ~ ' ' ~ found | length ~ ' times'] -%}
       {%- elif lines[0] | length > 1024 -%}
       {%- set ns.large = ns.large + [other ~ ': the line of ' ~ key ~ ' is too long to record'] -%}
+      {%- elif not (entries[other].isreg | default(false)) -%}
+      {%- set ns.irregular = ns.irregular + [other ~ ' is not a regular file (a symbolic link), and the collection'
+            ~ ' does not edit its line of ' ~ key ~ ' through it'] -%}
       {%- else -%}
       {%- set ns.edits = ns.edits + [{'path': other, 'original': lines[0],
             'written': (lines[0] | regex_search('^[^=]*=[ \t]*')) ~ value}] -%}
@@ -868,7 +880,7 @@
             'method_changed' if prior is mapping and prior.method | default('unknown') != 'dropin'
             else 'notapplicable' if __linux_compliance_remediate_kp_runtime and current is none
             else 'not_directory' if (directory.exists | default(false)) and not (directory.isdir | default(false))
-            else 'not_regular_file' if entry is not none and not entry.isreg
+            else 'not_regular_file' if (entry is not none and not entry.isreg) or ns.irregular | length > 0
             else 'not_owned' if entry is not none and not exact and not text.startswith(header)
             else 'duplicate_setting' if ns.duplicate | length > 0
             else 'prior_too_large' if ns.large | length > 0
@@ -886,7 +898,8 @@
              ~ ' method; clean it up first') if status == 'method_changed'
             else ('the running kernel has no parameter ' ~ key) if status == 'notapplicable'
             else (__linux_compliance_remediate_sysctl_directory ~ ' is not a directory') if status == 'not_directory'
-            else (path ~ ' is not a regular file') if status == 'not_regular_file'
+            else ((path ~ ' is not a regular file') if entry is not none and not entry.isreg
+                  else ns.irregular | join('; ')) if status == 'not_regular_file'
             else (path ~ ' exists without the header of the collection') if status == 'not_owned'
             else (ns.duplicate | join('; ')) if status == 'duplicate_setting'
             else (ns.large | join('; ')) if status == 'prior_too_large'
@@ -920,36 +933,42 @@
   tags:
     - always
 
-- name: Kernel parameters | Inspect the vendor files to edit again, with their SHA-256, right before anything is written
+- name: Kernel parameters | Inspect every file that the rules were decided on again, with its SHA-256, before any write
   ansible.builtin.stat:
-    path: "{{ __linux_compliance_remediate_kp_edit_path }}"
-    follow: false
+    path: "{{ __linux_compliance_remediate_kp_decided_path }}"
+    follow: >-
+      {{ (__linux_compliance_remediate_kp_entries[__linux_compliance_remediate_kp_decided_path] | default({})).islnk
+         | default(false) }}
     get_checksum: true
     checksum_algorithm: sha256
     get_mime: false
     get_attributes: false
   loop: >-
-    {{ __linux_compliance_remediate_kp_plan.values() | selectattr('status', 'equalto', 'applied')
-       | map(attribute='edits') | flatten | map(attribute='path') | unique | sort }}
+    {{ (__linux_compliance_remediate_kp_disk_texts.keys()
+        | reject('in', [] if ansible_check_mode else __linux_compliance_remediate_kp_removed) | sort)
+       if __linux_compliance_remediate_kp_plan.values() | selectattr('status', 'in', ['applied', 'compliant'])
+          | list | length > 0
+       else [] }}
   loop_control:
-    loop_var: __linux_compliance_remediate_kp_edit_path
-  register: __linux_compliance_remediate_kp_edit_stats
+    loop_var: __linux_compliance_remediate_kp_decided_path
+  register: __linux_compliance_remediate_kp_decided_stats
   tags:
     - always
 
-- name: Kernel parameters | Refuse every rule when a vendor file to edit changed since it was read, before any write
+- name: Kernel parameters | Refuse every rule when a file that it was decided on changed since it was read
   vars:
     __linux_compliance_remediate_kp_stale: >-
-      {%- set stale = [] -%}
-      {%- for result in __linux_compliance_remediate_kp_edit_stats.results | default([]) -%}
-      {%- set path = result.__linux_compliance_remediate_kp_edit_path -%}
-      {%- if not (result.stat.isreg | default(false))
-            or result.stat.checksum | default('')
-               != __linux_compliance_remediate_kp_disk_texts[path] | default('') | hash('sha256') -%}
+      {%- set stale = __linux_compliance_remediate_kp_cleanup_stale | list -%}
+      {%- for result in __linux_compliance_remediate_kp_decided_stats.results | default([]) -%}
+      {%- set path = result.__linux_compliance_remediate_kp_decided_path -%}
+      {%- if path not in stale
+            and (not (result.stat.isreg | default(false))
+                 or result.stat.checksum | default('')
+                    != __linux_compliance_remediate_kp_disk_texts[path] | default('') | hash('sha256')) -%}
       {%- set _ = stale.append(path) -%}
       {%- endif -%}
       {%- endfor -%}
-      {{ stale }}
+      {{ stale | sort }}
   ansible.builtin.set_fact:
     __linux_compliance_remediate_kp_plan: >-
       {%- set plan = {} -%}

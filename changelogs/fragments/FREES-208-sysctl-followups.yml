@@ -1,17 +1,21 @@
 ---
 bugfixes:
   - >-
-    remediate - the kernel parameter topics read the SHA-256 of every vendor file that they would write again before
-    the first write, as the ``login_defs``, ``auditd_conf`` and ``ssh`` families do (FREES-208, ADR 0029): a cleanup
-    whose recorded line would be written back into a file that changed since it was read stays
-    ``cleanup_incomplete`` with the reason ``modified_since_read`` and keeps its ledger entry, and when a vendor file
-    to edit changed, every rule to apply that is ``applied`` or ``compliant`` becomes ``modified_since_read`` and
-    nothing of the family is written, so ``lineinfile`` never rewrites a carriage return or another line that was
-    written between the read and the write. The texts that a cleanup leaves now also end a restored last line with
-    a line feed, as ``lineinfile`` writes it.
+    remediate - the kernel parameter topics read the SHA-256 of the files again before they write, as the
+    ``login_defs``, ``auditd_conf`` and ``ssh`` families do (FREES-208, ADR 0029): a cleanup whose recorded line would
+    be written back into a vendor file that changed since it was read stays ``cleanup_incomplete`` with the reason
+    ``modified_since_read`` and keeps its ledger entry, and when any file that the rules to apply were decided on
+    changed (or a vendor file that the cleanup found changed), every rule to apply that is ``applied`` or
+    ``compliant`` becomes ``modified_since_read`` and nothing of the family is written. This narrows the window in
+    which ``lineinfile`` could rewrite a carriage return or another line written after the read to the tasks between
+    the re-check and the write; it does not close it. A vendor file that is a symbolic link is refused as
+    ``not_regular_file`` and never edited or written back through the link. The texts that a cleanup leaves now also
+    end a restored last line with a line feed, as ``lineinfile`` writes it.
 trivial:
   - >-
     lint - ``make lint-repo`` refuses a remediation family whose task files do not have an internal variable prefix
     of their own: the files of ``roles/remediate/tasks`` that include one another (a family, its helpers and the
     families that share them) use exactly one prefix ``__linux_compliance_remediate_<xx>_``, which no other family
-    uses and which is not the first component of a constant of the role or of a shared name (FREES-208).
+    uses and which is not the first component of a constant of the role or of a shared name; a family may not set a
+    name that only ``main.yml`` or ``dispatch.yml`` defines (FREES-208). The role-guard generator now reads
+    ``ansible.legacy.set_fact`` and the short ``set_fact`` as well.

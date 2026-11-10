@@ -333,19 +333,31 @@ the real tasks on local hosts with mocked inputs, so their Jinja is tested in CI
 **Amendment (FREES-208).** Neither write of a vendor line, the apply edit nor the cleanup restore, checked that
 the file still held the bytes that the family had read and decided on, as the families of `login.defs`, `auditd.conf`
 and the SSH server do: a carriage return or any other change written between the read and the write would still have
-been rewritten by `lineinfile`. Both now read the SHA-256 of every vendor file that they would write again, with
-`stat` and `follow: false`, and compare it with the bytes that were read:
+been rewritten by `lineinfile`. The family now reads the SHA-256 of the files again with `stat` and compares it with
+the bytes that it read:
 
-- Cleanup checks the files of its restores before it writes anything, the running values included. A rule whose
-  restore would write into a file that is no longer a regular file with those bytes stays `cleanup_incomplete` with
-  the reason `modified_since_read`, writes nothing and keeps its ledger entry; the other rules are cleaned up.
-- Apply checks the files of its edits after every rule is decided and before anything is written: the ledger
-  records, the drop-in directory, the drop-ins, the edits and the running values. The bytes expected are the texts
-  as the cleanup of the same run leaves them (in check mode, as they were read, because the cleanup wrote nothing).
-  When one file changed, every rule that is `applied` or `compliant` becomes `modified_since_read` and nothing of the
-  family is written: each rule is decided on the texts of all the family's files together, and the sample rate's
-  decision on its companion's planned edit as well (section 2b), so no decision of the run still holds. The next run
-  reads the files again.
+- Cleanup checks every vendor file of its restores, with `follow: false`, before it writes anything, the running
+  values included. A rule whose restore would write into a file that is no longer a regular file with those bytes stays
+  `cleanup_incomplete` with the reason `modified_since_read`, writes nothing and keeps its ledger entry; the other
+  rules are cleaned up.
+- Apply checks every file that the rules were decided on (every configuration file that the family read, a link
+  through to its target, apart from the drop-ins that the cleanup of a real run removed), after every rule is decided
+  and before anything is written: the ledger records, the drop-in directory, the drop-ins, the edits and the running
+  values. The bytes expected are the texts as the cleanup of the same run leaves them (in check mode, as they were
+  read, because the cleanup wrote nothing), and every file that the cleanup found changed counts as changed too. When
+  one file changed, every rule that is `applied` or `compliant` becomes `modified_since_read` and nothing of the family
+  is written: each rule is decided on the texts of all the family's files together, and the sample rate's decision on
+  its companion's planned edit as well (section 2b), so no decision of the run still holds, whichever phase saw the
+  change. The next run reads the files again. A file that appears between the read and the write is not seen.
+- This narrows the window to the tasks between a re-check and its write; it does not close it. Between the cleanup's
+  check and its restore the running values are written back, and between the apply's check and its edits the ledger
+  records, the drop-in directory, its marker and the drop-ins are written; a change made to a vendor file in that
+  window is still rewritten by `lineinfile`. The drop-ins themselves are written with `copy` (`force: true`) and
+  removed without a check beyond the checksum that the family read at the start, a gap from before this change that
+  stays a follow-up of FREES-208.
+- A vendor file that is a symbolic link is not edited or written back through it: the plan refuses the rule as
+  `not_regular_file` (apply) or keeps its entry as `cleanup_incomplete` with that reason (cleanup), instead of the
+  check refusing it as `modified_since_read` on every run.
 
 `restore_lines`, which gives the texts as the cleanup leaves them, now also ends a restored last line with a line
 feed, as `lineinfile` does, so the bytes compared after a cleanup in the same run are the bytes on the disk; the
@@ -354,7 +366,8 @@ feed, as `lineinfile` does, so the bytes compared after a cleanup in the same ru
 cannot be staged in Molecule without a program running beside the role, so the refusals are proven by the render
 test below.
 `tests/unit/roles/test_sysctl_plan_render.py` renders both refusals with the role's own Jinja, from files whose bytes
-on the disk differ from those read, and resolves the rules' values with the role's own resolution task instead of
+on the disk differ from those read or that are gone (a changed vendor file of the cleanup refuses the rules to apply
+that were decided on its old bytes), and the refusal of a vendor file that is a link, and resolves the rules' values with the role's own resolution task instead of
 the catalogue's raw value; it fails instead of skipping when `CI` is set and `ansible-playbook` or the collection link
 is missing. The adversarial cases of the third to eighth reviews stay open on FREES-208 and are still not in
 `cases.json`: the verdict generator runs `unshare --propagation private` and mounts a tmpfs over `/proc/sys` inside its

@@ -45,19 +45,20 @@ TIMEOUT_SECONDS = 600
 RHEL = "xccdf_org.ssgproject.content_benchmark_RHEL-9"
 UBUNTU = "xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04"
 RESTORE_STAT = "Kernel parameters | Inspect the vendor files to write back again"
-EDIT_STAT = "Kernel parameters | Inspect the vendor files to edit again"
+EDIT_STAT = "Kernel parameters | Inspect every file that the rules were decided on again"
 TASKS = (
     "Kernel parameters | Resolve the value that the profile or the content requires",
     "Kernel parameters | Compose the drop-in of every rule to apply and read the record",
     "Kernel parameters | Compose the content and the SHA-256 of every drop-in to apply",
     "Kernel parameters | Name why each rule that is no longer effective",
     RESTORE_STAT,
+    "Kernel parameters | Name the vendor files to write back that changed since they were read",
     "Kernel parameters | Refuse the cleanup of the rules whose vendor file changed",
     "Kernel parameters | Name the rules whose prior state can be restored",
     "Kernel parameters | Keep the running values and the texts",
     "Kernel parameters | Decide for every rule to apply",
     EDIT_STAT,
-    "Kernel parameters | Refuse every rule when a vendor file to edit changed",
+    "Kernel parameters | Refuse every rule when a file that it was decided on changed",
 )
 STATS = (RESTORE_STAT, EDIT_STAT)
 CONTENT = {
@@ -127,6 +128,11 @@ def regular(text: str) -> dict[str, object]:
     }
 
 
+def linked(text: str) -> dict[str, object]:
+    """Return the entry of a symbolic link to a regular file with ``text``."""
+    return {**regular(text), "isreg": False, "islnk": True, "target": "file", "checksum": ""}
+
+
 @dataclass(frozen=True)
 class Cleanup:
     """A rule that the run cleans up, which had written a vendor line."""
@@ -144,7 +150,9 @@ class Scenario:
     """The inputs of one play and the statuses expected of the rules to apply, in order.
 
     ``disk`` holds the bytes of a file on the disk when they are no longer those that the role
-    read (``files``), as after a concurrent write between the read and the write.
+    read (``files``), as after a concurrent write between the read and the write, or ``None``
+    when the file is gone. ``links`` names the files of ``files`` that are symbolic links to a
+    regular file with that text.
     """
 
     name: str
@@ -159,7 +167,8 @@ class Scenario:
     cleanup_detail: str | None = None
     reason: str | None = None
     benchmark: str = RHEL
-    disk: dict[str, str] = field(default_factory=dict[str, str])
+    disk: dict[str, str | None] = field(default_factory=dict[str, str | None])
+    links: list[str] = field(default_factory=list[str])
 
 
 def content_sha256(benchmark: str) -> str:
@@ -215,6 +224,8 @@ def host_state(
     host = Host()
     for path, text in scenario.files.items():
         host.add(path, text)
+    for path in scenario.links:
+        host.entries[path] = linked(scenario.files[path])
     for key in scenario.exact:
         rule_id = str(by_key[key]["rule_id"])
         host.add(str(parameters(by_key[key])["path"]), contents[rule_id])
@@ -280,7 +291,9 @@ def scenario_vars(scenario: Scenario, by_key: dict[str, Rule]) -> dict[str, obje
         "__linux_compliance_remediate_kp_running_values": scenario.running,
         "__linux_compliance_remediate_kp_runtime": scenario.runtime,
         "__linux_compliance_remediate_kp_writable": dict.fromkeys(scenario.running, True),
-        "harness_disk": {**host.texts, **scenario.disk},
+        "harness_disk": {
+            path: text for path, text in {**host.texts, **scenario.disk}.items() if text is not None
+        },
     }
 
 
@@ -468,24 +481,89 @@ SCENARIOS = [
         disk={HARDENING: f"{KPTR} = 0\n{CPU} = 0\n"},
     ),
     Scenario(
-        "a file that the run does not write may change after it was read",
-        [SEND],
-        {"/etc/sysctl.d/50-x.conf": f"{KPTR} = 1\n"},
-        ["applied"],
-        running={**RUNNING, SEND: "1"},
-        disk={"/etc/sysctl.d/50-x.conf": f"{KPTR} = 2\n"},
+        "a cleanup restore into a vendor file that changed after it was read is not made",
+        [SAMPLE],
+        {HARDENING: f"{KPTR} = 1\n{CPU} = 1\n"},
+        ["modified_since_read"],
+        running={**RUNNING, SAMPLE: "1", CPU: "1"},
+        exact=[SAMPLE],
+        cleanup=COMPANION_CLEANUP,
+        cleanup_reason="modified_since_read",
+        cleanup_detail=f"{HARDENING} changed after the collection read it",
+        reason=f"{HARDENING} changed after the collection read it",
+        disk={HARDENING: f"{KPTR} = 2\n{CPU} = 1\n"},
     ),
     Scenario(
-        "a cleanup restore into a vendor file that changed after it was read is not made",
+        "the cleanup's changed vendor file refuses a sample rate decided on its old bytes",
+        [SAMPLE],
+        {HARDENING: f"{KPTR} = 1\n{CPU} = 1\n"},
+        ["modified_since_read"],
+        running={**RUNNING, SAMPLE: "1", CPU: "1"},
+        exact=[SAMPLE],
+        cleanup=COMPANION_CLEANUP,
+        cleanup_reason="modified_since_read",
+        cleanup_detail=f"{HARDENING} changed after the collection read it",
+        reason=f"{HARDENING} changed after the collection read it",
+        disk={HARDENING: f"{KPTR} = 1\n{CPU} = 0\n"},
+    ),
+    Scenario(
+        "the cleanup's changed vendor file refuses a compliant rule that the file now contradicts",
+        [KPTR],
+        {HARDENING: f"{KPTR} = 1\n{CPU} = 1\n"},
+        ["modified_since_read"],
+        running={**RUNNING, SAMPLE: "1", CPU: "1", KPTR: "1"},
+        cleanup=COMPANION_CLEANUP,
+        cleanup_reason="modified_since_read",
+        cleanup_detail=f"{HARDENING} changed after the collection read it",
+        reason=f"{HARDENING} changed after the collection read it",
+        disk={HARDENING: f"{KPTR} = 0\n{CPU} = 1\n"},
+    ),
+    Scenario(
+        "a file that no rule edits but that the rules were decided on changed after it was read",
+        [KPTR],
+        {"/etc/sysctl.d/50-x.conf": f"{SEND} = 1\n"},
+        ["modified_since_read"],
+        running={**RUNNING, KPTR: "0"},
+        reason="/etc/sysctl.d/50-x.conf changed after the collection read it",
+        disk={"/etc/sysctl.d/50-x.conf": f"{KPTR} = 0\n"},
+    ),
+    Scenario(
+        "a cleanup restore and an apply edit of one vendor file are compared with the bytes read",
+        [KPTR],
+        {HARDENING: f"{KPTR} = 0\n{CPU} = 1\n"},
+        ["applied"],
+        running={**RUNNING, SAMPLE: "1", CPU: "1", KPTR: "0"},
+        cleanup=COMPANION_CLEANUP,
+    ),
+    Scenario(
+        "a vendor file to edit that is gone before the write",
+        [KPTR],
+        {HARDENING: f"{KPTR} = 0\n"},
+        ["modified_since_read"],
+        running={**RUNNING, KPTR: "0"},
+        reason=f"{HARDENING} changed after the collection read it",
+        disk={HARDENING: None},
+    ),
+    Scenario(
+        "a vendor file to edit that is a symbolic link is not edited through it",
+        [KPTR],
+        {HARDENING: f"{KPTR} = 0\n"},
+        ["not_regular_file"],
+        running={**RUNNING, KPTR: "0"},
+        reason=f"{HARDENING} is not a regular file (a symbolic link)",
+        links=[HARDENING],
+    ),
+    Scenario(
+        "a vendor file to write back that is a symbolic link is not written through it",
         [SAMPLE],
         {HARDENING: f"{KPTR} = 1\n{CPU} = 1\n"},
         ["compliant"],
         running={**RUNNING, SAMPLE: "1", CPU: "1"},
         exact=[SAMPLE],
         cleanup=COMPANION_CLEANUP,
-        cleanup_reason="modified_since_read",
-        cleanup_detail=f"{HARDENING} changed after the collection read it",
-        disk={HARDENING: f"{KPTR} = 2\n{CPU} = 1\n"},
+        cleanup_reason="not_regular_file",
+        cleanup_detail=f"{HARDENING} is not a regular file (a symbolic link)",
+        links=[HARDENING],
     ),
 ]
 
@@ -643,7 +721,7 @@ def test_every_mocked_task_replaces_a_stat_of_the_role() -> None:
     for prefix in STATS:
         task = next(task for task in tasks if str(task["name"]).startswith(prefix))
         stat = cast("dict[str, object]", task["ansible.builtin.stat"])
-        assert stat["follow"] is False
+        assert stat["follow"] is False or "islnk" in str(stat["follow"])
         assert stat["get_checksum"] is True
         assert stat["checksum_algorithm"] == "sha256"
         mocked = mocked_stat(task)

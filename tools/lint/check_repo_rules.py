@@ -107,12 +107,16 @@ Rules:
   of ``tools/lint/repo_rules/own_remediation.py``.
 
 * Every remediation family has an internal variable prefix of its own (FREES-208,
-  ``tools/lint/repo_rules/family_prefixes.py``): the task files of ``roles/remediate/tasks``
-  that include one another (a family file, its helpers and the families that share them) define
-  internal variables with exactly one prefix ``__linux_compliance_remediate_<xx>_``, which no
-  other group of task files uses and which is neither the first component of a constant of the
-  role nor that of a name the role shares between families (``__linux_compliance_remediate_rule``
-  and the names that ``main.yml`` and ``dispatch.yml`` define).
+  ``tools/lint/repo_rules/family_prefixes.py``): the task files below ``roles/remediate/tasks``
+  that include or import one another (a family file, its helpers and the families that share
+  them) define internal variables (``set_fact`` in every form, ``register``, ``vars``,
+  ``apply.vars``, an ``include_vars`` ``name`` and ``loop_var``) with exactly one prefix
+  ``__linux_compliance_remediate_<xx>_``, which no other group of task files uses and which is
+  neither the first component of a constant of the role nor that of a name of ``main.yml`` or
+  ``dispatch.yml``; a family may set no name of those two files but
+  ``__linux_compliance_remediate_results`` and ``__linux_compliance_remediate_rule``, and no
+  templated ``set_fact`` key. The rule is reported on the task files, so a change to a constant
+  of ``vars/`` alone is found by ``make lint-repo`` over every file, not by the pre-commit hook.
 
 Violations are printed as ``path:line: message`` and the exit status is 1. An
 ``--index-modes`` listing that cannot be read is reported with exit status 2.

@@ -8,34 +8,43 @@ value when both run. Two pull requests (FREES-107 and the PAM configuration fami
 ``__linux_compliance_remediate_sc_`` and only collided after both had merged. The convention of
 the existing files makes such a collision impossible, and this rule group checks it:
 
-* The task files of ``roles/remediate/tasks`` other than the role's own entry files
-  (``main.yml``, ``dispatch.yml`` and the generated ``internal_variables.yml``) form groups: two
-  files belong to one group when one includes the other as ``{{ role_path }}/tasks/<file>``, so
-  a family file and its helpers are one group, and so are the families that share helpers
-  (``sysctl``, ``ipv4_parameters`` and ``ipv6_parameters`` with ``sysctl_parameters.yml``,
-  ``faillock`` and ``pwhistory`` with the ``pam_conf_*`` helpers).
-* An internal variable that a task file defines (a ``set_fact`` key, a ``register``, a key of a
-  task's ``vars`` or a ``loop_var``, in blocks at any depth, as the role-guard generator reads
-  them) has the prefix ``__linux_compliance_remediate_<xx>_``, where ``<xx>`` is the first
-  component of its name after the role's prefix; the name ``__linux_compliance_remediate_<xx>``
-  itself has that prefix too.
+* The task files below ``roles/remediate/tasks``, subdirectories included, other than the role's
+  own entry files (``main.yml``, ``dispatch.yml`` and the generated ``internal_variables.yml`` at
+  the top of the directory) form groups: two files belong to one group when a task of one
+  includes or imports the other as ``{{ role_path }}/tasks/<path>`` (``include_tasks`` or
+  ``import_tasks``, as ``ansible.builtin.``, ``ansible.legacy.`` or the short name, read from the
+  parsed tasks, not from the text). A family file and its helpers are one group, and so are the
+  families that share helpers (``sysctl``, ``ipv4_parameters`` and ``ipv6_parameters`` with
+  ``sysctl_parameters.yml``, ``faillock`` and ``pwhistory`` with the ``pam_conf_*`` helpers).
+* An internal variable that a task file defines has the prefix
+  ``__linux_compliance_remediate_<xx>_``, where ``<xx>`` is the first component of its name after
+  the role's prefix; the name ``__linux_compliance_remediate_<xx>`` itself has that prefix too.
+  A task defines a variable through a ``set_fact`` key (``ansible.builtin.``, ``ansible.legacy.``
+  or short), a ``register``, a key of its ``vars``, a key of the ``apply.vars`` of an include, the
+  ``name`` of an ``include_vars`` and a ``loop_var``, in blocks, ``rescue`` and ``always`` at any
+  depth.
 * Every group uses exactly one such prefix, no other group uses it, and it is neither the first
-  component of a constant of the role's variable files nor that of a name that the role shares
-  between families.
-* Shared names are exempt: the names that ``main.yml`` and ``dispatch.yml`` define, such as
-  ``__linux_compliance_remediate_results``, to which every family adds its results, and
-  ``__linux_compliance_remediate_rule``, the rule that a family file hands to its helpers
-  (``SHARED_NAMES``, the family file contract of ``docs/remediation.md``).
+  component of a constant of the role's variable files nor that of a name that ``main.yml`` or
+  ``dispatch.yml`` defines.
+* The names that a family shares with the role are exempt: ``__linux_compliance_remediate_results``,
+  to which every family adds its results, and ``__linux_compliance_remediate_rule``, the rule that
+  a family file hands to its helpers (``SHARED_NAMES``, the family file contract of
+  ``docs/remediation.md``). Every other name that ``main.yml`` or ``dispatch.yml`` defines (the
+  plan, the ledger, the family) belongs to the role, and a family may not set it.
+* A ``set_fact`` key with a template defines a name that the rule cannot read, and is refused in
+  these task files.
 
-A task file that cannot be parsed is left to the other rules. Violations are reported for the
-file being checked, at the first line that names the variable.
+What the rule does not see: an ``include_vars`` without ``name`` (its keys are constants, which
+the role-guard generator checks), variables set by a module or plugin at run time, and anything
+outside ``roles/remediate/tasks``. A task file that cannot be parsed is left to the other rules.
+Violations are reported for the file being checked, at the first line that names the variable.
 """
 
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Final, cast
 
 import yaml
@@ -53,14 +62,25 @@ ENTRY_FILES: Final[frozenset[str]] = frozenset(
     {"main.yml", "dispatch.yml", "internal_variables.yml"}
 )
 SHARED_SOURCES: Final[frozenset[str]] = frozenset({"main.yml", "dispatch.yml"})
-SHARED_NAMES: Final[frozenset[str]] = frozenset({"__linux_compliance_remediate_rule"})
+SHARED_NAMES: Final[frozenset[str]] = frozenset(
+    {"__linux_compliance_remediate_results", "__linux_compliance_remediate_rule"}
+)
 TASK_SUFFIXES: Final[frozenset[str]] = frozenset({".yml", ".yaml"})
 NESTED: Final[tuple[str, ...]] = ("block", "rescue", "always")
-SET_FACT: Final[str] = "ansible.builtin.set_fact"
-FACT_OPTIONS: Final[frozenset[str]] = frozenset({"cacheable"})
-INCLUDED_FILE: Final[re.Pattern[str]] = re.compile(
-    r"\{\{ role_path \}\}/tasks/([A-Za-z0-9_][A-Za-z0-9_.-]*\.ya?ml)"
+MODULE_PREFIXES: Final[tuple[str, ...]] = ("ansible.builtin.", "ansible.legacy.", "")
+SET_FACT: Final[frozenset[str]] = frozenset(prefix + "set_fact" for prefix in MODULE_PREFIXES)
+INCLUDE_VARS: Final[frozenset[str]] = frozenset(
+    prefix + "include_vars" for prefix in MODULE_PREFIXES
 )
+INCLUDES: Final[frozenset[str]] = frozenset(
+    prefix + name for prefix in MODULE_PREFIXES for name in ("include_tasks", "import_tasks")
+)
+FACT_OPTIONS: Final[frozenset[str]] = frozenset({"cacheable"})
+COMPONENT: Final[str] = r"[A-Za-z0-9_][A-Za-z0-9_.-]*"
+INCLUDED_FILE: Final[re.Pattern[str]] = re.compile(
+    r"\{\{ role_path \}\}/tasks/((?:" + COMPONENT + r"/)*" + COMPONENT + r"\.ya?ml)"
+)
+TEMPLATE: Final[str] = "{{"
 REFERENCE: Final[str] = "(FREES-208)"
 
 Findings = dict[str, list[tuple[int, str]]]
@@ -69,11 +89,12 @@ Prefixes = dict[str, list[str]]
 
 @dataclass(frozen=True, slots=True)
 class TaskFile:
-    """A task file of the role: its text, the variables it defines and the files it includes."""
+    """A task file of the role: its text, what it defines and the files that it includes."""
 
     text: str
     defined: frozenset[str]
     includes: frozenset[str]
+    templated: tuple[str, ...] = ()
 
 
 def prefix_of(name: str) -> str:
@@ -101,9 +122,47 @@ def _keys(value: object) -> list[str]:
     )
 
 
-def _defined(task: dict[str, object]) -> set[str]:
-    """Return every name that ``task`` defines, as the role-guard generator classifies them."""
-    names = {key for key in _keys(task.get(SET_FACT)) if key not in FACT_OPTIONS}
+def _options(task: dict[str, object], modules: frozenset[str]) -> list[object]:
+    return [task[module] for module in sorted(modules) if module in task]
+
+
+def _string_option(options: object, name: str) -> str | None:
+    if isinstance(options, dict):
+        value = cast("dict[str, object]", options).get(name)
+        return value if isinstance(value, str) else None
+    return None
+
+
+def _include_names(task: dict[str, object]) -> tuple[set[str], set[str]]:
+    """Return the files that ``task`` includes and the names its ``apply.vars`` defines."""
+    included: set[str] = set()
+    defined: set[str] = set()
+    for options in _options(task, INCLUDES):
+        target = options if isinstance(options, str) else _string_option(options, "file")
+        match = INCLUDED_FILE.fullmatch(target or "")
+        if match is not None:
+            included.add(match.group(1))
+        if isinstance(options, dict):
+            apply = cast("dict[str, object]", options).get("apply")
+            if isinstance(apply, dict):
+                defined.update(_keys(cast("dict[str, object]", apply).get("vars")))
+    return included, defined
+
+
+def _defined(task: dict[str, object]) -> tuple[set[str], set[str], list[str]]:
+    """Return the names that ``task`` defines, the files it includes and its templated keys."""
+    names: set[str] = set()
+    templated: list[str] = []
+    for options in _options(task, SET_FACT):
+        for key in _keys(options):
+            if TEMPLATE in key:
+                templated.append(key)
+            elif key not in FACT_OPTIONS:
+                names.add(key)
+    for options in _options(task, INCLUDE_VARS):
+        name = _string_option(options, "name")
+        if name is not None:
+            names.add(name)
     register = task.get("register")
     if isinstance(register, str):
         names.add(register)
@@ -113,7 +172,9 @@ def _defined(task: dict[str, object]) -> set[str]:
         loop_var = cast("dict[str, object]", loop_control).get("loop_var")
         if isinstance(loop_var, str):
             names.add(loop_var)
-    return {name for name in names if name.startswith(ROLE_PREFIX)}
+    included, applied = _include_names(task)
+    names.update(applied)
+    return {name for name in names if name.startswith(ROLE_PREFIX)}, included, templated
 
 
 def _task_file(text: str) -> TaskFile | None:
@@ -123,9 +184,14 @@ def _task_file(text: str) -> TaskFile | None:
     except yaml.YAMLError:
         return None
     defined: set[str] = set()
+    includes: set[str] = set()
+    templated: list[str] = []
     for task in _tasks(document):
-        defined.update(_defined(task))
-    return TaskFile(text, frozenset(defined), frozenset(INCLUDED_FILE.findall(text)))
+        names, included, keys = _defined(task)
+        defined.update(names)
+        includes.update(included)
+        templated.extend(keys)
+    return TaskFile(text, frozenset(defined), frozenset(includes), tuple(templated))
 
 
 def _constant_prefixes(root: Path) -> set[str]:
@@ -148,9 +214,9 @@ def _constant_prefixes(root: Path) -> set[str]:
 
 
 def read_task_files(directory: Path) -> dict[str, TaskFile]:
-    """Return the task files of ``directory`` that are regular YAML files, by file name."""
+    """Return the regular YAML task files below ``directory``, by path relative to it."""
     files: dict[str, TaskFile] = {}
-    for path in sorted(directory.iterdir()):
+    for path in sorted(directory.rglob("*")):
         if path.suffix not in TASK_SUFFIXES or not path.is_file() or path.is_symlink():
             continue
         try:
@@ -158,7 +224,7 @@ def read_task_files(directory: Path) -> dict[str, TaskFile]:
         except (OSError, UnicodeDecodeError):
             continue
         if parsed is not None:
-            files[path.name] = parsed
+            files[path.relative_to(directory).as_posix()] = parsed
     return files
 
 
@@ -177,10 +243,10 @@ def groups(files: Mapping[str, TaskFile]) -> list[list[str]]:
         for included in files[name].includes:
             if included in parent:
                 parent[find(included)] = find(name)
-    groups: dict[str, list[str]] = {}
+    grouped: dict[str, list[str]] = {}
     for name in members:
-        groups.setdefault(find(name), []).append(name)
-    return sorted(groups.values())
+        grouped.setdefault(find(name), []).append(name)
+    return sorted(grouped.values())
 
 
 def _line(text: str, name: str) -> int:
@@ -192,23 +258,23 @@ def _listed(names: Iterable[str]) -> str:
     return ", ".join(sorted(names))
 
 
-def _prefixes(group: list[str], files: Mapping[str, TaskFile], shared: set[str]) -> Prefixes:
+def _prefixes(group: list[str], files: Mapping[str, TaskFile], exempt: set[str]) -> Prefixes:
     """Return the internal variables that the files of ``group`` define, by prefix."""
     by_prefix: Prefixes = {}
     for name in group:
-        for variable in sorted(files[name].defined - shared):
+        for variable in sorted(files[name].defined - exempt):
             found = by_prefix.setdefault(prefix_of(variable), [])
             if variable not in found:
                 found.append(variable)
     return by_prefix
 
 
-def _shared_names(files: Mapping[str, TaskFile]) -> set[str]:
-    """Return ``SHARED_NAMES`` and every name that ``main.yml`` and ``dispatch.yml`` define."""
-    shared = set(SHARED_NAMES)
+def _entry_names(files: Mapping[str, TaskFile]) -> set[str]:
+    """Return every name that ``main.yml`` and ``dispatch.yml`` define."""
+    names: set[str] = set()
     for name in SHARED_SOURCES & files.keys():
-        shared.update(files[name].defined)
-    return shared
+        names.update(files[name].defined)
+    return names
 
 
 def analyse(root: Path) -> Findings:
@@ -217,9 +283,10 @@ def analyse(root: Path) -> Findings:
     if not directory.is_dir():
         return {}
     files = read_task_files(directory)
-    shared = _shared_names(files)
-    reserved = _constant_prefixes(root) | {prefix_of(name) for name in shared}
-    used = [(group, _prefixes(group, files, shared)) for group in groups(files)]
+    entry_names = _entry_names(files) - SHARED_NAMES
+    reserved = _constant_prefixes(root) | {prefix_of(name) for name in entry_names | SHARED_NAMES}
+    exempt = set(SHARED_NAMES) | entry_names
+    used = [(group, _prefixes(group, files, exempt)) for group in groups(files)]
     owners: dict[str, list[list[str]]] = {}
     for group, by_prefix in used:
         for prefix in by_prefix:
@@ -230,6 +297,7 @@ def analyse(root: Path) -> Findings:
             messages = _messages(prefix, group, by_prefix, owners, reserved)
             if messages:
                 _report(findings, files, group, variables, messages)
+        _report_owned(findings, files, group, entry_names)
     return findings
 
 
@@ -246,6 +314,27 @@ def _report(
         if mine:
             line = _line(files[name].text, mine[0])
             findings.setdefault(name, []).extend((line, text) for text in messages)
+
+
+def _report_owned(
+    findings: Findings, files: Mapping[str, TaskFile], group: list[str], entry_names: set[str]
+) -> None:
+    """Report every name of the role's entry files and every templated key that ``group`` sets."""
+    for name in group:
+        found = files[name]
+        for variable in sorted(found.defined & entry_names):
+            message = (
+                f"{variable} belongs to the role: only main.yml and dispatch.yml may define "
+                f"it, and a family may not set it {REFERENCE}"
+            )
+            findings.setdefault(name, []).append((_line(found.text, variable), message))
+        for key in found.templated:
+            message = (
+                f"the set_fact key {key!r} is a template, so the variable that it defines "
+                f"cannot be checked against the family's prefix; name the variable literally "
+                f"{REFERENCE}"
+            )
+            findings.setdefault(name, []).append((_line(found.text, key), message))
 
 
 def _messages(
@@ -273,7 +362,7 @@ def _messages(
     if prefix in reserved:
         messages.append(
             f"the internal variable prefix {full} is the first component of a constant of the "
-            f"role or of a name that the role shares between families; choose another {REFERENCE}"
+            f"role or of a name of main.yml or dispatch.yml; choose another {REFERENCE}"
         )
     return messages
 
@@ -286,7 +375,10 @@ def family_prefix_findings(
     ``analysis`` is the result of :func:`analyse` for ``root``, computed once by ``check_paths``;
     without it the role's task files are analysed for this path alone.
     """
-    if relative is None or relative.parent != TASKS_DIRECTORY or relative.name in ENTRY_FILES:
+    if relative is None or TASKS_DIRECTORY not in relative.parents:
+        return []
+    name = PurePosixPath(*relative.relative_to(TASKS_DIRECTORY).parts).as_posix()
+    if name in ENTRY_FILES:
         return []
     found = analyse(root) if analysis is None else analysis
-    return [Violation(path, line, message) for line, message in found.get(relative.name, [])]
+    return [Violation(path, line, message) for line, message in found.get(name, [])]

@@ -20,6 +20,8 @@ PREFIX = prefixes.ROLE_PREFIX
 REFERENCE = prefixes.REFERENCE
 ANOTHER_FAMILY = "is also used by the task files of another family"
 ONE_FAMILY = "give them the one prefix of the family"
+OWNED = "belongs to the role: only main.yml and dispatch.yml may define it"
+TEMPLATED = "is a template, so the variable that it defines cannot be checked"
 RESERVED = "is the first component of a constant of the role"
 FACT = """
 - name: Mutation | Set a fact
@@ -56,6 +58,67 @@ DEFINITIONS = {
     loop_var: {name}
   tags:
     - always
+""",
+    "legacy set_fact": """
+- name: Mutation | Set a fact through the legacy name
+  ansible.legacy.set_fact:
+    {name}: 1
+  tags:
+    - always
+""",
+    "short set_fact": """
+- name: Mutation | Set a fact through the short name
+  set_fact:
+    {name}: 1
+  tags:
+    - always
+""",
+    "include apply vars": """
+- name: Mutation | Include with variables applied to the included tasks
+  ansible.builtin.include_tasks:
+    file: "{{{{ role_path }}}}/tasks/ssh.yml"
+    apply:
+      vars:
+        {name}: 1
+      tags:
+        - always
+  when: false
+  tags:
+    - always
+""",
+    "include_vars name": """
+- name: Mutation | Load variables under a name
+  ansible.builtin.include_vars:
+    file: main.yml
+    name: {name}
+  tags:
+    - always
+""",
+    "rescue": """
+- name: Mutation | Block with a rescue
+  tags:
+    - always
+  block:
+    - name: Mutation | Debug
+      ansible.builtin.debug:
+        msg: x
+  rescue:
+    - name: Mutation | Set a fact in the rescue
+      ansible.builtin.set_fact:
+        {name}: 1
+""",
+    "always": """
+- name: Mutation | Block with an always
+  tags:
+    - always
+  block:
+    - name: Mutation | Debug
+      ansible.builtin.debug:
+        msg: x
+  always:
+    - name: Mutation | Set a fact in the always
+      ansible.builtin.set_fact:
+        {name}: 1
 """,
     "nested block": """
 - name: Mutation | Block
@@ -100,6 +163,7 @@ def append(root: Path, name: str, text: str) -> Path:
 
 def write(root: Path, name: str, text: str) -> Path:
     path = task_file(root, name)
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("---" + text, encoding="utf-8")
     return path
 
@@ -204,11 +268,28 @@ def test_two_new_families_with_one_prefix_are_both_refused(role: Path) -> None:
         assert any(ANOTHER_FAMILY in message and other in message for message in found), found
 
 
-@pytest.mark.parametrize("prefix", ["sysctl", "rules", "plan", "results", "rule"])
+@pytest.mark.parametrize(
+    "prefix", ["sysctl", "rules", "plan", "results", "rule", "ledger", "family"]
+)
 def test_a_prefix_of_a_constant_or_of_a_shared_name_is_refused(role: Path, prefix: str) -> None:
     write(role, "new_family.yml", FACT.format(name=f"{PREFIX}{prefix}_value"))
     found = messages(role, "new_family.yml")
     assert any(RESERVED in message for message in found), found
+
+
+def test_the_line_skips_a_longer_name_that_starts_with_the_variable(role: Path) -> None:
+    write(
+        role,
+        "new_family.yml",
+        FACT.format(name=f"{PREFIX}nf_value_longer") + FACT.format(name=f"{PREFIX}nf_value"),
+    )
+    write(role, "other_family.yml", FACT.format(name=f"{PREFIX}nf_value"))
+    violations = [
+        violation
+        for violation in rules.check_file(task_file(role, "new_family.yml"), role)
+        if ANOTHER_FAMILY in violation.message
+    ]
+    assert [violation.line for violation in violations] == [10]
 
 
 def test_the_finding_is_reported_at_the_first_line_that_names_the_variable(role: Path) -> None:
@@ -267,15 +348,159 @@ def test_the_prefix_is_the_first_component_after_the_role_s_prefix(name: str, pr
     assert prefixes.prefix_of(name) == prefix
 
 
-def test_the_entry_files_share_their_names_with_every_family(role: Path) -> None:
+@pytest.mark.parametrize(
+    "name", [f"{PREFIX}plan", f"{PREFIX}ledger", f"{PREFIX}family", f"{PREFIX}dispatched"]
+)
+def test_a_family_may_not_set_a_name_of_the_role_s_entry_files(role: Path, name: str) -> None:
+    write(role, "new_family.yml", FACT.format(name=name))
+    found = messages(role, "new_family.yml")
+    assert any(OWNED in message and name in message for message in found), found
+
+
+def test_a_name_that_main_yml_adds_belongs_to_the_role(role: Path) -> None:
     append(role, "main.yml", FACT.format(name=f"{PREFIX}zz_shared"))
     write(role, "new_family.yml", FACT.format(name=f"{PREFIX}zz_shared"))
-    write(role, "other_family.yml", FACT.format(name=f"{PREFIX}zz_shared"))
+    found = messages(role, "new_family.yml")
+    assert any(OWNED in message for message in found), found
+
+
+def test_the_shared_names_may_be_set_by_every_family(role: Path) -> None:
+    for name in ("new_family.yml", "other_family.yml"):
+        write(
+            role,
+            name,
+            FACT.format(name=f"{PREFIX}results")
+            + DEFINITIONS["loop_var"].format(name=f"{PREFIX}rule"),
+        )
+    assert messages(role, "new_family.yml") == []
+    assert messages(role, "other_family.yml") == []
+
+
+def test_a_templated_set_fact_key_is_refused(role: Path) -> None:
+    write(role, "new_family.yml", FACT.format(name='"{{ item }}"'))
+    found = messages(role, "new_family.yml")
+    assert any(TEMPLATED in message for message in found), found
+
+
+def test_a_name_outside_the_role_s_prefix_is_not_checked(role: Path) -> None:
+    write(
+        role,
+        "new_family.yml",
+        FACT.format(name="lifecycle_value") + FACT.format(name="__linux_compliance_audit_kp_x"),
+    )
     assert messages(role, "new_family.yml") == []
 
 
+@pytest.mark.parametrize("suffix", [".yml", ".yaml"])
+def test_task_files_with_either_suffix_are_checked(role: Path, suffix: str) -> None:
+    write(role, f"new_family{suffix}", FACT.format(name=f"{PREFIX}ld_extra"))
+    assert any(ANOTHER_FAMILY in message for message in messages(role, f"new_family{suffix}"))
+
+
+def test_a_task_file_in_a_subdirectory_is_checked_and_grouped_by_its_include(role: Path) -> None:
+    write(role, "nested/helper.yml", FACT.format(name=f"{PREFIX}ld_extra"))
+    found = messages(role, "nested/helper.yml")
+    assert any(ANOTHER_FAMILY in message for message in found), found
+    write(role, "nested/helper.yml", FACT.format(name=f"{PREFIX}nf_value"))
+    write(
+        role,
+        "new_family.yml",
+        """
+- name: Mutation | Include the helper in the subdirectory
+  ansible.builtin.include_tasks: "{{ role_path }}/tasks/nested/helper.yml"
+  tags:
+    - always
+"""
+        + FACT.format(name=f"{PREFIX}nf_other"),
+    )
+    assert messages(role, "nested/helper.yml") == []
+    files = prefixes.read_task_files(role / TASKS)
+    assert ["nested/helper.yml", "new_family.yml"] in prefixes.groups(files)
+
+
+def test_an_include_is_read_from_the_tasks_not_from_the_text(role: Path) -> None:
+    write(
+        role,
+        "new_family.yml",
+        """
+- name: Mutation | A name that mentions {{ role_path }}/tasks/ssh.yml includes nothing
+  ansible.builtin.debug:
+    msg: "{{ role_path }}/tasks/ssh.yml"
+  tags:
+    - always
+"""
+        + FACT.format(name=f"{PREFIX}nf_value"),
+    )
+    assert messages(role, "new_family.yml") == []
+    assert messages(role, "ssh.yml") == []
+    files = prefixes.read_task_files(role / TASKS)
+    assert ["new_family.yml"] in prefixes.groups(files)
+
+
+def test_foreign_includes_unnamed_variables_and_options_define_nothing(role: Path) -> None:
+    write(
+        role,
+        "new_family.yml",
+        """
+- name: Mutation | Include a file that is not below the role's tasks
+  ansible.builtin.include_tasks:
+    file: other.yml
+  tags:
+    - always
+- name: Mutation | Include without a file
+  ansible.builtin.include_tasks:
+    apply:
+      tags:
+        - always
+  tags:
+    - always
+- name: Mutation | Load variables without a name
+  ansible.builtin.include_vars:
+    file: main.yml
+  tags:
+    - always
+- name: Mutation | Load variables in the short form
+  ansible.builtin.include_vars: main.yml
+  tags:
+    - always
+- name: Mutation | A set_fact with only its option
+  ansible.builtin.set_fact:
+    cacheable: false
+  tags:
+    - always
+""",
+    )
+    found = prefixes.read_task_files(role / TASKS)["new_family.yml"]
+    assert found.defined == frozenset()
+    assert found.includes == frozenset()
+
+
+@pytest.mark.parametrize("module", ["ansible.legacy.import_tasks", "include_tasks"])
+def test_every_form_of_an_include_joins_the_groups(role: Path, module: str) -> None:
+    write(
+        role,
+        "new_family.yml",
+        f"""
+- name: Mutation | Include the SSH family file
+  {module}:
+    file: "{{{{ role_path }}}}/tasks/ssh.yml"
+  tags:
+    - always
+"""
+        + FACT.format(name=f"{PREFIX}nf_value"),
+    )
+    found = messages(role, "new_family.yml")
+    assert any(ONE_FAMILY in message for message in found), found
+
+
 def test_task_files_of_other_roles_and_directories_are_not_checked(tmp_path: Path) -> None:
-    for relative in ("roles/audit/tasks/a.yml", "roles/audit/tasks/b.yml", "roles/remediate/x.yml"):
+    for relative in (
+        "roles/audit/tasks/a.yml",
+        "roles/audit/tasks/b.yml",
+        "roles/remediate/x.yml",
+        "roles/remediate/handlers/main.yml",
+        "roles/remediate/tasks_extra/x.yml",
+    ):
         path = tmp_path / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("---" + FACT.format(name=f"{PREFIX}kp_value"), encoding="utf-8")
