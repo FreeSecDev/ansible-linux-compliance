@@ -3000,10 +3000,6 @@
         (lookup('ansible.builtin.file', role_path ~ '/vars/main.yml') |
         ansible.builtin.from_yaml)['__linux_compliance_remediate_pwquality_marker']
       - >-
-        __linux_compliance_remediate_pwquality_pam_directories is not defined or
-        __linux_compliance_remediate_pwquality_pam_directories == (lookup('ansible.builtin.file', role_path ~
-        '/vars/main.yml') | ansible.builtin.from_yaml)['__linux_compliance_remediate_pwquality_pam_directories']
-      - >-
         __linux_compliance_remediate_rules is not defined or __linux_compliance_remediate_rules ==
         (lookup('ansible.builtin.file', role_path ~ '/vars/rules.yml') |
         ansible.builtin.from_yaml)['__linux_compliance_remediate_rules']

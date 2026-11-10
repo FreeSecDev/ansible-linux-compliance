@@ -11,7 +11,9 @@ opt-in. The full guide, including the family file contract, is [docs/remediation
 Dispatcher and safety model implemented (FREES-52). 203 rules have a native remediation: the reference rule
 `xccdf_org.ssgproject.content_rule_file_permissions_crontab` (`file_permissions`), 15 rules of `banners` (the text,
 mode, owner and group of `/etc/issue`, `/etc/issue.net` and `/etc/motd`), 14 rules of `pwquality` (one line per
-setting in `/etc/security/pwquality.conf` on Ubuntu, one drop-in per setting on RHEL, where each content checks),
+setting in `/etc/security/pwquality.conf` on Ubuntu, one drop-in per setting on RHEL, where each content checks;
+a `pam_pwquality` argument in any file of `/etc/pam.d`, `/usr/lib/pam.d` or `/usr/share/pam.d` that sets another
+value makes the rule `overridden`),
 34 sshd keyword rules of `ssh` (one drop-in per rule, `/etc/ssh/sshd_config.d/00-freesecdev-<rule>.conf`, which
 sshd reads first, validated with `sshd -t` through the module `freesecdev.linux_compliance.sshd_validate` before it is
 written; a conflicting later line of `/etc/ssh/sshd_config` or `50-redhat.conf` is set to the rule's value in place and

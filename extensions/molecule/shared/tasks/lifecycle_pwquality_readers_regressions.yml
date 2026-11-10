@@ -16,6 +16,8 @@
     preaders_directory: /etc/security/pwquality.conf.d
     preaders_bad: /etc/security/pwquality.conf.d/00-freesecdev-readers.conf
     preaders_pam: /etc/pam.d/freesecdev-readers
+    preaders_vendor_directory: /usr/share/pam.d
+    preaders_vendor: /usr/share/pam.d/freesecdev-readers-vendor
     preaders_cr: "\r"
     preaders_newline: "\n"
 
@@ -33,7 +35,8 @@
   ansible.builtin.set_fact:
     lifecycle_items: >-
       {{ lifecycle_items | combine({'files': lifecycle_items.files
-           + [{'path': '/etc/pam.d', 'rewritten': true}, {'path': '/etc/security', 'rewritten': true}]}) }}
+           + [{'path': '/etc/pam.d', 'rewritten': true}, {'path': '/etc/security', 'rewritten': true},
+              {'path': preaders_vendor_directory, 'rewritten': true}]}) }}
 
 - name: Pwquality reader regressions | Select the rules of the profile, their toggles and the method of this platform
   ansible.builtin.set_fact:
@@ -232,6 +235,62 @@
     state: absent
   loop: >-
     {{ [preaders_bad, preaders_pam] + ([] if preaders_directory_stat.stat.exists else [preaders_directory]) }}
+
+- name: Pwquality reader regressions | Inspect the vendor PAM directory before a service file that only it holds
+  ansible.builtin.stat:
+    path: "{{ preaders_vendor_directory }}"
+  register: preaders_vendor_directory_stat
+
+- name: Pwquality reader regressions | Create the vendor PAM directory that Ubuntu does not ship, for the test only
+  ansible.builtin.file:
+    path: "{{ preaders_vendor_directory }}"
+    state: directory
+    mode: "0755"
+    owner: root
+    group: root
+  when: not preaders_vendor_directory_stat.stat.exists
+
+- name: Pwquality reader regressions | Add a vendor PAM file whose pam_pwquality arguments set minlen 8 and enforcing 0
+  ansible.builtin.copy:
+    content: "password requisite pam_pwquality.so minlen=8 enforcing=0{{ preaders_newline }}"
+    dest: "{{ preaders_vendor }}"
+    mode: "0644"
+    owner: root
+    group: root
+
+- name: Pwquality reader regressions | Apply the rules with the PAM file that only the vendor directory holds
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+
+- name: Pwquality reader regressions | Read the main file after the apply refused by the vendor PAM file
+  ansible.builtin.slurp:
+    src: "{{ preaders_main }}"
+  register: preaders_vendor_refused
+
+- name: Pwquality reader regressions | Check that the vendor PAM file refused minlen, and the root rule by enforcing 0
+  ansible.builtin.assert:
+    that:
+      - lifecycle_results | map(attribute='status') | unique | list == ['overridden']
+      - >-
+        lifecycle_results | selectattr('rule_id', 'equalto', preaders_minlen) | map(attribute='reason')
+        | select('search', 'pam_pwquality arguments override the file: ' ~ preaders_vendor ~ ': minlen=8')
+        | list | length == 1
+      - >-
+        lifecycle_results | selectattr('rule_id', 'equalto', preaders_root) | map(attribute='reason')
+        | select('search', 'enforcing is 0 in ' ~ preaders_vendor ~ ': enforcing=0') | list | length == 1
+      - lifecycle_results | selectattr('changed') | list == []
+      - preaders_vendor_refused.content == preaders_built.content
+    fail_msg: "{{ preaders_label }}, apply refused by the vendor PAM file: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Pwquality reader regressions | Remove the vendor PAM file and the directory created for the test
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop: >-
+    {{ [preaders_vendor] + ([] if preaders_vendor_directory_stat.stat.exists else [preaders_vendor_directory]) }}
 
 - name: Pwquality reader regressions | Switch the rules off after the regressions
   ansible.builtin.set_fact:

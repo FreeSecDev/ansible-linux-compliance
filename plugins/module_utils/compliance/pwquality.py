@@ -455,9 +455,13 @@ def why_not_effective(reading: Reading, rule: Rule, path: str, line: int | None)
 def pam_unread_includes(files: Sequence[tuple[str, str]]) -> list[str]:
     """Return ``<file> includes <path>`` for every PAM line that includes a path with a ``/``.
 
-    Linux-PAM opens an absolute path wherever it is, and a relative one below ``/etc/pam.d``, so
-    ``../security/x`` opens a file outside it too. A ``pam_pwquality`` line in such a file is not
-    among the files that the collection reads; only a bare name in the PAM directory is.
+    libpam (``_pam_open_config_file`` of linux-pam 1.5.1 and 1.5.3) opens an include target as it
+    opens a service: an absolute path wherever it is, and any other name in the first of
+    ``/etc/pam.d``, ``/usr/lib/pam.d`` and, where libpam is built with a vendor directory (Rocky
+    Linux 9), ``/usr/share/pam.d`` that has it. ``../security/x`` therefore opens a file outside
+    the PAM directories, and ``site/x`` one below them that the collection does not list. A
+    ``pam_pwquality`` line in such a file is not among the files that the collection reads; only a
+    bare name is, because the collection reads every file of the three directories (FREES-211).
     """
     found: list[str] = []
     for path, text in files:
