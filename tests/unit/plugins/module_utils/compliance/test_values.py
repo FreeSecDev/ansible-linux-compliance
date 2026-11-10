@@ -1,14 +1,17 @@
-"""Unit tests of the comparators of native values (FREES-203, ADR 0032 §3)."""
+"""Unit tests of the comparators of native values (FREES-203, ADR 0032 §3).
+
+The checks against the Jinja of the remediate role need Jinja2, which the target context of
+``ansible-test units`` does not have; they are in
+``tests/unit/roles/test_login_defs_comparators.py``.
+"""
 
 from __future__ import annotations
 
-import ast
 import itertools
 import re
 from pathlib import Path
 from typing import Any, cast
 
-import jinja2
 import pytest
 import yaml
 
@@ -19,11 +22,8 @@ from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compli
 )
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[5]
-DECIDE = REPOSITORY_ROOT / "roles/remediate/tasks/login_defs_decide.yml"
 ROLE_VARIABLES = REPOSITORY_ROOT / "roles/remediate/vars/main.yml"
 CATALOGUE = REPOSITORY_ROOT / "roles/remediate/vars/rules.yml"
-DECIDE_TASK = "Login defaults | Decide whether the setting satisfies"
-FIND_TASK = "Login defaults | Find the lines that set the setting"
 PREFIX = "__linux_compliance_remediate_"
 INTENDED: dict[tuple[str, str], str] = {
     ("login_defs", "FAIL_DELAY"): "login_defs_at_least",
@@ -419,58 +419,10 @@ def test_the_bounds_are_those_of_the_readers_and_the_family_validators() -> None
     assert re.fullmatch(pam_number, str(values.PAM_NUMBER_MAXIMUM))
     assert not re.fullmatch(pam_number, str(values.PAM_NUMBER_MAXIMUM + 1))
     assert umask == "^[0-7]{3}$"
-    assert strict_umask_pattern() == "^[ \t]*UMASK[ \t]+(" + values.UMASK + ")[ \t\r\v\f]*$"
     assert values.FAILLOCK_MAX_TIME == pam_conf.MAX_TIME
     assert values.FAILLOCK_MAX_DENY == pam_conf.MAX_DENY
     assert values.PAM_NUMBER_MAXIMUM < pam_conf.INT_MAX
     assert values.PWQUALITY_LIMIT < pwquality.INT_MAX
-
-
-def strict_umask_pattern() -> str:
-    tasks = cast("list[dict[str, object]]", yaml.safe_load(DECIDE.read_text(encoding="utf-8")))
-    task = next(item for item in tasks if str(item["name"]).startswith(FIND_TASK))
-    template = cast("dict[str, str]", task["ansible.builtin.set_fact"])[f"{PREFIX}ld_strict"]
-    context: dict[str, object] = {
-        f"{PREFIX}rule": {"rule_id": "umask", "parameters": {"comparison": "umask"}},
-        f"{PREFIX}ld_setting": "UMASK",
-        f"{PREFIX}ld_values": {},
-    }
-    return render(template, context)
-
-
-def strtol_base_zero(text: str) -> int:
-    if text.startswith("0") and len(text) > 1:
-        return int(text[1:], values.UMASK_BASE)
-    return int(text)
-
-
-def test_a_umask_is_taken_exactly_when_every_reader_reads_it_as_written() -> None:
-    variables = cast(
-        "dict[str, object]", yaml.safe_load(ROLE_VARIABLES.read_text(encoding="utf-8"))
-    )
-    assertion = str(variables[f"{PREFIX}login_defs_umask_pattern"])
-    read = str(variables[f"{PREFIX}login_defs_umask_read_pattern"])
-    strict = strict_umask_pattern()
-    found = values.comparator("login_defs_umask")
-    octal = [f"{number:03o}" for number in range(0o1000)]
-    others = [
-        "".join(digits)
-        for size in range(1, 5)
-        for digits in itertools.product("01789", repeat=size)
-    ]
-    for text in octal + others:
-        taken = re.fullmatch(values.UMASK, text) is not None
-        assert taken is (re.match(strict, f"UMASK {text}") is not None), text
-        if not taken:
-            with pytest.raises(values.ValueOverrideError):
-                found.validate(text)
-            continue
-        assert found.validate(text) == text
-        assert re.match(assertion, text) is not None, text
-        assert re.match(read, text) is not None, text
-    for text in octal:
-        read_alike = strtol_base_zero(text) == int(text, values.UMASK_BASE)
-        assert (re.fullmatch(values.UMASK, text) is not None) is read_alike, text
 
 
 def catalogue_rules() -> list[dict[str, object]]:
@@ -527,7 +479,7 @@ def test_the_pam_comparators_judge_as_the_pam_conf_filter_decides(
             required,
         )
         decision = pam_conf.pam_conf_decision(
-            f"{setting} = {candidate}\n", pam_rule(reader, setting, comparison, required), {}
+            f"{setting} = {candidate}\n", pam_rule(reader, setting, comparison, required), {}, ()
         )
         assert (decision["status"] in {"compliant", "stricter_setting"}) is expected, (
             setting,
@@ -548,101 +500,10 @@ def test_the_pam_comparators_refuse_what_the_pam_conf_filter_does_not_write(
     with pytest.raises(values.ValueOverrideError):
         found.validate(above)
     if reader == "faillock":
-        decision = pam_conf.pam_conf_decision("", pam_rule(reader, setting, comparison, above), {})
+        decision = pam_conf.pam_conf_decision(
+            "", pam_rule(reader, setting, comparison, above), {}, ()
+        )
         assert decision["status"] == "unsupported_value"
     if comparison == "at_most":
         with pytest.raises(values.ValueOverrideError):
             found.validate(0)
-
-
-def login_defs_templates() -> dict[str, str]:
-    tasks = cast("list[dict[str, object]]", yaml.safe_load(DECIDE.read_text(encoding="utf-8")))
-    task = next(item for item in tasks if str(item["name"]).startswith(DECIDE_TASK))
-    found = dict(cast("dict[str, str]", task["vars"]))
-    found.update(cast("dict[str, str]", task["ansible.builtin.set_fact"]))
-    return found
-
-
-def matches(value: object, pattern: object) -> bool:
-    return re.match(str(pattern), str(value)) is not None
-
-
-def render(template: str, context: dict[str, object]) -> str:
-    environment = jinja2.Environment(autoescape=jinja2.select_autoescape(default_for_string=False))
-    environment.tests["match"] = matches
-    return environment.from_string(template).render(context)
-
-
-def strict_reading(comparison: str, current: str) -> str | None:
-    if comparison != "umask":
-        return current
-    found = re.match(strict_umask_pattern(), f"UMASK {current}")
-    return None if found is None else found.group(1)
-
-
-def jinja_decision(
-    comparison: str, required: str, current: str, readings: list[int]
-) -> tuple[bool, str]:
-    templates = login_defs_templates()
-    variables = cast(
-        "dict[str, object]", yaml.safe_load(ROLE_VARIABLES.read_text(encoding="utf-8"))
-    )
-    context: dict[str, object] = {
-        f"{PREFIX}rule": {"parameters": {"setting": "SETTING"}},
-        f"{PREFIX}ld_econf_reader": {},
-        f"{PREFIX}ld_econf_separated": True,
-        f"{PREFIX}ld_comparison": comparison,
-        f"{PREFIX}ld_required": required,
-        f"{PREFIX}ld_token": current,
-        f"{PREFIX}ld_set": strict_reading(comparison, current),
-        f"{PREFIX}ld_readings": readings,
-        f"{PREFIX}ld_defaults": [],
-        f"{PREFIX}login_defs_umask_read_pattern": variables[
-            f"{PREFIX}login_defs_umask_read_pattern"
-        ],
-    }
-    context[f"{PREFIX}ld_bits"] = ast.literal_eval(render(templates[f"{PREFIX}ld_bits"], context))
-    satisfied = render(templates[f"{PREFIX}ld_satisfied"], context)
-    line = render(templates[f"{PREFIX}ld_line"], context)
-    assert line.startswith("SETTING ")
-    return satisfied == "True", line.removeprefix("SETTING ")
-
-
-@pytest.mark.parametrize(
-    ("comparison", "required", "current", "readings"),
-    [
-        ("at_least", "12", "14", [14]),
-        ("at_least", "12", "12", [12]),
-        ("at_least", "12", "9", [9]),
-        ("at_least", "12", "0", [0, 8]),
-        ("at_most", "90", "60", [60]),
-        ("at_most", "90", "365", [365]),
-        ("at_most", "90", "90", [90, 72]),
-        ("at_most", "90", "0", [0]),
-        ("umask", "027", "077", []),
-        ("umask", "027", "027", []),
-        ("umask", "027", "022", []),
-        ("umask", "077", "070", []),
-        ("umask", "027", "007", []),
-        ("umask", "027", "000", []),
-    ],
-)
-def test_the_login_defs_comparators_decide_as_the_jinja_of_the_family(
-    comparison: str, required: str, current: str, readings: list[int]
-) -> None:
-    satisfied, written = jinja_decision(comparison, required, current, readings)
-    name = f"login_defs_{comparison}"
-    assert values.judge(name, required, current) is satisfied
-    texts = [current] if comparison == "umask" else [str(reading) for reading in readings]
-    assert values.stricter_of(name, required, texts) == written
-
-
-@pytest.mark.parametrize("current", ["177", "700", "777", "0027"])
-def test_the_umask_family_does_not_take_what_the_comparator_cannot_judge(current: str) -> None:
-    satisfied, written = jinja_decision("umask", "027", current, [])
-    assert not satisfied
-    assert written == "027"
-    with pytest.raises(values.ValueOverrideError):
-        values.judge("login_defs_umask", "027", current)
-    with pytest.raises(values.ValueOverrideError):
-        values.stricter_of("login_defs_umask", "027", [current])
