@@ -104,7 +104,7 @@ The ledger is implemented by `plugins/module_utils/compliance/ledger.py` (typed 
 ### Ledger format
 
 `/var/lib/freesecdev/linux_compliance/state.json` is a JSON document with exactly the keys `schema_version` (integer,
-currently `1`) and `entries` (a list sorted by `rule_id`). It is serialised deterministically (sorted keys, two-space
+`1`; version 2 is defined by the FREES-203 amendment below) and `entries` (a list sorted by `rule_id`). It is serialised deterministically (sorted keys, two-space
 indent, ASCII, trailing newline). Each entry has exactly these keys:
 
 | Key | Contract |
@@ -885,3 +885,79 @@ Residual risk, in addition to the FREES-189 amendment's:
 - **A registry insertion changes the order in which a local full run takes the topics.** CI runs each topic and mode
   in a container of its own, so the order does not reach a planned leg; the full matrix on `main` and nightly still
   runs every leg.
+
+## Amendment 2026-11-10: ledger version 2 and the deviation register (FREES-203)
+
+[ADR 0032](0032-operator-control-community-modules-and-value-overrides.md) lets an operator override the value that a
+rule writes, and requires that a value looser than the profile is reported as a deviation. The ledger has to say
+where a written value came from, and something on the host has to remember a deviation for the next audit. The
+format of the FREES-56 amendment cannot hold either, so the ledger gets a second schema version. This amendment
+records the format; the role starts to use it with the value overrides of ADR 0032.
+
+### Format
+
+- **Version 1 stays the default form.** `dumps` writes `schema_version` `1`, with exactly the keys `entries` and
+  `schema_version`, while no entry records a value and the register is empty. A ledger written before this change is
+  therefore rewritten byte for byte as before, and a host that never uses an override keeps a ledger that an older
+  collection version can still read.
+- **Version 2** has exactly the keys `deviations`, `entries` and `schema_version` (`2`). It is written as soon as one
+  entry records a value or one deviation is recorded, and returns to version 1 when the last of them is gone.
+- **Entries** keep the six keys of version 1. In version 2 an entry may also have `value`, an object with exactly
+  these keys:
+
+  | Key | Contract |
+  |---|---|
+  | `value_id` | Short id of the XCCDF `Value` (the catalogue's `profile_value`), `[a-z0-9][a-z0-9_]*`, at most 128 characters |
+  | `value_source` | `profile` (the target is the profile's value) or `override` (the operator chose it) |
+  | `profile_value` | The selected profile's value |
+  | `target` | The value the family aimed at |
+
+  `value` is left out when the rule records none; it is never `null` on disk. An entry without it reads as
+  `value_source: profile`: `control_state` returns `value` (the object or `null`) and `value_source` for every entry.
+  An entry whose `value` differs is a `conflict` without `replace`, like any other difference.
+- **The deviation register**, `deviations`, is a list sorted by `rule_id` with at most 4096 records
+  (`MAX_DEVIATIONS`), each with exactly `rule_id` (unique in the register), `value_id`, `profile_value`,
+  `effective_value` (the value in force after the run, looser than the profile's), `recorded_at` (UTC, like
+  `applied_at`) and `collection_version`.
+- **Text values** (`profile_value`, `target`, `effective_value`) are strings of at most 4096 characters with no control
+  character at all (unlike prior values, not even a tab or a line break), no lone surrogate and no bidirectional
+  control. An empty string is allowed.
+
+### Why a register next to the entries
+
+An entry exists only for a rule that wrote something, because it says how to revert that write. A looser override
+that the host already has writes nothing, so it would leave no entry, and the audit would have nothing to flag.
+Creating an entry for it would claim a change that never happened and would give cleanup something to revert. The
+register records the state "this rule's value in force is looser than the profile" independently: a rule can have an
+entry and no deviation (a stricter or equal override), a deviation and no entry (a looser value already in place), or
+both. Removing an entry never removes a deviation, and the reverse.
+
+`control_state` gains the actions `record_deviation` (option `deviation` with `value_id`, `profile_value` and
+`effective_value`, plus `collection_version` and an optional `recorded_at`) and `remove_deviation`; `list` returns the
+register as `deviations` (not filtered by `family`), and `record` takes the optional `value`. A deviation with the same
+content keeps its original time; a different one replaces the record without `replace`, because the register holds the
+current state, not a prior value that must survive. Both actions support check mode (nothing is created or written) and
+diff mode. The `Ledger` class gains `document()`, `deviations()`, `record_deviation()` and `remove_deviation()`, and
+`ledger.load_document()` returns both parts of one read; `loads()` still returns the entries.
+
+### Reading
+
+- `schema_version` must be the integer `1` or `2`; any other integer is `unsupported_schema` and the file is never
+  rewritten, as before.
+- Every document has one form. In version 1 an entry with `value` or a `deviations` key is `corrupt`. A version 2
+  document without `deviations`, with an entry whose `value` is `null` or malformed, with a rule listed twice in the
+  register, with more than 4096 records, or with neither a value nor a deviation (which `dumps` writes as version 1)
+  is `corrupt`. Every other rule of the FREES-56 amendment (size, duplicate keys, `NaN`, nesting, unknown keys) applies
+  to the new keys too.
+
+### Consequences
+
+- **Downgrade.** A collection version before this change refuses a version 2 ledger with `unsupported_schema` and
+  stops before it changes anything. A host gets one only once the role records a value or a deviation, which starts
+  with the value overrides of ADR 0032; until then every ledger stays version 1. There is no automatic way back: a
+  version 2 ledger returns to version 1 only when this version has removed every value record and deviation, or when
+  the ledger is restored from a backup taken before.
+- **The plan is unaffected.** `remediation_plan.check_ledger` reads `rule_id` and `family` and ignores the other keys,
+  so the extra `value` and `value_source` keys of `control_state` `list` change no plan.
+- **A stale record over-reports.** A deviation that stays in the register after the host was changed by hand flags
+  the rule until the next enabled remediation run corrects the register, which is the safe direction.

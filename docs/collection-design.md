@@ -237,10 +237,16 @@ reader and writer are in `plugins/module_utils/compliance/ledger.py`. All file a
 
 | Action | Behaviour |
 |---|---|
-| `record` | Adds an entry (rule ID, family, revert strategy, prior values, collection version, time). Identical entries are left alone, differing ones are a `conflict` unless `replace: true` |
+| `record` | Adds an entry (rule ID, family, revert strategy, prior values, collection version, time, and optionally the `value` record: value ID, `value_source`, profile value and target). Identical entries are left alone, differing ones are a `conflict` unless `replace: true` |
 | `get` | Returns the entry or `found: false` |
 | `remove` | Deletes the entry; a missing entry is `changed: false` |
-| `list` | Returns all entries sorted by rule ID, optionally for one `family` |
+| `list` | Returns all entries sorted by rule ID, optionally for one `family`, and the whole deviation register as `deviations` |
+| `record_deviation` | Records that a rule's value in force is looser than the profile's (value ID, profile value, value in force, collection version, time), whether or not the rule wrote anything. The same record keeps its time; a different one replaces it |
+| `remove_deviation` | Deletes the deviation of a rule; a missing record is `changed: false` |
+
+The ledger is schema version 1 while no entry records a value and the deviation register is empty, so existing
+ledgers keep their bytes, and version 2 otherwise ([ADR 0011, FREES-203 amendment](adr/0011-control-toggles-and-cleanup.md#amendment-2026-11-10-ledger-version-2-and-the-deviation-register-frees-203)).
+Every entry is returned with `value` (the record or `null`) and `value_source` (`profile` when no record exists).
 
 The module needs `become`. It supports check mode (nothing is created or written) and diff mode. Sensitive prior values
 are passed through `sensitive_prior_values` (`no_log`) and are redacted from results unless `reveal_sensitive` is set.
