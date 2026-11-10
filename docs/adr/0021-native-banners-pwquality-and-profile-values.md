@@ -352,7 +352,8 @@ file that only `/usr/share/pam.d` holds was therefore not read: the family could
 The source of `libpam/pam_handlers.c` in both Molecule images, fetched the way `make pam-reader-verdicts` fetches it
 (linux-pam 1.5.1-28.el9 and 1.5.3-5ubuntu5.7), and the strings of the installed `libpam.so.0` show:
 
-- `_pam_open_config_file` opens a service name and every `include`, `substack` and `@include` target the same way:
+- `_pam_open_config_file` opens a service name and every `include` and `substack` target the same way, and on Ubuntu,
+  whose libpam also accepts `@include` (Rocky Linux's refuses the line), every `@include` target too:
   an absolute path as given, and any other name in the first of `/etc/pam.d/<name>`, `/usr/lib/pam.d/<name>` and,
   only when libpam is built with a vendor directory, `/usr/share/pam.d/<name>` that it can open. A relative target is
   looked up in each directory in turn, not only below `/etc/pam.d`.
@@ -364,11 +365,16 @@ The source of `libpam/pam_handlers.c` in both Molecule images, fetched the way `
 
 - The family reads the shared list `__linux_compliance_remediate_pam_directories` of ADR 0027 (`/etc/pam.d`,
   `/usr/lib/pam.d`, `/usr/share/pam.d`), and `__linux_compliance_remediate_pwquality_pam_directories` is removed.
-  Every file of every directory that exists is read through symbolic links and the files are searched together: no
-  file is left out because a file of the same name comes first in libpam's order. An argument in a file that libpam
-  does not open, such as a vendor file behind a file of the same name in `/etc/pam.d`, or any vendor file on Ubuntu,
-  also refuses the rule. As before, this finds more than libpam reads and never less, so the added directory can
-  only add refusals.
+  Every regular file of every directory that exists is read and the files are searched together: no file is left
+  out because a file of the same name comes first in libpam's order. An argument in a file that libpam does not
+  open, such as a vendor file behind a file of the same name in `/etc/pam.d`, or any vendor file on Ubuntu, also
+  refuses the rule, so the added directory can only add refusals.
+- **Known gap, not closed here.** A PAM file that is a symbolic link, and a PAM directory that is one, are not read:
+  `ansible.builtin.find` with `file_type: file` keeps only regular files, whatever `follow` says. The decision of
+  FREES-200 above says the files are read through symbolic links; that is not what the role does. On a host where
+  authselect makes `/etc/pam.d/system-auth` a link, an argument there is missed and the rule can be reported
+  `compliant` or `applied`. FREES-213 records the fail-open and its fix, for this family and for the faillock and
+  pwhistory families of ADR 0027.
 - An include of a target with a `/` still refuses every rule; the reason is the lookup above: `../security/x` and
   `site/x` open a file outside the three directories or below one of them, which the collection does not read. A bare
   name is looked up in the three directories, and every file of them is read.
