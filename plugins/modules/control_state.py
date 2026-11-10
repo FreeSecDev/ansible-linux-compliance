@@ -18,8 +18,9 @@ description:
     looser than the selected profile's. A deviation is recorded whether or not the rule wrote
     anything, and is kept apart from the entries, which say what to revert.
   - The ledger is written as schema version 1 while no entry records a value and the register is
-    empty, so an existing ledger keeps its bytes, and as version 2 otherwise. An older collection
-    version refuses a version 2 ledger (C(unsupported_schema)).
+    empty, so an existing ledger keeps its bytes, and as version 2 otherwise. A collection version
+    from before version 2 refuses a version 2 ledger as C(corrupt), because it does not know the
+    C(deviations) key. The file is not damaged and must not be deleted.
   - The ledger is owned by root with mode C(0600) in a C(0700) directory, is written atomically and
     is serialised between concurrent runs with a lock. The module needs C(become).
   - A corrupt, oversized or unsafe ledger (symbolic link, wrong owner, group or world permission
@@ -100,6 +101,7 @@ options:
       - Omit it for a rule that writes no value from an XCCDF C(Value); such an entry reads as
         C(value_source=profile).
       - An existing entry whose O(value) differs is replaced only with O(replace).
+      - Any other action fails when it is set.
     type: dict
     suboptions:
       value_id:
@@ -126,6 +128,7 @@ options:
       - The deviation to record, for C(record_deviation). Required for it.
       - An existing record of the rule with the same content keeps its time; a different one is
         replaced.
+      - Any other action fails when it is set.
     type: dict
     suboptions:
       value_id:
@@ -146,11 +149,14 @@ options:
     description:
       - Time the deviation was recorded, as UTC C(YYYY-MM-DDTHH:MM:SSZ), for C(record_deviation).
         Defaults to the current time.
+      - Any other action fails when it is set.
     type: str
   replace:
     description:
       - Replace an existing entry that differs. Without it, a differing entry is an error
         (C(conflict)), so the original prior values cannot be overwritten by accident.
+      - C(record_deviation) and C(remove_deviation) fail when it is true, because a changed
+        deviation is always replaced.
     type: bool
     default: false
   reveal_sensitive:
@@ -405,6 +411,12 @@ ACTIONS: Final[tuple[str, ...]] = (
 )
 STRATEGIES: Final[tuple[str, ...]] = tuple(strategy.value for strategy in RevertStrategy)
 SOURCES: Final[tuple[str, ...]] = tuple(sorted(VALUE_SOURCES, reverse=True))
+ONLY_WITH: Final[dict[str, str]] = {
+    "value": "record",
+    "deviation": "record_deviation",
+    "recorded_at": "record_deviation",
+}
+WITHOUT_REPLACE: Final[frozenset[str]] = frozenset({"record_deviation", "remove_deviation"})
 REQUIRED_IF: Final[list[tuple[str, str, tuple[str, ...]]]] = [
     ("action", "get", ("rule_id",)),
     ("action", "remove", ("rule_id",)),
@@ -621,8 +633,18 @@ def _remove_deviation(module: AnsibleModule, ledger: Ledger) -> None:
     )
 
 
-def run(module: AnsibleModule, ledger: Ledger) -> None:
-    """Run the requested action against ``ledger`` and exit through ``module``."""
+def misplaced_option(params: Mapping[str, object]) -> str | None:
+    """Return why an option is set that ``params["action"]`` does not use, or None."""
+    action = params["action"]
+    for name, owner in ONLY_WITH.items():
+        if params[name] is not None and action != owner:
+            return f"{name} is only used with action={owner}"
+    if params["replace"] and action in WITHOUT_REPLACE:
+        return f"replace is not used with action={action}"
+    return None
+
+
+def _dispatch(module: AnsibleModule, ledger: Ledger) -> None:
     action = module.params["action"]
     try:
         if action == "get":
@@ -639,6 +661,19 @@ def run(module: AnsibleModule, ledger: Ledger) -> None:
             _list(module, ledger)
     except LedgerError as error:
         module.fail_json(msg=str(error), error_type=error.error_type, path=ledger.path)
+
+
+def run(module: AnsibleModule, ledger: Ledger) -> None:
+    """Run the requested action against ``ledger`` and exit through ``module``.
+
+    ``value``, ``deviation`` or ``recorded_at`` with an action that does not use it, and
+    ``replace`` with a deviation action, fail the task before the ledger is read.
+    """
+    misplaced = misplaced_option(module.params)
+    if misplaced is None:
+        _dispatch(module, ledger)
+    else:
+        module.fail_json(msg=misplaced)
 
 
 def main() -> None:

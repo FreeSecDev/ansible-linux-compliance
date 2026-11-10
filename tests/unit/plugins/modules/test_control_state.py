@@ -651,6 +651,63 @@ def test_incomplete_value_and_deviation_arguments_fail_before_anything_runs(
     assert not state.exists()
 
 
+@pytest.mark.parametrize(
+    ("arguments", "message"),
+    [
+        (deviation_arguments(value=dict(VALUE)), "value is only used with action=record"),
+        ({"action": "get", "rule_id": RULE, "value": dict(VALUE)}, "value is only used"),
+        ({"action": "list", "value": dict(VALUE)}, "value is only used"),
+        (
+            record_arguments(deviation=dict(DEVIATION)),
+            "deviation is only used with action=record_deviation",
+        ),
+        (
+            {"action": "remove_deviation", "rule_id": RULE, "deviation": dict(DEVIATION)},
+            "deviation is only used",
+        ),
+        (
+            record_arguments(recorded_at=STAMP),
+            "recorded_at is only used with action=record_deviation",
+        ),
+        ({"action": "remove", "rule_id": RULE, "recorded_at": STAMP}, "recorded_at is only used"),
+        (deviation_arguments(replace=True), "replace is not used with action=record_deviation"),
+        (
+            {"action": "remove_deviation", "rule_id": RULE, "replace": True},
+            "replace is not used with action=remove_deviation",
+        ),
+    ],
+)
+def test_an_option_the_action_does_not_use_fails_before_the_ledger_is_read(
+    capsys: pytest.CaptureFixture[str],
+    store: ledger.Ledger,
+    state: Path,
+    arguments: dict[str, Any],
+    message: str,
+) -> None:
+    code, failed = invoke(capsys, store, arguments)
+    assert code == 1
+    assert failed["failed"] is True
+    assert failed["msg"].startswith(message)
+    assert "error_type" not in failed
+    assert not state.exists()
+
+
+def test_a_misplaced_option_never_touches_an_existing_ledger(
+    capsys: pytest.CaptureFixture[str], store: ledger.Ledger, state: Path
+) -> None:
+    invoke(capsys, store, record_arguments())
+    before = (state / "state.json").read_bytes()
+    fake = raw_run(store, {"action": "remove", "rule_id": RULE, "value": dict(VALUE)})
+    assert fake.exited == []
+    assert fake.failed == [{"msg": "value is only used with action=record"}]
+    assert (state / "state.json").read_bytes() == before
+    for arguments in (record_arguments(replace=True), deviation_arguments(replace=False)):
+        code, _result = invoke(capsys, store, arguments)
+        assert code == 0
+    unused = {"value": None, "deviation": None, "recorded_at": None, "replace": True}
+    assert control_state.misplaced_option({"action": "list", **unused}) is None
+
+
 def test_record_list_and_remove_a_deviation(
     capsys: pytest.CaptureFixture[str], store: ledger.Ledger, state: Path
 ) -> None:

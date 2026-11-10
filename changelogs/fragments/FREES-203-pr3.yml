@@ -1,17 +1,21 @@
 ---
 minor_changes:
   - >-
-    control_state - the state ledger gains schema version 2 (ADR 0011, ADR 0032). An entry may record where the value
-    it wrote came from (``value`` with ``value_id``, ``value_source`` ``profile`` or ``override``, ``profile_value``
-    and ``target``; a different ``value`` needs ``replace``), and a new deviation register lists the rules whose value
-    in force is looser than the profile's, whether or not they wrote anything. The new actions ``record_deviation``
-    and ``remove_deviation`` maintain the register, ``list`` returns it as ``deviations``, and every returned entry
-    carries ``value`` and ``value_source`` (``profile`` when no value is recorded). Both actions support check mode
-    and diff mode. A ledger without value records and deviations is still written as version 1, byte for byte as
-    before; version 2 is written only when one of them exists. The role does not record either yet.
+    control_state - the state ledger gains schema version 2 (ADR 0011, ADR 0032). An entry may record where the value it
+    wrote came from (``value`` with ``value_id``, ``value_source`` ``profile`` or ``override``, ``profile_value`` and
+    ``target``; a different ``value`` needs ``replace``), and a new deviation register lists the rules whose value in
+    force is looser than the profile's, whether or not they wrote anything. The new actions ``record_deviation`` and
+    ``remove_deviation`` maintain the register, ``list`` returns it as ``deviations``, and every returned entry carries
+    ``value`` and ``value_source`` (``profile`` when no value is recorded). Both actions support check mode and diff
+    mode; ``value``, ``deviation`` and ``recorded_at`` with an action that does not use them, and ``replace`` with a
+    deviation action, fail the task instead of being ignored. A ledger without value records and deviations is still
+    written as version 1, byte for byte as before; version 2 is written only when one of them exists. The role does not
+    record either yet.
 breaking_changes:
   - >-
-    control_state - a collection version from before this change refuses a ledger of schema version 2 with
-    ``unsupported_schema`` and stops before it changes anything. A ledger becomes version 2 only once a value record or
-    a deviation is recorded, which no released role does yet; downgrading a host that has one needs a ledger without
-    them, or a backup from before.
+    control_state - a collection version from before this change refuses a ledger of schema version 2 as ``corrupt``
+    (its reader expects exactly the keys ``entries`` and ``schema_version``, and a version 2 ledger also has
+    ``deviations``) and stops before it changes anything. The file is not damaged and must not be deleted, because it
+    holds the revert record of every applied rule. A ledger becomes version 2 only once a value record or a deviation
+    is recorded, which no released role does yet; downgrading a host that has one needs a ledger without them, or a
+    backup from before.

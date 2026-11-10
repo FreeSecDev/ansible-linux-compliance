@@ -74,6 +74,7 @@ _ALLOWED_CONTROLS: Final[frozenset[str]] = frozenset({"\t", "\n", "\r"})
 _BIDI_CONTROLS: Final[frozenset[str]] = frozenset(
     chr(code) for code in (0x202A, 0x202B, 0x202C, 0x202D, 0x202E, 0x2066, 0x2067, 0x2068, 0x2069)
 )
+_SETTING_REFUSED: Final[frozenset[str]] = frozenset({"Cc", "Cs", "Zl", "Zp"})
 _ENTRY_KEYS: Final[tuple[str, ...]] = (
     "applied_at",
     "collection_version",
@@ -153,7 +154,7 @@ def _setting_text(value: object, name: str) -> str:
     if len(value) > MAX_VALUE_LENGTH:
         _invalid(f"{name} exceeds {MAX_VALUE_LENGTH} characters")
     for character in value:
-        if character in _BIDI_CONTROLS or unicodedata.category(character) in {"Cc", "Cs"}:
+        if character in _BIDI_CONTROLS or unicodedata.category(character) in _SETTING_REFUSED:
             _invalid(f"{name} contains control characters")
     return value
 

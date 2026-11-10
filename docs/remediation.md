@@ -807,8 +807,10 @@ keeps its bytes and older collection versions can still read it. Version 2 adds:
 
 The role does not record values or deviations yet: that starts with `linux_compliance_remediate_value_overrides`
 ([ADR 0032](adr/0032-operator-control-community-modules-and-value-overrides.md)). Until then every ledger stays version 1.
-A collection version from before FREES-203 refuses a version 2 ledger with `unsupported_schema` and changes nothing;
-going back to it needs a ledger without value records and deviations, or a backup from before.
+A collection version from before FREES-203 refuses a version 2 ledger as `corrupt`, because its reader does not know
+the `deviations` key, and changes nothing. The file is not damaged: do not delete it, since it holds the revert record
+of every applied rule. Going back to such a version needs a ledger without value records and deviations, or a backup
+from before.
 
 ### A lost ledger cannot be detected
 

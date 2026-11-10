@@ -247,6 +247,8 @@ reader and writer are in `plugins/module_utils/compliance/ledger.py`. All file a
 The ledger is schema version 1 while no entry records a value and the deviation register is empty, so existing
 ledgers keep their bytes, and version 2 otherwise ([ADR 0011, FREES-203 amendment](adr/0011-control-toggles-and-cleanup.md#amendment-2026-11-10-ledger-version-2-and-the-deviation-register-frees-203)).
 Every entry is returned with `value` (the record or `null`) and `value_source` (`profile` when no record exists).
+`value`, `deviation` and `recorded_at` with an action that does not use them, and `replace: true` with a deviation
+action, fail the task before the ledger is read.
 
 The module needs `become`. It supports check mode (nothing is created or written) and diff mode. Sensitive prior values
 are passed through `sensitive_prior_values` (`no_log`) and are redacted from results unless `reveal_sensitive` is set.

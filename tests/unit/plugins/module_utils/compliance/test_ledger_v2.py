@@ -141,7 +141,19 @@ def test_value_records_validate_their_fields() -> None:
         assert error_type(ledger.ValueRecord, value_id, "profile", "1", "1") == "invalid_entry"
     for source in ["", "Profile", "tailoring", None, 1, ["override"]]:
         assert error_type(ledger.ValueRecord, "var_x", source, "1", "1") == "invalid_entry"
-    for text in [None, 14, b"14", "1\n4", "1\t4", "a\x00b", "a" + chr(0x202E), chr(0xD800)]:
+    for text in [
+        None,
+        14,
+        b"14",
+        "1\n4",
+        "1\t4",
+        "a\x00b",
+        "1\x854",
+        "1\u20284",
+        "1\u20294",
+        "a" + chr(0x202E),
+        chr(0xD800),
+    ]:
         assert error_type(ledger.ValueRecord, "var_x", "override", text, "1") == "invalid_entry"
         assert error_type(ledger.ValueRecord, "var_x", "override", "1", text) == "invalid_entry"
     assert error_type(ledger.ValueRecord, "var_x", "override", "1", "x" * 4097) == "invalid_entry"
@@ -231,6 +243,8 @@ def test_deviation_records_validate_their_fields() -> None:
         ("effective_value", None),
         ("effective_value", "x" * 4097),
         ("effective_value", "a" + chr(0x2066)),
+        ("effective_value", "8\u2028"),
+        ("profile_value", "\u202914"),
         ("recorded_at", "2026-02-30T12:00:00Z"),
         ("recorded_at", "yesterday"),
         ("recorded_at", None),

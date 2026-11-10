@@ -104,7 +104,7 @@ The ledger is implemented by `plugins/module_utils/compliance/ledger.py` (typed 
 ### Ledger format
 
 `/var/lib/freesecdev/linux_compliance/state.json` is a JSON document with exactly the keys `schema_version` (integer,
-`1`; version 2 is defined by the FREES-203 amendment below) and `entries` (a list sorted by `rule_id`). It is serialised deterministically (sorted keys, two-space
+currently `1`) and `entries` (a list sorted by `rule_id`). It is serialised deterministically (sorted keys, two-space
 indent, ASCII, trailing newline). Each entry has exactly these keys:
 
 | Key | Contract |
@@ -920,8 +920,9 @@ records the format; the role starts to use it with the value overrides of ADR 00
   `effective_value` (the value in force after the run, looser than the profile's), `recorded_at` (UTC, like
   `applied_at`) and `collection_version`.
 - **Text values** (`profile_value`, `target`, `effective_value`) are strings of at most 4096 characters with no control
-  character at all (unlike prior values, not even a tab or a line break), no lone surrogate and no bidirectional
-  control. An empty string is allowed.
+  character at all (unlike prior values, not even a tab or a line break), no line or paragraph separator (U+2028,
+  U+2029), no lone surrogate and no bidirectional control, because they reach reports and the dashboard, which show
+  each of them on one line. An empty string is allowed.
 
 ### Why a register next to the entries
 
@@ -937,8 +938,10 @@ both. Removing an entry never removes a deviation, and the reverse.
 register as `deviations` (not filtered by `family`), and `record` takes the optional `value`. A deviation with the same
 content keeps its original time; a different one replaces the record without `replace`, because the register holds the
 current state, not a prior value that must survive. Both actions support check mode (nothing is created or written) and
-diff mode. The `Ledger` class gains `document()`, `deviations()`, `record_deviation()` and `remove_deviation()`, and
-`ledger.load_document()` returns both parts of one read; `loads()` still returns the entries.
+diff mode. `value`, `deviation` and `recorded_at` with an action that does not use them, and `replace: true` with a
+deviation action, fail the task before the ledger is read, so a misplaced option is never silently ignored. The `Ledger`
+class gains `document()`, `deviations()`, `record_deviation()` and `remove_deviation()`, and `ledger.load_document()`
+returns both parts of one read; `loads()` still returns the entries.
 
 ### Reading
 
@@ -952,11 +955,14 @@ diff mode. The `Ledger` class gains `document()`, `deviations()`, `record_deviat
 
 ### Consequences
 
-- **Downgrade.** A collection version before this change refuses a version 2 ledger with `unsupported_schema` and
-  stops before it changes anything. A host gets one only once the role records a value or a deviation, which starts
-  with the value overrides of ADR 0032; until then every ledger stays version 1. There is no automatic way back: a
-  version 2 ledger returns to version 1 only when this version has removed every value record and deviation, or when
-  the ledger is restored from a backup taken before.
+- **Downgrade.** A collection version before this change refuses a version 2 ledger as `corrupt` (not
+  `unsupported_schema`: its reader checks for exactly the keys `entries` and `schema_version` before it reads the
+  version, and every version 2 document has `deviations`) and stops before it changes anything. The file is not
+  damaged and must not be deleted: deleting it loses the revert record of every applied rule. A host gets a version 2
+  ledger only once the role records a value or a deviation, which starts with the value overrides of ADR 0032; until
+  then every ledger stays version 1. There is no automatic way back: a version 2 ledger returns to version 1 only when
+  this version has removed every value record and deviation, or when the ledger is restored from a backup taken
+  before.
 - **The plan is unaffected.** `remediation_plan.check_ledger` reads `rule_id` and `family` and ignores the other keys,
   so the extra `value` and `value_source` keys of `control_state` `list` change no plan.
 - **A stale record over-reports.** A deviation that stays in the register after the host was changed by hand flags
