@@ -31,5 +31,6 @@
 | [0028](0028-native-kernel-module-drop-ins.md) | Native kernel module remediation through modprobe drop-ins | proposed |
 | [0030](0030-native-auditd-settings-and-audit-rules.md) | Native auditd settings and audit rule drop-ins | proposed |
 | [0031](0031-fast-records-for-the-lifecycle-harness.md) | Fast records for the Molecule lifecycle harness | proposed |
+| [0033](0033-review-policy-independent-verdict-without-required-approval.md) | Review policy: an independent verdict on the pull request, without a required GitHub approval | accepted |
 
 Proposed ADRs are accepted through the pull request that introduces their first implementation.

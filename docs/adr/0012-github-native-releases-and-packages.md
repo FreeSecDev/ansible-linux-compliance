@@ -53,7 +53,8 @@ GitHub Packages has no native registry for Ansible collections or Python package
 - The environment has no human required reviewers: the project owner decided on 2026-10-25 not to be asked for
   approvals. The gate is automated instead. Before anything is published, the release workflow, running from `main`,
   verifies all of the following and fails otherwise:
-  - the commit was merged from a pull request approved by the `freesecdev-review` App;
+  - the commit was merged from a pull request that carries an independent reviewer's verdict marker for its merged head
+    (amended by [ADR 0033](0033-review-policy-independent-verdict-without-required-approval.md));
   - every required check passed on that commit;
   - the version is new, follows SemVer and has a changelog entry;
   - no `vX.Y.Z` tag or release exists yet, so a hand-pushed tag makes the release fail instead of being reused;
@@ -135,7 +136,7 @@ More publishing paths to maintain. Immutable releases mean a bad release must be
 
 | Risk | Mitigation now | Owner | Follow-up |
 |---|---|---|---|
-| No human approves a release before publication, by owner decision | Automated gates in the release workflow, which always runs from protected `main` (approved pull request, required checks, new SemVer version with changelog, reproducibility); main-only release environment; immutable releases; attestations | Project owner | FREES-84 |
+| No human approves a release before publication, by owner decision | Automated gates in the release workflow, which always runs from protected `main` (a pull request with an independent verdict for its merged head, required checks, new SemVer version with changelog, reproducibility); main-only release environment; immutable releases; attestations | Project owner | FREES-84 |
 | Anyone with write access can create a `v*` tag and run workflows from their own commits with the repository token. They cannot use the `release` environment, so they get no publishing secrets and no AWS release role. The environment does not gate `GITHUB_TOKEN` permissions, though: a workflow on any branch can declare `packages: write` and write to a GHCR package, including the runner image and its tags. Consumers are protected by digest pins plus signature and attestation verification bound to the release workflow on `main` | Write access is the real containment: today the owner is the only collaborator and the organisation default permission is read. Releases are never triggered by tags. The tag ruleset blocks deletion and update | Project owner | FREES-124 |
 | Withdrawn 2026-10-27: CodeBuild steps were not covered by cryptographic provenance | Removed: images are built on GitHub-hosted runners in the attested workflow run ([ADR 0007](0007-registry-build-and-signing.md) amendment) | Lead architect | FREES-36 |
 | Image builds trust GitHub-hosted runners and their images | Single-use VMs; the build job holds no write or package token and the push runs in a separate job; digest-pinned builder and base images, checksum-pinned tools, provenance verified with `--deny-self-hosted-runners`, Grype gate on the published digest | Project owner | FREES-36 |
@@ -144,3 +145,14 @@ More publishing paths to maintain. Immutable releases mean a bad release must be
 
 The release workflow must complete every publishing step before the release is made public, because immutable releases
 cannot be edited afterwards. Release runbooks cover failed partial publishes.
+
+## Amendment 2026-11-09: the release gate checks the verdict marker (ADR 0033, FREES-204)
+
+GitHub no longer requires an approving review on `main`, and the `freesecdev-review` App no longer approves pull
+requests. The release gate therefore does not check for an approval. It checks that the merged pull request carries
+the verdict marker of [ADR 0033](0033-review-policy-independent-verdict-without-required-approval.md):
+`approve` or `approve-with-follow-ups`, with a `head` equal to the pull request's merged head SHA.
+
+This gate is weaker than an approval. GitHub does not prevent a merge without a verdict, and the marker is posted
+from the owner's account, the same account as the author. A release of a commit merged without a verdict is still
+refused by this gate. No release workflow exists yet (FREES-84); it implements this check.
