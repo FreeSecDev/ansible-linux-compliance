@@ -10,4 +10,5 @@ minor_changes:
   - >-
     reporting - a scan run of findings model schema 1.3, read from ``--scan-run``, ``--exceptions-evaluation`` or an
     evidence bundle, is an input error until the report counts operator deviations, so a flagged pass never counts
-    as a pass (FREES-203).
+    as a pass (FREES-203). XCCDF and ARF results next to a ``scan-run.json`` of schema 1.3 (in the same directory or
+    the one above) are refused too, because raw results carry no deviation flag.

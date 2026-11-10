@@ -246,7 +246,8 @@ a baseline of the host's own release.
   `target_platform`, `run_status` and `counts`. `overview.off_platform` counts them.
 - A target host whose bundles all carry the marker is not covered: see [host coverage](#host-coverage).
 - XCCDF and ARF files named `*.off-platform.xml`, and files next to a marked or unreadable `scan-run.json` (in the
-  same directory or the one above), are refused as input errors: they carry no marker.
+  same directory or the one above), are refused as input errors: they carry no marker. Files next to a `scan-run.json`
+  of findings schema 1.3 are refused as well ([operator deviations](#operator-deviations)).
 
 ## Operator deviations
 
@@ -259,6 +260,9 @@ report reads the flag, a scan run of schema 1.3 is an input error, never a pass:
 
 - a `--scan-run` file, an `--exceptions-evaluation` and an evidence bundle whose run is 1.3 become an item with status
   `error` and a gap whose reason names the findings schema;
+- an `--xccdf` or `--arf` file next to a `scan-run.json` of schema 1.3 (in the same directory or the one above) is
+  refused the same way: the scanner reports a pass under a looser value as a plain pass, and raw results carry no
+  flag, so they are never figured, also once the report reads 1.3;
 - the run enters no rule list, group, aggregate or summary.
 
 Runs of schema 1.0 to 1.2 are read as before. No writer of the collection emits schema 1.3 yet.

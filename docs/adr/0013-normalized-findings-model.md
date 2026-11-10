@@ -649,7 +649,8 @@ document is read, the model turns a `DeviationError` into `ModelError`.
 - **Readers come first.** The report (schema 2.3) cannot count a flagged pass apart from a pass, so until report
   schema 2.4 reads the flag, a 1.3 scan run is an input error on every path into the compliance section: `--scan-run`,
   `--exceptions-evaluation` and evidence bundles ([reporting data model](../reporting-data-model.md#operator-deviations)).
-  No writer emits 1.3 yet.
+  Raw XCCDF and ARF results carry no flag at all, so results next to a 1.3 `scan-run.json` (in the same directory or
+  the one above) are refused too, and stay refused once the report reads 1.3. No writer emits 1.3 yet.
 
 Rejected alternatives:
 
