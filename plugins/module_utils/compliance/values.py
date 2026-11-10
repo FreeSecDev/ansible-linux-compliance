@@ -75,15 +75,15 @@ class Comparator(Protocol):
 
     def validate(self, raw: object, /) -> str:
         """Return the canonical text of an operator's value, or raise ValueOverrideError."""
-        ...
+        raise NotImplementedError
 
     def meets(self, candidate: str, profile: str, /) -> bool:
         """Return whether ``candidate`` is at least as strict as ``profile``."""
-        ...
+        raise NotImplementedError
 
     def stricter(self, first: str, second: str, /) -> str:
         """Return the stricter of two canonical values."""
-        ...
+        raise NotImplementedError
 
 
 def shown(raw: object) -> str:

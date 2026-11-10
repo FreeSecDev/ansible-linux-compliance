@@ -6,7 +6,7 @@ import ast
 import itertools
 import re
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 import jinja2
 import pytest
@@ -303,6 +303,19 @@ def test_an_unknown_comparator_is_refused() -> None:
         values.judge("equal", "1", "1")
     with pytest.raises(values.ValueOverrideError, match="known: faillock_deny"):
         values.stricter_of("pwquality_max", "1", [])
+
+
+def test_the_protocol_methods_are_abstract() -> None:
+    order = values.comparator("faillock_deny")
+    validate: Any = values.Comparator.validate
+    meets: Any = values.Comparator.meets
+    stricter: Any = values.Comparator.stricter
+    with pytest.raises(NotImplementedError):
+        validate(order, "4")
+    with pytest.raises(NotImplementedError):
+        meets(order, "4", "4")
+    with pytest.raises(NotImplementedError):
+        stricter(order, "4", "4")
 
 
 @pytest.mark.parametrize(
