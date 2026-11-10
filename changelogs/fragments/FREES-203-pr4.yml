@@ -5,7 +5,8 @@ minor_changes:
     that validate an operator's value as the family and its reader take it, judge whether a value is at least as
     strict as the profile's, with the readers' special values (``deny = 0`` the loosest, ``unlock_time = 0`` the
     strictest, pwquality 0 for off), and keep the stricter of two values, for the ``login_defs``, pwquality,
-    pwhistory and faillock settings. Nothing uses them yet, so remediation is unchanged.
+    pwhistory and faillock settings. A umask is taken only as a zero and two octal digits, the form that
+    shadow-utils and ``pam_umask`` read alike. Nothing uses them yet, so remediation is unchanged.
   - >-
     catalogue - a native rule with a profile value may name its comparator in ``value_comparison``, which
     ``make catalogue`` copies into the rule's parameters; it is refused without a profile value, for a banner rule,

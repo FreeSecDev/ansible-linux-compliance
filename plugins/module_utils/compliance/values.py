@@ -49,7 +49,7 @@ AT_MOST: Final[str] = "at_most"
 DIRECTIONS: Final[frozenset[str]] = frozenset({AT_LEAST, AT_MOST})
 DECIMAL: Final[str] = r"-?(?:0|[1-9][0-9]{0,17})"
 NEGATIVE_ZERO: Final[str] = "-0"
-UMASK: Final[str] = r"[0-7]{3}"
+UMASK: Final[str] = r"0[0-7]{2}"
 UMASK_BASE: Final[int] = 8
 MAX_TEXT_LENGTH: Final[int] = 1024
 SHOWN_LENGTH: Final[int] = 80
@@ -181,15 +181,22 @@ class IntegerOrder:
 
 @dataclass(frozen=True)
 class UmaskBits:
-    """A umask of three octal digits that is stricter the more permission bits it masks."""
+    """A umask of a zero and two octal digits that is stricter the more permission bits it masks.
+
+    Only this form is read alike by every reader of ``UMASK`` in ``/etc/login.defs``:
+    shadow-utils reads the value with ``strtol`` and base 0, so ``177`` is the decimal number 177
+    (octal 261), while ``pam_umask`` reads it as octal 177 (ADR 0024). A umask with the owner's
+    bits therefore cannot be taken or judged.
+    """
 
     def validate(self, raw: object, /) -> str:
-        """Return a umask given as a string of three octal digits, or raise."""
+        """Return a umask given as a string of a zero and two octal digits, or raise."""
         if not isinstance(raw, str) or re.fullmatch(UMASK, raw) is None:
             message = (
-                "needs a umask of exactly three octal digits as a quoted string, such as '027'; "
-                "a YAML integer is refused because YAML 1.1 reads 027 as the octal number 23, "
-                f"got {shown(raw)}"
+                "needs a umask of a zero and two octal digits as a quoted string, such as '027'; "
+                "a YAML integer is refused because YAML 1.1 reads 027 as the octal number 23, and "
+                "a umask without the leading zero, such as '177', because shadow-utils reads it "
+                f"as a decimal number and pam_umask as an octal one, got {shown(raw)}"
             )
             raise ValueOverrideError(message)
         return raw

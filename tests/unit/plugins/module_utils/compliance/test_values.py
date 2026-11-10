@@ -23,6 +23,7 @@ DECIDE = REPOSITORY_ROOT / "roles/remediate/tasks/login_defs_decide.yml"
 ROLE_VARIABLES = REPOSITORY_ROOT / "roles/remediate/vars/main.yml"
 CATALOGUE = REPOSITORY_ROOT / "roles/remediate/vars/rules.yml"
 DECIDE_TASK = "Login defaults | Decide whether the setting satisfies"
+FIND_TASK = "Login defaults | Find the lines that set the setting"
 PREFIX = "__linux_compliance_remediate_"
 INTENDED: dict[tuple[str, str], str] = {
     ("login_defs", "FAIL_DELAY"): "login_defs_at_least",
@@ -79,7 +80,7 @@ PAM_PROFILES: dict[str, list[int]] = {
 SAMPLES: dict[str, list[str]] = {
     "login_defs_at_least": ["0", "1", "7", "12", "999999"],
     "login_defs_at_most": ["0", "1", "45", "365", "999999"],
-    "login_defs_umask": ["000", "002", "022", "027", "070", "077", "700", "777"],
+    "login_defs_umask": ["000", "002", "007", "022", "027", "037", "070", "077"],
     "pwquality_at_least": ["0", "1", "2", "8", "999999"],
     "pwquality_minlen": ["6", "8", "14", "15", "999999"],
     "pwquality_minclass": ["0", "1", "3", "4"],
@@ -143,7 +144,9 @@ def test_an_integer_order_is_total_and_its_stricter_value_is_one_of_the_two(name
         ("login_defs_umask", "027", "077", False),
         ("login_defs_umask", "037", "027", True),
         ("login_defs_umask", "070", "027", False),
-        ("login_defs_umask", "777", "000", True),
+        ("login_defs_umask", "077", "000", True),
+        ("login_defs_umask", "007", "002", True),
+        ("login_defs_umask", "000", "002", False),
         ("pwquality_minlen", "16", "14", True),
         ("pwquality_minlen", "8", "14", False),
         ("pwquality_minlen", "6", "6", True),
@@ -239,10 +242,14 @@ def test_validate_returns_the_canonical_text(name: str, raw: object, canonical: 
         ("faillock_unlock_time", 604801, "from 0 to 604800"),
         ("faillock_unlock_time", "never", "needs a whole number"),
         ("login_defs_umask", 27, "YAML 1.1 reads 027 as the octal number 23"),
-        ("login_defs_umask", "27", "exactly three octal digits"),
-        ("login_defs_umask", "0027", "exactly three octal digits"),
-        ("login_defs_umask", "028", "exactly three octal digits"),
-        ("login_defs_umask", "027\n", "exactly three octal digits"),
+        ("login_defs_umask", "27", "a zero and two octal digits"),
+        ("login_defs_umask", "0027", "a zero and two octal digits"),
+        ("login_defs_umask", "028", "a zero and two octal digits"),
+        ("login_defs_umask", "027\n", "a zero and two octal digits"),
+        ("login_defs_umask", "177", "shadow-utils reads it as a decimal number"),
+        ("login_defs_umask", "700", "shadow-utils reads it as a decimal number"),
+        ("login_defs_umask", "777", "shadow-utils reads it as a decimal number"),
+        ("login_defs_umask", "100", "shadow-utils reads it as a decimal number"),
     ],
 )
 def test_validate_refuses_what_the_family_or_its_reader_would_not_take_as_written(
@@ -271,6 +278,11 @@ def test_an_error_shows_a_bounded_value() -> None:
         ("pwquality_minlen", "5", "14"),
         ("login_defs_at_most", "016", "90"),
         ("login_defs_umask", "77", "027"),
+        ("login_defs_umask", "177", "027"),
+        ("login_defs_umask", "700", "027"),
+        ("login_defs_umask", "777", "027"),
+        ("login_defs_umask", "777", "000"),
+        ("login_defs_umask", "077", "177"),
     ],
 )
 def test_a_value_that_the_comparator_cannot_judge_raises(
@@ -334,7 +346,7 @@ def test_an_exact_value_meets_only_itself_and_has_no_stricter_value() -> None:
         ("login_defs_umask", "027", ["002"], "027"),
         ("login_defs_umask", "027", ["077"], "077"),
         ("login_defs_umask", "027", ["070"], "077"),
-        ("login_defs_umask", "022", ["007", "700"], "727"),
+        ("login_defs_umask", "022", ["007", "050"], "077"),
         ("faillock_deny", "4", ["0"], "4"),
         ("faillock_unlock_time", "900", ["0", "1800"], "0"),
         ("pwquality_max_or_off", "3", ["0"], "3"),
@@ -351,6 +363,37 @@ def test_stricter_of_checks_the_target_without_readings() -> None:
         values.stricter_of("login_defs_at_least", "1000000", [])
 
 
+@pytest.mark.parametrize(
+    ("target", "readings"),
+    [("027", ["177"]), ("027", ["002", "700"]), ("177", []), ("027", ["0077"])],
+)
+def test_stricter_of_refuses_a_umask_that_the_readers_read_differently(
+    target: str, readings: list[str]
+) -> None:
+    with pytest.raises(values.ValueOverrideError, match="a zero and two octal digits"):
+        values.stricter_of("login_defs_umask", target, readings)
+
+
+@pytest.mark.parametrize(
+    ("first", "second", "strictest"),
+    [("0", "11", False), ("11", "0", False), ("12", "13", True), ("13", "12", True)],
+)
+def test_the_stricter_of_two_equally_strict_special_values_is_the_first(
+    first: str, second: str, *, strictest: bool
+) -> None:
+    order = values.IntegerOrder(
+        values.AT_MOST,
+        1,
+        10,
+        loosest=frozenset({0, 11}),
+        strictest=frozenset({12, 13}),
+    )
+    assert order.meets(first, second)
+    assert order.meets(second, first)
+    assert order.stricter(first, second) == first
+    assert order.stricter(first, "5") == (first if strictest else "5")
+
+
 def test_the_bounds_are_those_of_the_readers_and_the_family_validators() -> None:
     variables = cast(
         "dict[str, object]", yaml.safe_load(ROLE_VARIABLES.read_text(encoding="utf-8"))
@@ -362,11 +405,59 @@ def test_the_bounds_are_those_of_the_readers_and_the_family_validators() -> None
     assert not re.fullmatch(login_defs_number, str(values.LOGIN_DEFS_MAXIMUM + 1))
     assert re.fullmatch(pam_number, str(values.PAM_NUMBER_MAXIMUM))
     assert not re.fullmatch(pam_number, str(values.PAM_NUMBER_MAXIMUM + 1))
-    assert umask == "^" + values.UMASK + "$"
+    assert umask == "^[0-7]{3}$"
+    assert strict_umask_pattern() == "^[ \t]*UMASK[ \t]+(" + values.UMASK + ")[ \t\r\v\f]*$"
     assert values.FAILLOCK_MAX_TIME == pam_conf.MAX_TIME
     assert values.FAILLOCK_MAX_DENY == pam_conf.MAX_DENY
     assert values.PAM_NUMBER_MAXIMUM < pam_conf.INT_MAX
     assert values.PWQUALITY_LIMIT < pwquality.INT_MAX
+
+
+def strict_umask_pattern() -> str:
+    tasks = cast("list[dict[str, object]]", yaml.safe_load(DECIDE.read_text(encoding="utf-8")))
+    task = next(item for item in tasks if str(item["name"]).startswith(FIND_TASK))
+    template = cast("dict[str, str]", task["ansible.builtin.set_fact"])[f"{PREFIX}ld_strict"]
+    context: dict[str, object] = {
+        f"{PREFIX}rule": {"rule_id": "umask", "parameters": {"comparison": "umask"}},
+        f"{PREFIX}ld_setting": "UMASK",
+        f"{PREFIX}ld_values": {},
+    }
+    return render(template, context)
+
+
+def strtol_base_zero(text: str) -> int:
+    if text.startswith("0") and len(text) > 1:
+        return int(text[1:], values.UMASK_BASE)
+    return int(text)
+
+
+def test_a_umask_is_taken_exactly_when_every_reader_reads_it_as_written() -> None:
+    variables = cast(
+        "dict[str, object]", yaml.safe_load(ROLE_VARIABLES.read_text(encoding="utf-8"))
+    )
+    assertion = str(variables[f"{PREFIX}login_defs_umask_pattern"])
+    read = str(variables[f"{PREFIX}login_defs_umask_read_pattern"])
+    strict = strict_umask_pattern()
+    found = values.comparator("login_defs_umask")
+    octal = [f"{number:03o}" for number in range(0o1000)]
+    others = [
+        "".join(digits)
+        for size in range(1, 5)
+        for digits in itertools.product("01789", repeat=size)
+    ]
+    for text in octal + others:
+        taken = re.fullmatch(values.UMASK, text) is not None
+        assert taken is (re.match(strict, f"UMASK {text}") is not None), text
+        if not taken:
+            with pytest.raises(values.ValueOverrideError):
+                found.validate(text)
+            continue
+        assert found.validate(text) == text
+        assert re.match(assertion, text) is not None, text
+        assert re.match(read, text) is not None, text
+    for text in octal:
+        read_alike = strtol_base_zero(text) == int(text, values.UMASK_BASE)
+        assert (re.fullmatch(values.UMASK, text) is not None) is read_alike, text
 
 
 def catalogue_rules() -> list[dict[str, object]]:
@@ -469,6 +560,13 @@ def render(template: str, context: dict[str, object]) -> str:
     return environment.from_string(template).render(context)
 
 
+def strict_reading(comparison: str, current: str) -> str | None:
+    if comparison != "umask":
+        return current
+    found = re.match(strict_umask_pattern(), f"UMASK {current}")
+    return None if found is None else found.group(1)
+
+
 def jinja_decision(
     comparison: str, required: str, current: str, readings: list[int]
 ) -> tuple[bool, str]:
@@ -483,7 +581,7 @@ def jinja_decision(
         f"{PREFIX}ld_comparison": comparison,
         f"{PREFIX}ld_required": required,
         f"{PREFIX}ld_token": current,
-        f"{PREFIX}ld_set": current,
+        f"{PREFIX}ld_set": strict_reading(comparison, current),
         f"{PREFIX}ld_readings": readings,
         f"{PREFIX}ld_defaults": [],
         f"{PREFIX}login_defs_umask_read_pattern": variables[
@@ -524,3 +622,14 @@ def test_the_login_defs_comparators_decide_as_the_jinja_of_the_family(
     assert values.judge(name, required, current) is satisfied
     texts = [current] if comparison == "umask" else [str(reading) for reading in readings]
     assert values.stricter_of(name, required, texts) == written
+
+
+@pytest.mark.parametrize("current", ["177", "700", "777", "0027"])
+def test_the_umask_family_does_not_take_what_the_comparator_cannot_judge(current: str) -> None:
+    satisfied, written = jinja_decision("umask", "027", current, [])
+    assert not satisfied
+    assert written == "027"
+    with pytest.raises(values.ValueOverrideError):
+        values.judge("login_defs_umask", "027", current)
+    with pytest.raises(values.ValueOverrideError):
+        values.stricter_of("login_defs_umask", "027", [current])

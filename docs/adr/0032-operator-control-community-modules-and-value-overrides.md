@@ -250,7 +250,11 @@ The first comparators cover the integer families: `login_defs` (`at_least`, `at_
 (`deny`, `interval`, `unlock_time`, the last also for `root_unlock_time`). Their bounds are those of the family
 validators and of what the readers read as written:
 
-- a umask is three octal digits given as a string; a YAML integer is refused, because YAML 1.1 reads `027` as 23;
+- a umask is a zero and two octal digits given as a string (`027`), the strict form of ADR 0024 that every reader
+  of `UMASK` reads alike; a YAML integer is refused, because YAML 1.1 reads `027` as 23, and so is a umask with the
+  owner's bits such as `177`, because shadow-utils reads it with base 0 as the decimal 177 (octal 261, which leaves
+  the read and write bits of others unmasked) while `pam_umask` reads it as octal 177; such a value is neither
+  accepted nor judged;
 - integers are decimal without a sign, leading zero or `-0`, so `016` is never read as octal by one reader and as
   decimal by another;
 - `minlen` starts at libpwquality's floor of 6 and `minclass` ends at its 4 classes, because the library reads other
@@ -258,7 +262,10 @@ validators and of what the readers read as written:
 - `maxrepeat`, `maxclassrepeat` and `maxsequence` treat 0 (off) as the loosest value, and `retry` starts at 1;
 - `deny = 0` (never lock) is judged the loosest value but refused as an override, as the faillock family refuses a
   maximum of 0; `unlock_time = 0` (never unlock) is the strictest and is accepted; the faillock times end at 604800
-  and `deny` at 65535, which pam_faillock stores in 16 bits.
+  and `deny` at 65535, which pam_faillock stores in 16 bits;
+- `login_defs_at_most` has no loosest value, so a host value of `PASS_MAX_DAYS -1` (no expiry) cannot be judged
+  and `judge` raises, which fails closed; whether it is judged as a deviation instead is decided, against the OVAL
+  check, when the `login_defs` family is wired for overrides.
 
 No catalogue entry names a comparator yet, so nothing is overridable and behaviour is unchanged.
 `plugins/filter/pam_conf.py` keeps its own decision until the faillock and pwhistory family is wired; the unit tests
