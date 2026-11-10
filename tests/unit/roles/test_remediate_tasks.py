@@ -93,3 +93,31 @@ def test_the_dispatch_is_marked_complete_only_after_the_completeness_check() -> 
         "__linux_compliance_remediate_dispatched": True
     }
     assert names[-1] == "Remediate | Fail when the always-tagged tasks were skipped"
+
+
+def test_pwquality_and_the_pam_conf_families_read_the_same_pam_directories() -> None:
+    variables = cast(
+        "dict[str, object]",
+        yaml.safe_load(
+            (REPOSITORY_ROOT / "roles" / "remediate" / "vars" / "main.yml").read_text(
+                encoding="utf-8"
+            )
+        ),
+    )
+    shared = "{{ __linux_compliance_remediate_pam_directories }}"
+    pwquality = [
+        task
+        for task in walk(load(TASKS / "pwquality.yml"))
+        if str(task.get("name", "")).startswith("Password quality | Inspect the PAM directories")
+    ]
+    pam_conf = [
+        task for task in walk(load(TASKS / "pam_conf_prepare.yml")) if task.get("loop") == shared
+    ]
+    assert variables["__linux_compliance_remediate_pam_directories"] == [
+        "/etc/pam.d",
+        "/usr/lib/pam.d",
+        "/usr/share/pam.d",
+    ]
+    assert "__linux_compliance_remediate_pwquality_pam_directories" not in variables
+    assert [task.get("loop") for task in pwquality] == [shared]
+    assert len(pam_conf) == 1

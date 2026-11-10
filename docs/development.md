@@ -147,7 +147,14 @@ a copy in a temporary root is parsed again, and it returns a deep copy on every 
 another reads. The YAML loaders of `tools/roles` that the tests call most use the libyaml safe loader as well. Before
 FREES-199 the pure Python parser took most of the time of the slowest tests: the unit suite took 532 seconds serially
 and 186 on four workers on a workstation, and 330 and 92 after it, with the same tests and the same covered lines and
-branches.
+branches. Both parse through `tools/yaml_loader.py`, which falls back to PyYAML's pure Python safe loader when PyYAML
+was built without libyaml, so invalid YAML still raises `yaml.YAMLError` there and not an `AttributeError` (FREES-206).
+
+`tests/unit/roles/test_login_defs_readers.py` runs the login.defs decision tasks of the remediate role in
+`ansible-playbook`, about a third of a second per case. It decides the cases in eight interleaved shards, one test per
+shard, so the pytest-xdist workers share them and each shard is decided once. On a 16-CPU workstation the former
+module-scoped fixture, which decided every case in one run, took 105 seconds of setup; after the split the module took
+30 seconds on four workers, about 15 seconds per shard (FREES-206).
 
 ## Pre-commit stages
 

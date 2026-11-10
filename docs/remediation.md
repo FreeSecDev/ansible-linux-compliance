@@ -171,8 +171,11 @@ would not be.
 The family registry is in `roles/remediate/vars/rules.yml`, generated from `content/catalogue.yml`. Its order is the
 dispatch order: non-disruptive families first, so that a failure in a disruptive family leaves the harmless changes
 applied, then the families in order of growing lock-out risk, with the bootloader last because it takes effect only on
-the next boot. The [control family reference](control-families.md) lists all 21 families with the reason for each
-disruptive flag and their rules per profile.
+the next boot. The [control family reference](control-families.md) lists all 58 families with the reason for each
+disruptive flag and their rules per profile. The table names the 21 top-level topics, in registry order: the families
+that no umbrella groups and the umbrellas, with the flag of the families that each umbrella groups.
+`tests/unit/tools/test_docs_counts.py` fails when the table or the counts on this page differ from the registry
+(FREES-206).
 
 | Disruptive | Families |
 |---|---|
@@ -384,7 +387,7 @@ statuses that refuse to act, with nothing changed and the entry kept:
 | `not_directory` | `pwquality.conf.d` exists but is not a directory, for example a symbolic link; nothing is written through it |
 | `not_regular_file` | The main file or a drop-in is a symbolic link or another non-regular file |
 | `not_owned` | A file at the drop-in's path does not carry the collection's header, with or without a ledger entry |
-| `overridden` (apply) | A file that libpwquality reads later sets another value, or a `pam_pwquality` argument in a PAM file sets the setting to another value (FREES-200); the reason names the file and the line or the argument. Also every rule other than `_enforcing` when `enforcing` is 0 in the files or in a `pam_pwquality` argument, in any form that the library reads as 0 (`enforcing=0`, `enforcing=00`, `enforcing=+00`, `enforcing=-0`), because libpwquality then only warns; and every rule when a PAM line includes a path with a `/` (`@include /etc/site/password`, `password include ../security/x`), which Linux-PAM opens outside the PAM files that the collection reads |
+| `overridden` (apply) | A file that libpwquality reads later sets another value, or a `pam_pwquality` argument in any file of `/etc/pam.d`, `/usr/lib/pam.d` or the vendor directory `/usr/share/pam.d` sets the setting to another value (FREES-200, FREES-211); the reason names the file and the line or the argument. Also every rule other than `_enforcing` when `enforcing` is 0 in the files or in a `pam_pwquality` argument, in any form that the library reads as 0 (`enforcing=0`, `enforcing=00`, `enforcing=+00`, `enforcing=-0`), because libpwquality then only warns; and every rule when a PAM line includes a path with a `/` (`@include /etc/site/password`, `password include ../security/x`), which Linux-PAM opens outside the PAM files that the collection reads (a relative target is looked up in each PAM directory in turn, as a service name is) |
 | `modified_since_read` | The main file changed between the read and the write, of an apply or of a cleanup (its SHA-256 is read again right before the write); nothing is written, and the next run reads it again |
 | `write_mismatch` (cleanup) | After the main file was written back, its SHA-256 is not that of the text written; unlike the other reasons, the file was written, and the entry is kept so that the next run checks it again |
 | `unreadable_file` (apply) | libpwquality stops reading at a line before the rule's value (an unknown setting, a value that is not an integer, a NUL, a line of 1023 bytes or more, also in a drop-in read before the main file), a drop-in that it reads is a symbolic link or not a regular file, or the main file is not UTF-8 text or holds a NUL |
@@ -399,7 +402,11 @@ of `pwquality.conf.d` whose name holds `.conf` only at its end, dot files includ
 occurrence wins, and the first line it cannot read stops the whole configuration. The filters `pwquality_decide` and
 `pwquality_restore` reproduce that reader, which `tests/fixtures/pwquality_readers/verdicts.json` checks against the
 real library of both Molecule images (ADR 0021, amendment of FREES-200). A rule is `applied` or `compliant` only when
-the library would take the profile's value from what the rule writes. With the main file, a setting that is set on
+the library would take the profile's value from what the rule writes. The `pam_pwquality` arguments are searched in
+every file of the three PAM directories that the `faillock` and `pwhistory` families also read, `/etc/pam.d`,
+`/usr/lib/pam.d` and `/usr/share/pam.d` (FREES-211), all together: a file is searched even when libpam does not open
+it, because a file of the same name comes first or, on Ubuntu, because libpam is built without the vendor directory,
+so the family may refuse more than libpam would read but never less. With the main file, a setting that is set on
 more than one line, in any case or spacing, is `duplicate_setting` and not touched. With drop-ins, a rule is
 `overridden`, with nothing changed and the overriding file named, when the main file or a later drop-in sets another
 value; a file at the
@@ -790,6 +797,27 @@ The role publishes `linux_compliance_remediated`:
 | `disabled_rules` | Rules switched off by a toggle (`rule_id`, `disabled_by`), restricted to the profile when remediation is enabled. The audit role computes the same list itself from the same toggles, so it does not depend on this fact |
 | `orphaned` | Ledger entries for rules that the catalogue no longer contains; nothing is done to them |
 | `notices` | Operator messages |
+
+### Ledger versions and the deviation register
+
+The state ledger has two schema versions ([ADR 0011, FREES-203
+amendment](adr/0011-control-toggles-and-cleanup.md#amendment-2026-11-10-ledger-version-2-and-the-deviation-register-frees-203)).
+Version 1 is written while no entry records a value and the deviation register is empty, so an existing ledger
+keeps its bytes and older collection versions can still read it. Version 2 adds:
+
+- an optional `value` record per entry (`value_id`, `value_source` `profile` or `override`, `profile_value`,
+  `target`). `control_state` returns `value_source` for every entry; an entry without a record reads as `profile`;
+- the deviation register, `deviations`: the rules whose value in force is looser than the profile's, each with
+  `value_id`, `profile_value`, `effective_value`, `recorded_at` and `collection_version`. A deviation is recorded
+  whether or not the rule wrote anything, so a looser value that the host already had is remembered without a revert
+  entry. `control_state` `record_deviation` and `remove_deviation` maintain it and `list` returns it.
+
+The role does not record values or deviations yet: that starts with `linux_compliance_remediate_value_overrides`
+([ADR 0032](adr/0032-operator-control-community-modules-and-value-overrides.md)). Until then every ledger stays version 1.
+A collection version from before FREES-203 refuses a version 2 ledger as `corrupt`, because its reader does not know
+the `deviations` key, and changes nothing. The file is not damaged: do not delete it, since it holds the revert record
+of every applied rule. Going back to such a version needs a ledger without value records and deviations, or a backup
+from before.
 
 ### A lost ledger cannot be detected
 

@@ -828,7 +828,12 @@ platforms): with `minlen` and `enforce_for_root`, a main file with CRLF line end
 `minlen = 8` is applied (the line rewritten in place on Ubuntu, `overridden` by the main file on Rocky Linux, where the
 drop-ins are read first) and cleaned up byte for byte; then a PAM file that passes `minlen=8` to `pam_pwquality` makes
 `minlen` `overridden`, and a drop-in read first with `minlen == 14`, which stops libpwquality, makes
-`enforce_for_root` `unreadable_file`, with nothing written. It ends with the whole-instance comparison.
+`enforce_for_root` `unreadable_file`, with nothing written; then a service file that only the vendor directory
+`/usr/share/pam.d` holds (FREES-211; the directory is created for the test on Ubuntu, which does not ship it, and
+removed again), with `pam_pwquality.so minlen=8 enforcing=0`, makes `minlen` `overridden` by the argument and
+`enforce_for_root` by `enforcing=0`, with nothing written. The test declares `/usr/share/pam.d` as rewritten, so the
+whole-instance comparison leaves out the times of that directory and of `/usr/share`. It ends with the whole-instance
+comparison.
 
 The auditd topics ([ADR 0030](adr/0030-native-auditd-settings-and-audit-rules.md), FREES-110) select their rules
 with `profiles`: `auditd_conf` runs with `cis_level2_server` on Ubuntu and `stig` on Rocky Linux, `auditd_rules_time`
@@ -1001,7 +1006,7 @@ Since FREES-182 the images are built once per run and every leg loads them
 ([built once per run](#images-and-collections-built-once-per-run)). A leg that
 approaches 20 minutes should be split further, for example per pre-state, rather than given a longer limit, so that
 no required job comes near the merge queue's check timeout (30 minutes until 2026-11-10, 90 since). The `test` job, 21 minutes at 6628b92, was split the same way: `test` keeps
-the coverage, audit-exception, golden-content and browser tests, and `test-playbooks` runs the check-mode playbooks
+the coverage, audit-exception, golden-content and browser tests, and `test-playbooks` ran the check-mode playbooks
 (`test-evidence`, `test-remediate-check`, `test-role-guards`, `test-verify`).
 
 By 9be18b4 `test` was close to its limit again: in four of the eight latest runs it took 18.0 to 18.6 minutes, 13.8
@@ -1034,23 +1039,44 @@ way.
 
 With `sudo` (FREES-175) the regressions moved out of the cycle legs: `make molecule-matrix` adds one leg per regression
 group that a declaration lists and platform it runs on, with the mode `regressions-<group>`, after the two toggle
-modes of the topic, so 40 cycle legs and 37 regression legs (`pwquality` `changes`, `ssh` `changes` and
-`vendor`, `sudo` `changes` and `profiles`, `login_defs` `changes`, `refusals`, `values`, `profiles` and `bytes`,
-`filesystem_modules` `changes`, `faillock` `changes`, `readers`, `bytes`, `stack` and `profiles` on both platforms,
-`sudo` `files` on Ubuntu, `login_defs` `readers` and `pwhistory` `changes`, `readers` and `stack` on Rocky Linux;
-`wireless_modules` runs on Rocky Linux only). The kernel parameter topics (FREES-107) add 12 cycle legs and the two
-`ipv4_parameters` `changes` legs to the Docker matrix, and the `ipv4_parameters` `runtime` group, which requires
-libvirt, a leg per platform to the libvirt matrix. A topic skips
-the platforms that its declaration lists under `unselected_platforms` (`pwhistory` on Ubuntu), which get no leg.
-`tests/unit/tools/test_molecule_matrix.py` checks that every declared group
-gets its legs with the drivers it requires, `make lint-lifecycle` checks the groups, and the harness fails a regression leg whose
+modes of the topic. The full Docker matrix has 60 cycle legs and 47 regression legs. The full libvirt matrix has 24
+cycle legs, 2 regression legs and 3 legs without a topic (`libvirt-ubuntu`, `libvirt-rhel-compatible` and
+`libvirt-selftest`). Per native topic, the platforms of its cycle legs (`both` is Ubuntu 24.04 and Rocky Linux 9) and
+its regression groups, which run on the platforms of the topic's cycles of that driver unless the table names others:
+
+| Topic | Docker cycles | Docker regression groups | libvirt cycles | libvirt regression groups |
+|---|---|---|---|---|
+| `file_permissions` | both | none | both | none |
+| `sysctl` | both | none | both | none |
+| `banners` | both | none | none | none |
+| `auditd_rules_time` | both | `changes` | both | none |
+| `auditd_conf` | both | `changes` | both | none |
+| `ipv4_parameters` | both | `changes` | both | `runtime` |
+| `ipv6_parameters` | both | none | both | none |
+| `filesystem_modules` | both | `changes` | none | none |
+| `protocol_modules` | both | none | none | none |
+| `wireless_modules` | Rocky Linux | none | none | none |
+| `ssh` | both | `changes`, `readers`, `vendor` | none | none |
+| `pwquality` | both | `changes`, `readers` | none | none |
+| `pwhistory` | Rocky Linux | `changes`, `readers`, `stack` | none | none |
+| `faillock` | both | `bytes`, `changes`, `profiles`, `readers`, `stack` | none | none |
+| `login_defs` | both | `bytes`, `changes`, `profiles`, `readers` (Rocky Linux), `refusals`, `values` | none | none |
+| `sudo` | both | `changes`, `files` (Ubuntu), `profiles` | none | none |
+
+Each cycle runs in both toggle modes, so a topic has two cycle legs per platform and driver. The libvirt cycle legs
+run the cycles whose pre-state or topic requires libvirt. A topic skips the platforms that its declaration lists under
+`unselected_platforms` (`pwhistory` and `wireless_modules` on Ubuntu), which get no leg.
+`tests/unit/tools/test_docs_counts.py` derives the numbers and the table above from `make molecule-matrix`
+(`molecule_matrix.legs`) and fails when this text differs (FREES-206). `tests/unit/tools/test_molecule_matrix.py`
+checks that every declared group gets its legs with the drivers it requires, `make lint-lifecycle` checks the groups, and the harness fails a regression leg whose
 group did not run. Before the split the `sudo` cycle legs carried up to four minutes of regressions each and took 14 to
 19 minutes on slow runners.
 
 ### Affected legs on pull requests
 
-With five native topics the full plan has 31 Docker lifecycle legs and 7 libvirt legs, and a run about 60 jobs, which
-is all that the organisation runs at a time. Every new topic adds four to nine legs. On `pull_request` and
+With five native topics the full plan had 31 Docker lifecycle legs and 7 libvirt legs, and a run about 60 jobs, which
+is all that the organisation runs at a time. Every new topic adds two legs per platform, one per toggle mode, and one
+more per regression group and platform ([above](#ci-legs) for the current matrix). On `pull_request` and
 `merge_group`, `molecule-plan` therefore keeps only the lifecycle legs of the topics that the change can affect, and
 always the legs without a topic: the libvirt base scenarios `libvirt-<platform>` and `libvirt-selftest`. The standard
 scenarios of `molecule-docker` run as before. A push to `main`, the nightly schedule and `workflow_dispatch` always run
@@ -1205,9 +1231,10 @@ No topic can gain a native rule without its lifecycle test:
 
 ### Disruptive topics
 
-`pwquality`, `ssh`, `sudo`, `pwhistory`, `faillock` and the kernel module topics (`filesystem_modules`,
-`protocol_modules`, `wireless_modules`) are the disruptive families with native rules; the others (`pam`, `sssd` and
-the rest that the registry flags) have none yet. A disruptive topic is opted in by its declaration:
+`auditd_rules_time`, `auditd_conf`, `ipv4_parameters`, `ipv6_parameters`, `filesystem_modules`, `protocol_modules`,
+`wireless_modules`, `ssh`, `pwquality`, `pwhistory`, `faillock`, `login_defs` and `sudo` are the disruptive families with
+native rules, in registry order; the others (`pam`, `sssd` and the rest that the registry flags) have none yet, and
+`tests/unit/tools/test_docs_counts.py` fails when this list differs from the registry (FREES-206). A disruptive topic is opted in by its declaration:
 `disruptive: true`, which must match the registry, and a `containment` note. The harness then passes `linux_compliance_remediate_allow_disruptive` with
 that one family, for that topic's runs only, both for apply and for cleanup (ADR 0011). The breakage stays in the
 container:
@@ -1227,10 +1254,12 @@ container:
 - The lifecycle is the last step before `destroy`, which removes only the containers that carry this scenario's
   labels, and runs even after a failure. The container is never reused.
 
-A disruptive topic that cannot be applied meaningfully in a container (boot loader, mounts, kernel parameters,
-firewall, auditd) declares `requires: [libvirt]` and runs in the [libvirt scenarios](molecule-libvirt.md), where the
-connection is SSH as root to a disposable virtual machine; its `containment` note must then say why a broken SSH, PAM
-or network configuration still cannot reach the host.
+A disruptive topic that cannot be applied meaningfully in a container (boot loader, mounts, firewall) declares
+`requires: [libvirt]` and runs in the [libvirt scenarios](molecule-libvirt.md), where the connection is SSH as root to
+a disposable virtual machine; its `containment` note must then say why a broken SSH, PAM or network configuration still
+cannot reach the host. A topic that a container can apply only in part declares `requires: [libvirt]` on the pre-states
+that need the virtual machine instead, as the kernel parameter topics do for the running values and the auditd topics
+for a running auditd ([CI legs](#ci-legs)).
 
 ## Container-meaningful and not
 

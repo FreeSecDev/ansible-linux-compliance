@@ -1,0 +1,82 @@
+{
+  "adversarial/missing-result-element.xml": {
+    "off_platform": "22cb3262c43312fb754a55fb9d4b698b4695d8360e579f32ef0e766f3356c4fe",
+    "placed": "3ce2a42d7f4033c4c7fad56d796c7ea43d9415d5e533dcdbd35c93d0e2895484",
+    "placed_off_platform": "3d9f63efe0dae2c42fe7cc0c7603b361338723cf2481cee7b86f2ade3ce34a6c",
+    "plain": "e7549874227592338b8361f4e0d1b80f22d9814ca29ddb5fbd630faba5091f11",
+    "remediated": "5bf41c2e767c80462102e8d354acde83bb0ea426980bf5f57eeed45a85db7c48",
+    "waived": "e7549874227592338b8361f4e0d1b80f22d9814ca29ddb5fbd630faba5091f11"
+  },
+  "adversarial/unknown-result-value.xml": {
+    "off_platform": "a108414e4787556297456e0db88d64e2d97975acdce0fd08bf0eb03e923767e0",
+    "placed": "de934fc876fc9c1db7f60622d9993aa2b7dad804ab9ae5ced0523a670559ec49",
+    "placed_off_platform": "caa552cf8cd7a59640507021dd7d77bdae9f126411d532ef9735d8aa0c4bafd3",
+    "plain": "701654d826d100527986b37f545463deb7b0a3ca70fb531f230560a09952c6b2",
+    "remediated": "d047767ce9d6d75d1a83413eb4268d5730e4ea1571c90ff96f60a2b9c0515b5d",
+    "waived": "701654d826d100527986b37f545463deb7b0a3ca70fb531f230560a09952c6b2"
+  },
+  "xccdf/all-pass.xml": {
+    "off_platform": "462ee91291a8105b4f4e19eb1af548e3571597af29428e9ffea1b3ec14de7fc5",
+    "placed": "a91642e1f3ada0389c67343fb9d32110dd7d60ab9879ba342934ce4c989ee0e5",
+    "placed_off_platform": "024980b0a9f19db718053b3b8f9ce138cd6e738daa48dd781d6c602ed26bcf65",
+    "plain": "af08d645eea1c4722f853ed26f1cf918ddfd3b36aa877acfcbaf918165e50126",
+    "remediated": "9b5008dc843bbf52d3313c1a5b12232751a3f8c3e1904c56b3cff99cfcc003ac",
+    "waived": "af08d645eea1c4722f853ed26f1cf918ddfd3b36aa877acfcbaf918165e50126"
+  },
+  "xccdf/mixed-results.xml": {
+    "off_platform": "807d8fe8bde90bb9a8a946abc269d1a64aecfa03914c8175ba1942578671c4e5",
+    "placed": "bad1521886ca38025e933fe7a925fdc50a9edc8f60bbec7a8b5fdae2a4a1438d",
+    "placed_off_platform": "df728a1cdf3cc0e346cd83ceb537fd19a560b93b5a5574e4826ec1ec276f3dd0",
+    "plain": "76a4429e41f950681bfe6446db440867d3a575b13fc6a57250ca2c55745a1eb4",
+    "remediated": "32d09849f2d84ee10153b70eab4ef6eaef32956e370503e6fc6cf372a2271dcc",
+    "waived": "fce6ede93aab7b30de3a4992a83694fff4a2fbd8d248e20486f4ec757c019c45"
+  },
+  "xccdf/offset-timestamps.xml": {
+    "off_platform": "b2bd2cc162d6939e1373c1bc229ecff623835997923348e79ae83abf4b2d9c75",
+    "placed": "199e6ab6eee0c12ec11ffba4947d27a7224fb7abdd061e51026bd0bbbda12cc9",
+    "placed_off_platform": "ec4ecf451542155dcc32ff4b97ef9bdb4b96a6f99dcbdf792e18e0dd4787af2f",
+    "plain": "889bc052a72c5882fd9620a1df3e53d9f2c82d5db63f6b82b548b91a042927cb",
+    "remediated": "4a3edf56e90508fceb68e3ae7ae1b57ba30b1534cbffd6f5bc2d5a24938be705",
+    "waived": "889bc052a72c5882fd9620a1df3e53d9f2c82d5db63f6b82b548b91a042927cb"
+  },
+  "xccdf/one-fail.xml": {
+    "off_platform": "288c1164a651371ce5d421325c335e4963934ca0278c9f7803562819dc519161",
+    "placed": "282ce04a788aa68fe5de36a3228500b86531f13fcaad2089d595e3c7a72d6a2c",
+    "placed_off_platform": "cff4f6cdea5a054680102cca6446a3a71a166d7d949bc982de8b9d40bc125efc",
+    "plain": "9bcf1ac51dade821707e0a8c4d15e8dc6ce656debe4b0e48394d28ea8b2cb8a0",
+    "remediated": "3b791ba729f523c41785acc466c7e83f3238a1229764781517d3609e95ea90ff",
+    "waived": "9245220edf8381aeeb66258cfb7001e45777ec1b79b3680a590da49204ba62c4"
+  },
+  "xccdf/oscap-like-fail.xml": {
+    "off_platform": "ae628bd369ba521b5892d7d9866178ad39182f974a2f64b9a7754e6e7a713c3b",
+    "placed": "e0524a0efb1ccb6e8f5cd1230c12be72969e6b471fcaf0f6cfd0924746164b01",
+    "placed_off_platform": "25958d7a098a7476484f4893c846b4b4b6292e29085783b4c8baf8025925aa3d",
+    "plain": "dc2d3fc139a3cf820dbf52f34b7a883807afa54cd8f853a8bac26415e22cab5a",
+    "remediated": "e407f52a4dfbab76c35cd309e49cb4f12084d759735608b2b919ec06b1daef2d",
+    "waived": "9c581400c46650628f9c5d98d2a2de1fba2ef29fc2e1da0c2eb6a3328587cc54"
+  },
+  "xccdf/oscap-like-pass.xml": {
+    "off_platform": "cda738ddfa3bf08d3bce4f15d0edcb02251091850e8c55de4be21a770cb95d31",
+    "placed": "b5ae9960ee861b8cc340eb19a311e15ec9a5a39081bc97a676dfdc0bc493bd1e",
+    "placed_off_platform": "312dd10233d7af02132f85dd178c7f4806b7f482c5494774d4abe2bfce80a415",
+    "plain": "e2d949edf54926a23283311d987d5f7e4fce948997d7c969ab3e90676ce69658",
+    "remediated": "de617b862464eaa013fa663f7894de973af17cf76f37682d991742168027dd5b",
+    "waived": "e2d949edf54926a23283311d987d5f7e4fce948997d7c969ab3e90676ce69658"
+  },
+  "xccdf/test-result-root.xml": {
+    "off_platform": "0629b5eef1e14e65201b2b30b4c58376f7879dbc1bf307fe9781393bf30ae276",
+    "placed": "50b0ee8c0dc5d0f6ee4fd73cc84f6c2b078852fdc2f97c8925f40711d4b3575b",
+    "placed_off_platform": "e91c8e71957d4a395d381e1e2859b017d03657ceaabe20c9e92a06e189a293e2",
+    "plain": "3d19296bd64464e7d813b9828ac827514d91d9e5499e684540cdee4492932a2e",
+    "remediated": "f89386f10bd818b06c3920e6cf61dbe2c4971d765171dcc87a0c2263d6421190",
+    "waived": "3d19296bd64464e7d813b9828ac827514d91d9e5499e684540cdee4492932a2e"
+  },
+  "xccdf/utc-z-timestamps.xml": {
+    "off_platform": "458af3001dc624c8359523aaa19b20d6e5a9a71dd71cae66b002f6d241fee58d",
+    "placed": "54b51dbdd9205b0eac2c189e033b63c22710cdbfb1cafe95fd9f414da1f24fcc",
+    "placed_off_platform": "f3bd5dc2ba829374efaae22640bd34d6c29884693cbff882437fcdbc9a83aa1f",
+    "plain": "c3ed5b3bee37e4ea028123c3142cd5dc89a4cfd6bdad20a60317084a15ac44fb",
+    "remediated": "09e313577de36d9a78a53b7868284a4c5e36844cc6905b3349887065e74a76d0",
+    "waived": "c3ed5b3bee37e4ea028123c3142cd5dc89a4cfd6bdad20a60317084a15ac44fb"
+  }
+}
