@@ -16,7 +16,11 @@ repository and is consumed here by digest only.
 
 - Every change maps to a Jira issue in project `FREES` on `vidlunnia.atlassian.net`.
 - Branch names: `<type>/FREES-<number>-<short-slug>`, for example `feat/FREES-42-openscap-audit-module`.
-- Commits follow Conventional Commits and end with a `Refs: FREES-<number>` footer.
+- Commits follow Conventional Commits and carry a `Refs: FREES-<number>` footer. Branch commits end with it. The
+  squash commit on `main` takes its message from the pull request body, so the body ends with the footer, with
+  attribution lines before it, and the squash commit carries it. GitHub appends `Co-authored-by:` lines after the
+  body, so on `main` the footer is not the last line of the commit and not a Git trailer. Dependabot pull requests
+  carry no footer (FREES-81).
 - Every change lands through a pull request into `main`; squash merge only, rebased on the latest `main`.
 - Significant decisions are recorded as ADRs in [`docs/adr/`](docs/adr/) before implementation.
 - Documentation lives in Git under [`docs/`](docs/) and changes in the same PR as the code it describes.
