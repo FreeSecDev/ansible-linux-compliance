@@ -63,7 +63,8 @@ A new ecosystem must be assigned to exactly one bot in this table in the same pu
   and review. `uv.lock` is deliberately not filtered by release age (no `exclude-newer`), so that a security fix is
   never held back; a locked version with a known vulnerability is fixed immediately whatever its age.
 - Major updates wait 14 days, are labelled `breaking-change` and get their own pull request. Like every other update,
-  they are reviewed by the `freesecdev-review` App and must pass the required checks. Nobody is asked to approve them
+  they get an independent reviewer's verdict ([ADR 0033](adr/0033-review-policy-independent-verdict-without-required-approval.md))
+  and must pass the required checks. Nobody is asked to approve them
   on the dependency dashboard, which is informational only.
 - Concurrency is limited (Dependabot 5 open pull requests, Renovate 5 concurrent and 2 per hour).
 - Commits use the Conventional Commit type `build`, for example `build(deps): bump ...`.

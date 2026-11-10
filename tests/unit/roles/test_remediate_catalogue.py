@@ -14,6 +14,7 @@ from ansible_collections.freesecdev.linux_compliance.plugins.filter import (
 from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance import (
     toggles,
 )
+from tests.unit import yaml_cache
 from tools.roles import generate_toggles
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
@@ -104,7 +105,7 @@ LOGIN_DEFS_VALUES = {
 
 
 def load(path: Path) -> dict[str, object]:
-    return cast("dict[str, object]", yaml.safe_load(path.read_text(encoding="utf-8")))
+    return cast("dict[str, object]", yaml_cache.load(path))
 
 
 def registry() -> list[dict[str, object]]:

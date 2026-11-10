@@ -1,0 +1,8 @@
+---
+trivial:
+  - >-
+    Tests: the unit tests that read the remediation catalogue parse each file once per test process through
+    tests/unit/yaml_cache.py, keyed by the resolved path and the SHA-256 of the content (a changed file or a copy in a
+    temporary root is parsed again) and returning a deep copy per call. generate_toggles, check_lifecycle_topics and
+    generate_role_guards load YAML with the libyaml safe loader, as affected_topics already does, and a matrix test
+    computes its legs once. The tests and their assertions are unchanged (FREES-199).
