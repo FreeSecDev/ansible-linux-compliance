@@ -12,6 +12,9 @@ import yaml
 from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance import (
     catalog,
 )
+from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance import (
+    values as comparators,
+)
 from tests.unit.tools.test_generate_catalogue import RULE, read, source_document
 from tools.roles import generate_catalogue as gen
 from tools.roles import generate_toggles
@@ -387,6 +390,98 @@ def test_a_datastream_whose_values_cannot_be_read_is_an_error(
 def test_an_invalid_profile_value_or_parameters_are_refused(
     change: dict[str, object], message: str
 ) -> None:
+    data = source_document()
+    native = cast("list[dict[str, object]]", data["native_rules"])
+    native[0].update(change)
+    with pytest.raises(gen.GenerationError, match=message):
+        gen.parse_source(data)
+
+
+def compared_document(comparison: object) -> dict[str, object]:
+    data = valued_document()
+    native = cast("list[dict[str, object]]", data["native_rules"])
+    native[0][gen.VALUE_COMPARISON_KEY] = comparison
+    return data
+
+
+def test_a_value_comparison_is_copied_into_the_parameters(tmp_path: Path) -> None:
+    built = gen.build(
+        gen.parse_source(compared_document("pwquality_minlen")), with_values(tmp_path)
+    )
+    crontab = next(
+        rule for rule in built.rules if rule["rule_id"] == RULE + "file_permissions_crontab"
+    )
+    parameters = cast("dict[str, object]", crontab["parameters"])
+    assert parameters[gen.VALUE_COMPARISON_KEY] == "pwquality_minlen"
+    assert gen.VALUE_COMPARISON_KEY not in crontab
+    assert 'value_comparison: "pwquality_minlen"' in gen.render_catalogue(built)
+
+
+def test_a_value_comparison_that_refuses_a_profile_value_is_an_error(tmp_path: Path) -> None:
+    with pytest.raises(
+        gen.GenerationError,
+        match="the comparison pwquality_flag refuses a profile value: needs a whole number",
+    ):
+        gen.build(gen.parse_source(compared_document("pwquality_flag")), with_values(tmp_path))
+
+
+class Rewriting:
+    """A comparator that does not return a profile value as it is."""
+
+    def validate(self, raw: object, /) -> str:
+        return f"+{raw}"
+
+    def meets(self, candidate: str, profile: str, /) -> bool:
+        return candidate == profile
+
+    def stricter(self, first: str, _second: str, /) -> str:
+        return first
+
+
+def test_a_value_comparison_that_rewrites_a_profile_value_is_an_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(comparators, "COMPARATORS", {"rewriting": Rewriting()})
+    with pytest.raises(
+        gen.GenerationError,
+        match="the comparison rewriting reads the profile value '15' as '\\+15'",
+    ):
+        gen.build(gen.parse_source(compared_document("rewriting")), with_values(tmp_path))
+
+
+def test_a_banner_rule_takes_no_value_comparison(tmp_path: Path) -> None:
+    data = compared_document("pwquality_minlen")
+    families = cast("list[dict[str, object]]", data["families"])
+    families[0]["name"] = "banners"
+    with pytest.raises(
+        gen.GenerationError, match="the values of the banners family are not compared"
+    ):
+        gen.build(gen.parse_source(data), with_values(tmp_path))
+
+
+@pytest.mark.parametrize(
+    ("change", "message"),
+    [
+        (
+            {gen.VALUE_COMPARISON_KEY: "pwquality_minlen"},
+            "value_comparison needs 'profile_value' or 'profile_value_id'",
+        ),
+        (
+            {"profile_value": "var_password_pam_minlen", gen.VALUE_COMPARISON_KEY: "equal"},
+            "value_comparison must name a comparator of",
+        ),
+        (
+            {"profile_value_id": MINLEN, gen.VALUE_COMPARISON_KEY: ["pwquality_minlen"]},
+            "value_comparison must name a comparator of",
+        ),
+        (
+            {"parameters": {gen.VALUE_COMPARISON_KEY: "pwquality_minlen"}},
+            "parameters must be a mapping without the generated keys",
+        ),
+        ({"extra": 1}, "with an optional 'value_comparison'"),
+    ],
+)
+def test_an_invalid_value_comparison_is_refused(change: dict[str, object], message: str) -> None:
     data = source_document()
     native = cast("list[dict[str, object]]", data["native_rules"])
     native[0].update(change)
