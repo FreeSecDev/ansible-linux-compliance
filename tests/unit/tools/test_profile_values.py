@@ -431,11 +431,45 @@ class Rewriting:
     def validate(self, raw: object, /) -> str:
         return f"+{raw}"
 
+    def read_profile(self, text: str, /) -> str:
+        return self.validate(text)
+
     def meets(self, candidate: str, profile: str, /) -> bool:
         return candidate == profile
 
     def stricter(self, first: str, _second: str, /) -> str:
         return first
+
+
+class ProfileOnly(Rewriting):
+    """A comparator that takes a profile value as it is but refuses it as an override."""
+
+    def validate(self, raw: object, /) -> str:
+        message = f"one keyword only, got {raw!r}"
+        raise comparators.ValueOverrideError(message)
+
+    def read_profile(self, text: str, /) -> str:
+        return text
+
+
+def test_a_profile_value_is_read_as_a_profile_value_not_as_an_override(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(comparators, "COMPARATORS", {"profile_only": ProfileOnly()})
+    built = gen.build(gen.parse_source(compared_document("profile_only")), with_values(tmp_path))
+    crontab = next(
+        rule for rule in built.rules if rule["rule_id"] == RULE + "file_permissions_crontab"
+    )
+    assert cast("dict[str, object]", crontab["parameters"])[gen.VALUE_COMPARISON_KEY] == (
+        "profile_only"
+    )
+
+
+def test_a_choice_set_takes_a_profile_value_of_several_choices() -> None:
+    choices = comparators.comparator("auditd_choice_disk_error_action")
+    assert choices.read_profile("syslog|single|halt") == "syslog|single|halt"
+    with pytest.raises(comparators.ValueOverrideError, match="not a set of them"):
+        choices.validate("syslog|single|halt")
 
 
 def test_a_value_comparison_that_rewrites_a_profile_value_is_an_error(

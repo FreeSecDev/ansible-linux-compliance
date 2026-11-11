@@ -1,0 +1,16 @@
+---
+minor_changes:
+  - >-
+    module_utils - the ``values`` helper of ADR 0032 (FREES-203) gets comparators for the text families: the sshd
+    numbers in whole seconds or counts (0 the loosest where it turns ``ClientAliveInterval``,
+    ``ClientAliveCountMax`` or ``LoginGraceTime`` off), ``MaxStartups`` compared per component, ``KexAlgorithms``
+    and ``MACs`` as a subset of the profile's list without the ``+``, ``-`` and ``^`` modifiers, the sudo
+    ``timestamp_timeout`` and ``logfile``, kernel parameters compared exactly in plain decimal form, and each auditd
+    setting, an action being one keyword of that setting's own vocabulary. Each takes only the forms that its reader
+    reads back as written; ``5m``, ``+4``, a single ``MaxStartups`` number, repeated algorithms, ``010`` or an action
+    that auditd refuses for the setting are refused. Nothing uses them yet, so remediation is unchanged.
+  - >-
+    catalogue - ``make catalogue`` reads the profile values of a rule with a ``value_comparison`` through the
+    comparator's new ``read_profile``, so an auditd choice set such as ``syslog|single|halt`` is taken as a profile
+    value while an override stays one keyword. No rule names a comparator yet, so the generated catalogue is
+    unchanged.
