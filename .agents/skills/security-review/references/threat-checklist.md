@@ -41,7 +41,7 @@ Mark each item `satisfied`, `not applicable` or `violated` in the review comment
 - [ ] No `pull_request_target` or `workflow_run` executes untrusted code with secrets or write tokens.
 - [ ] Untrusted input is passed to scripts through environment variables, never interpolated into `run:`.
 - [ ] Caches written by untrusted runs cannot be restored by privileged runs.
-- [ ] Release jobs verify tag, commit approval, required checks and artifact digests.
+- [ ] Release jobs verify tag, the verdict marker for the merged head (ADR 0033), required checks and artifact digests.
 
 ## AWS
 

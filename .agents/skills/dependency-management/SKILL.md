@@ -4,7 +4,7 @@ description: Automated dependency updates and vulnerability triage for the FreeS
 license: Apache-2.0
 metadata:
   owner: lead-architect
-  version: "1.0.0"
+  version: "1.0.1"
 ---
 
 # Dependency management
@@ -43,7 +43,7 @@ duplicate pull requests. Pinning rules from `AGENTS.md` are kept current, not re
 - Set pull request concurrency and hourly limits.
 - Major updates are never gated on dashboard approval (the owner is not asked to approve). They wait 14 days, are labelled `breaking-change`, get their own pull request and get an independent reviewer's verdict (ADR 0033) and pass all required checks.
 - Labels: `dependencies` plus an ecosystem label.
-- Pull request body includes `Refs: FREES-<maintenance-issue>`; commits follow Conventional Commits.
+- Pull request body ends with `Refs: FREES-<maintenance-issue>` as its last line, because it becomes the squash commit message; commits follow Conventional Commits. Dependabot cannot add that footer to the body it writes and has no Jira key, so its pull requests are exempt from the `pr-body` check; the gap is tracked on FREES-81.
 - No automerge that bypasses required checks. Automerge, if allowed at all, applies only to digest and patch updates after every required check passes; an ADR decides.
 - Triage uses the severity SLA table in the reference. Never suppress a finding without a written justification, and every ignore entry has an owner and an expiry date.
 

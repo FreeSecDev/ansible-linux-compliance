@@ -90,6 +90,7 @@ UNIT_PYTHONS := 3.9 3.12 3.14
 BROWSER_TEST_DIR := build/browser-test
 PYTEST_WORKERS ?= auto
 PYTEST_PARALLEL := -n $(PYTEST_WORKERS) --dist worksteal
+PR_BODY_FILE ?=
 NAME_SET_PYTHONS := 3.9 3.10 3.11 3.12 3.13 3.14 3.15
 NAME_SET_PYTHON ?=
 NAME_SET_DIRECTORY := build/name-sets
@@ -278,6 +279,7 @@ Formatting and linting
   lint-repo             Repository source rules (document start, comments, banned modules)
   name-sets             Probe Python 3.9 to 3.15 and regenerate the guard name sets
   lint-skills           Validate agent skills under .agents/skills
+  lint-pr-body          Check that the body in PR_BODY_FILE ends with Refs: FREES-<n> (PR_AUTHOR, PR_HEAD_REF optional)
   lint-ansible          ansible-lint (production profile), role argument spec check and antsibull-changelog lint
   lint-toggles          Fail when the generated toggles, their argument specs or their reference drift from the catalogue
   toggles               Regenerate the toggle defaults, argument specs and docs/remediation-variables.md
@@ -372,7 +374,7 @@ endef
 export HELP_TEXT
 
 .PHONY: help bootstrap install format lint lint-ansible lint-toggles toggles lint-role-guards role-guards lint-lifecycle content catalogue stig-mapping lint-python lint-yaml lint-actions \
-	lint-containerfile oscap-image scc-expiry-check scc-fetch scc-image scc-image-ubuntu2604 scc-smoke scc-integration scc-own-expiry-check scc-image-clean scc-release-watch lint-iac lock-check tofu-validate aws-bootstrap-render lint-packer lint-repo lint-skills security typecheck test test-unit test-sanity test-audit-exceptions test-evidence test-remediate-check test-remediate-disruptive test-role-guards test-verify \
+	lint-containerfile oscap-image scc-expiry-check scc-fetch scc-image scc-image-ubuntu2604 scc-smoke scc-integration scc-own-expiry-check scc-image-clean scc-release-watch lint-iac lock-check tofu-validate aws-bootstrap-render lint-packer lint-repo lint-skills lint-pr-body security typecheck test test-unit test-sanity test-audit-exceptions test-evidence test-remediate-check test-remediate-disruptive test-role-guards test-verify \
 	test-ansible-units package-check collection-tree collection-link sanity-pythons name-sets test-name-sets \
 	test-integration test-coverage test-content-golden test-oscap-integration test-browser browser-test-deps molecule-dependencies molecule-content molecule-matrix auditd-conf-verdicts \
 	molecule-affected molecule-plan molecule-collections-fetch molecule-collections-lock molecule-images-build molecule-images-plan molecule-images-ids pam-reader-verdicts \
@@ -490,6 +492,10 @@ lint-repo: require-uv
 
 lint-skills: require-uv
 	$(RUN) python tools/skills/validate_skills.py
+
+lint-pr-body: require-uv
+	@if [ -z '$(PR_BODY_FILE)' ]; then printf 'error: set PR_BODY_FILE to a file that holds the pull request body\n' >&2; exit 2; fi
+	uv run --no-project python -I tools/lint/check_pr_body.py --body-file '$(PR_BODY_FILE)' --author "$${PR_AUTHOR:-}" --head-ref "$${PR_HEAD_REF:-}"
 
 lint-ansible: require-uv collection-link molecule-dependencies
 	$(RUN) ansible-lint

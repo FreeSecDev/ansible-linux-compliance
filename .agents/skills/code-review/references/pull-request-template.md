@@ -2,6 +2,10 @@
 
 The file `.github/pull_request_template.md` is created from the block below by a separate task.
 
+The body becomes the squash commit message on `main`, so the template ends with the `Refs: FREES-<n>` footer. Keep
+it the last line and put attribution lines above it. A note such as "Generated with ..." goes in a paragraph of its
+own; only trailer lines (`Key: value`, such as `Co-Authored-By:`) may share the footer's paragraph.
+
 ```markdown
 ## Summary
 <What changed and why, in a few lines.>
@@ -34,4 +38,7 @@ FREES-<n>
 - [ ] No inline comments, secrets or unpinned references
 - [ ] Tests and docs updated; required CI is green including the report artifact
 - [ ] Reviewer is not the author
+- [ ] The last line of this body is `Refs: FREES-<n>`; attribution lines come before it
+
+Refs: FREES-NNN
 ```

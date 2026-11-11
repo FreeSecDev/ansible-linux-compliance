@@ -73,8 +73,9 @@ overriding them.
 | `lint-python` | implemented | Ruff lint, Ruff format check, Pylint (`tools`, `tests`, `plugins`) |
 | `lint-yaml` | implemented | `yamllint --strict` |
 | `lint-actions` | implemented | actionlint |
-| `lint-repo` | implemented | `tools/lint/check_repo_rules.py` on every tracked and new file, including symbolic links and files without a suffix; it refuses compiled module files (`.so`, `.pyd`, `.pyc`, `.pyo`, `.fwork`, any case) and code outside `plugins/` in a location from which Ansible loads code (FREES-156), and anything that would use the scanner's remediation: Python outside `tests/unit/`, `docs/` and `changelogs/` that names XCCDF `fix` elements, committed ComplianceAsCode or OpenSCAP remediation content, and invocations of the scanner's remediation or of scripts it provides ([ADR 0025](adr/0025-own-ansible-remediation-only.md), FREES-188); and a remediation family whose task files do not have an internal variable prefix of their own (`__linux_compliance_remediate_<xx>_`, one per family and its helpers, used by no other family; FREES-208) |
+| `lint-repo` | implemented | `tools/lint/check_repo_rules.py` on every tracked and new file, including symbolic links and files without a suffix; it refuses compiled module files (`.so`, `.pyd`, `.pyc`, `.pyo`, `.fwork`, any case) and code outside `plugins/` in a location from which Ansible loads code (FREES-156), and anything that would use the scanner's remediation: Python outside `tests/unit/`, `docs/` and `changelogs/` that names XCCDF `fix` elements, committed ComplianceAsCode or OpenSCAP remediation content, and invocations of the scanner's remediation or of scripts it provides ([ADR 0025](adr/0025-own-ansible-remediation-only.md), FREES-188); in a task file below `roles/remediate` it refuses every module that is not an `ansible.builtin` module that ansible-core leaves in place and that does not choose its module at run time (`gather_facts`, `package` and `service` are refused), a `freesecdev.linux_compliance` module or an allow-listed community module with pinned collection, by its fully qualified name, an `action` whose module is not a plain string, and role includes, role dependencies and task includes outside `{{ role_path }}/tasks/`, and below its `tasks/`, `handlers/` and `meta/` every file that is not a readable `.yml` or `.yaml` task list or metadata mapping, or that holds a JSON load marker key (`__ansible_*`), which Ansible could still load ([ADR 0032](adr/0032-operator-control-community-modules-and-value-overrides.md) §1, FREES-203); in every task list it refuses names that Ansible learns only at run time: templated `set_fact` keys outside `extensions/molecule/`, templated `args`, `module_defaults` entries and free-form arguments, and templated or execution-altering `loop_var`, `index_var`, `register` and `include_vars`/`vars_prompt` names (FREES-203); and a remediation family whose task files do not have an internal variable prefix of their own (`__linux_compliance_remediate_<xx>_`, one per family and its helpers, used by no other family; FREES-208) |
 | `lint-skills` | implemented | `tools/skills/validate_skills.py` |
+| `lint-pr-body` | implemented | `tools/lint/check_pr_body.py` on the pull request body in `PR_BODY_FILE`: the last line is `Refs: FREES-<n>` in a paragraph of trailer lines only, and lists the key of a `<type>/FREES-<n>-<slug>` branch in `PR_HEAD_REF`; a `PR_AUTHOR` of `dependabot[bot]` is exempt (FREES-81). Standard library only, run with `uv run --no-project`; not part of `lint`, because it needs the body |
 | `security` | implemented | Bandit (`tools`, `plugins`), Checkov on `infra/`, gitleaks history scan, zizmor (pedantic persona) |
 | `aws-bootstrap` | implemented | Renders and runs the one-time interactive AWS account bootstrap ([docs/aws/bootstrap.md](aws/bootstrap.md)); never run by CI |
 | `typecheck` | implemented | mypy strict, Pyright strict |
@@ -433,6 +434,19 @@ Configuration relaxations, each with its reason:
 are stable, so the required check name `ci-gate` does not change. Runs for pull requests cancel superseded
 runs; runs on `main` and merge groups are never cancelled. `docs` is part of `make ci` locally and is
 added as a job together with the documentation pipeline (FREES-80).
+
+`.github/workflows/pr-body.yml` runs the job `refs-footer` for every pull request to `main` when it is opened, edited,
+reopened or pushed to: `make lint-pr-body` on the body, author and head branch of the event. The step reads the body
+with `jq` from the event file (`$GITHUB_EVENT_PATH`) into `$RUNNER_TEMP/pr-body.txt`, so a large body never passes
+through an environment variable; the author and head branch reach it through environment variables, and nothing from
+the event is interpolated into the script. The squash commit message is the pull request body, so this keeps the
+`Refs: FREES-<n>` footer of AGENTS.md on the squash commit on `main`. There it is not the last line and not a Git
+trailer, because GitHub appends `Co-authored-by:` lines after the body
+([ADR 0033](adr/0033-review-policy-independent-verdict-without-required-approval.md#amendment-2026-11-10-the-pull-request-body-ends-with-the-jira-footer-frees-204)).
+It has `contents: read` only and is not part of `ci-gate`: `ci.yml` does not run when only the body is edited, and the
+ruleset does not require the check, so the `code-review` skill has the reviewer confirm it passed. A pull request runs its own copy of the workflow and
+of `tools/lint/check_pr_body.py`, so a change to either is reviewed like any other change. Requiring it would
+also need a `merge_group` trigger, because the merge queue waits for every required check.
 
 `.github/workflows/scc-release-watch.yml` runs the job `scc-release-watch` daily at 05:43 UTC and on manual dispatch,
 on `main` only: `make scc-release-watch SCC_RELEASE_WATCH_ISSUES=true` with `GH_TOKEN` set to the job token. It is the

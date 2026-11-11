@@ -7,6 +7,12 @@ Record each item as satisfied, not applicable (with reason) or violated.
 - [ ] Branch name matches `<type>/FREES-<n>-<slug>`.
 - [ ] Title is a Conventional Commit and references `FREES-<n>`.
 - [ ] Commits end with `Refs: FREES-<n>`.
+- [ ] The last line of the pull request body is `Refs: FREES-<n>`, in a paragraph of trailer lines only, with any
+  attribution lines before it; the `pr-body` check passed for the current body. Not applicable to a Dependabot
+  pull request (FREES-81).
+- [ ] If the pull request changes `.github/workflows/pr-body.yml`, `tools/lint/check_pr_body.py` or the
+  `lint-pr-body` target, that change was reviewed: a pull request runs its own copy of the workflow and the checker,
+  so its `pr-body` result proves only what its own version checks.
 - [ ] Jira issue updated with PR and CI links.
 - [ ] Interface change links an accepted ADR.
 
@@ -20,6 +26,10 @@ Record each item as satisfied, not applicable (with reason) or violated.
 - [ ] No secrets, tokens, host evidence or restricted benchmark content.
 - [ ] Audit mode changes nothing on a managed host; remediation is opt-in.
 - [ ] No suppression without documented justification.
+- [ ] A change to `roles/remediate`, `meta/runtime.yml` or the module rule of ADR 0032 §1
+      (`tools/lint/repo_rules/remediate_*.py` and its tests) is checked for module-rule bypasses that the rule does
+      not catch: Jinja plugins of other collections, files the role plants, routing, play settings and edits of the
+      rule itself (ADR 0032, boundary of 2026-11-10).
 
 ## Verification
 
@@ -34,5 +44,7 @@ Record each item as satisfied, not applicable (with reason) or violated.
 - [ ] Reviewer is not the author.
 - [ ] `security-review` invoked when its triggers apply, verdict linked.
 - [ ] Branch rebased onto latest `main`.
+- [ ] A push after the last verdict that only brings in `main` passed the range-diff check (rebase) or the merge
+  re-review (merge of `main`) of [re-review-after-main.md](re-review-after-main.md), including the semantic checks.
 - [ ] Squash merge selected; branch auto-delete enabled.
 - [ ] Verdict and PR link recorded in Jira.

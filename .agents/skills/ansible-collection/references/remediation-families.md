@@ -14,8 +14,17 @@ Each family is one file, `roles/remediate/tasks/<family>.yml`, covering a narrow
    toggle defaults, argument specs and `docs/remediation-variables.md` (`make lint` fails on drift), and
    `make role-guards` to regenerate the static family dispatch `tasks/dispatch.yml` (only families with a native
    rule are dispatched) and the internal-variable guard `tasks/internal_variables.yml`.
-3. Choose a native module (`ansible.posix.sysctl`, `ansible.builtin.lineinfile`, `ansible.builtin.file`,
-   `ansible.builtin.service`, `community.general.*`). If none exists, stop and request a project module.
+3. Choose a module by its fully qualified name: an `ansible.builtin` module of `BUILTIN_MODULES`
+   (`ansible.builtin.copy`, `ansible.builtin.file`, `ansible.builtin.stat`, `ansible.builtin.slurp`; a name such as
+   `ansible.builtin.make` or `ansible.builtin.sysctl`, which ansible-core redirects to a community collection, is
+   refused, and so are `gather_facts`, `package` and `service`, which pick their module at run time), a module of
+   this collection that `meta/runtime.yml` does not redirect, or a community module on the allow list of
+   [ADR 0032](../../../../docs/adr/0032-operator-control-community-modules-and-value-overrides.md) §1
+   (`ALLOWED_COMMUNITY_MODULES` in `tools/lint/repo_rules/remediate_modules.py`; empty today). A community module
+   that is not listed is refused by `make lint-repo`; listing one needs the security review of ADR 0032 §1 and its
+   collection pinned at one exact version in `galaxy.yml`, `extensions/molecule/requirements.yml` and
+   `extensions/molecule/collections.pins`. `ansible.posix.sysctl`, for example, runs `sysctl` without a timeout and
+   is refused. If no allowed module fits, stop and request a project module.
 4. Prefer a collection-owned drop-in file named `50-freesecdev-linux-compliance-<family>.<ext>` over in-place edits.
 5. For in-place edits and package or service changes, record the prior state with
    `freesecdev.linux_compliance.control_state` before changing anything.
@@ -55,6 +64,18 @@ family, never a templated file name (FREES-137). Family files record and remove 
 
 - Importing or copying ComplianceAsCode generated remediation playbooks.
 - `ansible.builtin.shell`, `command`, `raw`, `script` or aliases in any form.
+- A short module name, an `ansible.legacy` name, a templated module name, an `ansible.builtin` name that ansible-core
+  redirects or removes, `ansible.builtin.gather_facts`, `package` or `service` (their action plugins pick the module
+  at run time; reload units with `ansible.builtin.systemd_service`), an `action` whose module is not a plain string,
+  or a community module that is not on the allow list, in any YAML task file below `roles/remediate`.
+- A templated `set_fact` key outside `extensions/molecule/`, a template as `args`, as a `module_defaults` entry or in
+  a free-form argument string, and a templated or execution-altering `loop_var`, `index_var`, `register` or
+  `include_vars`/`vars_prompt` `name`, anywhere: Ansible learns these names only at run time.
+- `include_role`, `import_role` or a role dependency in `roles/remediate`, and an `include_tasks` or `import_tasks`
+  target other than `{{ role_path }}/tasks/<file>`.
+- A file below `roles/remediate/tasks/`, `handlers/` or `meta/` that does not end in `.yml` or `.yaml`, that PyYAML
+  cannot read, or whose document is not a task list (`meta/`: a mapping), such as `handlers/main.json`,
+  `handlers/main` or a vaulted file: Ansible loads it, but the module check could not read it.
 - One large file for unrelated controls.
 - Nested toggle dictionaries, or a rule without a toggle.
 - A rule without a revert path, unless it is catalogued as `irreversible` with a runbook.

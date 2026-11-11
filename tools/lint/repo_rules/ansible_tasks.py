@@ -111,7 +111,7 @@ def _is_templated(text: str) -> bool:
     return any(marker in text for marker in TEMPLATE_MARKERS)
 
 
-def _action_modules(value: yaml.Node) -> Iterable[yaml.ScalarNode]:
+def action_modules(value: yaml.Node) -> Iterable[yaml.ScalarNode]:
     """Yield the scalars that name the module of an ``action`` style value.
 
     Every ``module`` key of the mapping form is yielded, so a duplicated key
@@ -132,7 +132,7 @@ def _action_findings(value: yaml.Node) -> Iterable[tuple[yaml.Node, str]]:
     the ``module`` key of the mapping form, so ``module: shell echo hi`` names
     ``shell``. A templated module name cannot be checked statically and is denied.
     """
-    for module in _action_modules(value):
+    for module in action_modules(value):
         words = str(module.value).split(maxsplit=1)
         if not words:
             continue

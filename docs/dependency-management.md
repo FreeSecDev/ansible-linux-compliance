@@ -68,6 +68,9 @@ A new ecosystem must be assigned to exactly one bot in this table in the same pu
   on the dependency dashboard, which is informational only.
 - Concurrency is limited (Dependabot 5 open pull requests, Renovate 5 concurrent and 2 per hour).
 - Commits use the Conventional Commit type `build`, for example `build(deps): bump ...`.
+- Dependabot writes its own pull request body, which becomes the squash commit message, and has no Jira key. Its
+  pull requests are therefore exempt from the rule that the body ends with `Refs: FREES-<n>`, and the `pr-body` check
+  accepts them ([CONTRIBUTING](../CONTRIBUTING.md)). The gap is tracked on FREES-81.
 - Labels: `dependencies` plus an ecosystem label such as `python` or `ci`.
 - Automerge is disabled. Every update goes through the same review and required checks as any other change.
 - Update pull requests are untrusted code: they receive no cloud role and no secrets. Reviewers check changelogs,

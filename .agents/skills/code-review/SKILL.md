@@ -4,7 +4,7 @@ description: Pull request review and acceptance for the FreeSecDev compliance pl
 license: Apache-2.0
 metadata:
   owner: lead-architect
-  version: "1.1.0"
+  version: "1.2.0"
 ---
 
 # Code review
@@ -23,6 +23,8 @@ an independent agent or a human.
 - The pull request, its Jira issue `FREES-<n>`, and the linked ADRs.
 - CI results including the report artifact.
 - The checklist in [references/pr-checklist.md](references/pr-checklist.md).
+- For a re-review after an update from `main`: the head named in the last verdict marker, and
+  [references/re-review-after-main.md](references/re-review-after-main.md).
 
 ## Outputs
 
@@ -34,6 +36,12 @@ an independent agent or a human.
 ## Conventions
 
 - Branch name is `<type>/FREES-<n>-<slug>`; the pull request title is a Conventional Commit with the FREES reference.
+- The pull request body is the squash commit message, so its last line is `Refs: FREES-<n>`, in a paragraph of
+  trailer lines only. It is the last line of the body, not of the commit: GitHub appends `Co-authored-by:` lines, so
+  on `main` the footer is not a Git trailer. Attribution lines, such as `Co-Authored-By:` or a "Generated with" note, come before it. The
+  `pr-body` workflow (`make lint-pr-body`) checks this on every pull request; it is not a required check, so the
+  reviewer confirms it passed for the current body. Dependabot pull requests are exempt: Dependabot writes its own
+  body and has no Jira key; the gap is tracked on FREES-81.
 - Interface changes link an accepted ADR.
 - Tests are added or updated and pass; documentation is updated in the same pull request.
 - No `shell`, `command`, `raw` or `script` modules or aliases, including in Molecule and test playbooks.
@@ -45,6 +53,10 @@ an independent agent or a human.
 - Required CI is green, including the report artifact; a skipped required check is a failure.
 - Invoke `security-review` whenever its trigger list applies; its blocking findings block the merge.
 - The branch is rebased onto the latest `main`; merge is squash only and the branch is deleted automatically.
+- A push after a verdict needs a new verdict for the new head. When the push only brings in `main`, a re-review of
+  that update replaces the full review (ADR 0033 §4, amendment of 2026-11-10): a rebase needs the range-diff check,
+  and a merge of `main` always needs the merge re-review. Both check for semantic conflicts. The steps are in
+  [references/re-review-after-main.md](references/re-review-after-main.md).
 - Review the diff, not the description; verify claims by running or reading the evidence.
 
 ## Quality gates
@@ -64,6 +76,11 @@ an independent agent or a human.
 - Missing documentation or changelog fragment because "it is small".
 - Tolerating a `# noqa` or skipped test with no justification.
 - Merging with a merge commit or without rebasing.
+- Accepting a merge of `main` because the tree "only adds `main`", without comparing it to `git merge-tree`, or
+  missing a semantic conflict that Git merged silently, such as a count, a shared name prefix or a threshold that
+  both sides changed.
+- A pull request body that ends with an attribution line instead of `Refs: FREES-<n>`, so the squash commit on `main`
+  carries no Jira footer.
 - Marking Jira done before the pull request merged.
 
 ## Security requirements
@@ -75,7 +92,7 @@ an independent agent or a human.
 
 ## Documentation requirements
 
-- Keep [references/pr-checklist.md](references/pr-checklist.md) and [references/pull-request-template.md](references/pull-request-template.md) aligned with `AGENTS.md`.
+- Keep [references/pr-checklist.md](references/pr-checklist.md), [references/pull-request-template.md](references/pull-request-template.md) and [references/re-review-after-main.md](references/re-review-after-main.md) aligned with `AGENTS.md` and ADR 0033.
 - The pull request template file under `.github/` is derived from the reference template.
 - Record changes to review policy as an ADR.
 
