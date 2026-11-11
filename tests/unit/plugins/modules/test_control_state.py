@@ -238,13 +238,16 @@ def test_the_ledger_location_and_owner_cannot_be_set_through_module_arguments() 
         "action",
         "applied_at",
         "collection_version",
+        "deviation",
         "family",
         "prior_values",
+        "recorded_at",
         "replace",
         "reveal_sensitive",
         "revert_strategy",
         "rule_id",
         "sensitive_prior_values",
+        "value",
     ]
 
 
@@ -450,6 +453,9 @@ class RecordingModule:
             "sensitive_prior_values": [],
             "collection_version": None,
             "applied_at": None,
+            "value": None,
+            "deviation": None,
+            "recorded_at": None,
             "replace": False,
             "reveal_sensitive": False,
             **params,
@@ -538,5 +544,305 @@ def test_return_documents_every_key_the_module_can_return() -> None:
         "entry",
         "entries",
         "count",
+        "deviation",
+        "deviations",
     } <= set(returned)
     assert returned["error_type"]["returned"] == "on failure"
+
+
+VALUE = {
+    "value_id": "var_password_pam_minlen",
+    "value_source": "override",
+    "profile_value": "14",
+    "target": "8",
+}
+DEVIATION = {"value_id": "var_password_pam_minlen", "profile_value": "14", "effective_value": "8"}
+
+
+def deviation_arguments(**changes: Any) -> dict[str, Any]:
+    values: dict[str, Any] = {
+        "action": "record_deviation",
+        "rule_id": RULE,
+        "deviation": dict(DEVIATION),
+        "collection_version": "0.1.0",
+        "recorded_at": STAMP,
+    }
+    values.update(changes)
+    return values
+
+
+def test_an_entry_without_a_value_reads_as_profile_and_keeps_version_1(
+    capsys: pytest.CaptureFixture[str], store: ledger.Ledger, state: Path
+) -> None:
+    _code, recorded = invoke(capsys, store, record_arguments())
+    assert recorded["entry"]["value"] is None
+    assert recorded["entry"]["value_source"] == "profile"
+    assert json.loads((state / "state.json").read_bytes())["schema_version"] == 1
+    _code, listing = invoke(capsys, store, {"action": "list"})
+    assert listing["deviations"] == []
+
+
+def test_record_with_a_value_writes_version_2_and_returns_it(
+    capsys: pytest.CaptureFixture[str], store: ledger.Ledger, state: Path
+) -> None:
+    code, recorded = invoke(capsys, store, record_arguments(value=dict(VALUE)))
+    assert code == 0
+    assert recorded["entry"]["value"] == VALUE
+    assert recorded["entry"]["value_source"] == "override"
+    assert '"value_source": "override"' in recorded["diff"]["after"]
+    assert json.loads((state / "state.json").read_bytes())["schema_version"] == 2
+    _code, fetched = invoke(capsys, store, {"action": "get", "rule_id": RULE})
+    assert fetched["entry"] == recorded["entry"]
+    _code, again = invoke(capsys, store, record_arguments(value=dict(VALUE)))
+    assert again["changed"] is False
+
+
+def test_a_changed_value_needs_replace(
+    capsys: pytest.CaptureFixture[str], store: ledger.Ledger
+) -> None:
+    invoke(capsys, store, record_arguments(value=dict(VALUE)))
+    stricter = {**VALUE, "target": "16"}
+    for different in (record_arguments(value=stricter), record_arguments()):
+        code, failed = invoke(capsys, store, different)
+        assert (code, failed["error_type"]) == (1, "conflict")
+    _code, would = invoke(capsys, store, record_arguments(value=stricter, replace=True), check=True)
+    assert would["changed"] is True
+    _code, replaced = invoke(capsys, store, record_arguments(value=stricter, replace=True))
+    assert replaced["entry"]["value"]["target"] == "16"
+    assert '"target": "8"' in replaced["diff"]["before"]
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        {**VALUE, "value_id": "Var_Minlen"},
+        {**VALUE, "target": "1\n6"},
+        {**VALUE, "profile_value": "x" * 4097},
+    ],
+)
+def test_an_invalid_value_fails_with_a_stable_error_type(
+    capsys: pytest.CaptureFixture[str], store: ledger.Ledger, state: Path, value: dict[str, Any]
+) -> None:
+    code, failed = invoke(capsys, store, record_arguments(value=value))
+    assert (code, failed["error_type"]) == (1, "invalid_entry")
+    assert not state.exists()
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        record_arguments(value={**VALUE, "value_source": "tailoring"}),
+        record_arguments(value={key: item for key, item in VALUE.items() if key != "target"}),
+        record_arguments(value={**VALUE, "extra": "x"}),
+        deviation_arguments(deviation=None),
+        deviation_arguments(collection_version=None),
+        deviation_arguments(rule_id=None),
+        deviation_arguments(deviation={"value_id": "var_x", "profile_value": "1"}),
+        {"action": "remove_deviation"},
+    ],
+)
+def test_incomplete_value_and_deviation_arguments_fail_before_anything_runs(
+    capsys: pytest.CaptureFixture[str], store: ledger.Ledger, state: Path, arguments: dict[str, Any]
+) -> None:
+    values = {key: item for key, item in arguments.items() if item is not None}
+    code, failed = invoke(capsys, store, values)
+    assert code == 1
+    assert "error_type" not in failed
+    assert not state.exists()
+
+
+@pytest.mark.parametrize(
+    ("arguments", "message"),
+    [
+        (deviation_arguments(value=dict(VALUE)), "value is only used with action=record"),
+        ({"action": "get", "rule_id": RULE, "value": dict(VALUE)}, "value is only used"),
+        ({"action": "list", "value": dict(VALUE)}, "value is only used"),
+        (
+            record_arguments(deviation=dict(DEVIATION)),
+            "deviation is only used with action=record_deviation",
+        ),
+        (
+            {"action": "remove_deviation", "rule_id": RULE, "deviation": dict(DEVIATION)},
+            "deviation is only used",
+        ),
+        (
+            record_arguments(recorded_at=STAMP),
+            "recorded_at is only used with action=record_deviation",
+        ),
+        ({"action": "remove", "rule_id": RULE, "recorded_at": STAMP}, "recorded_at is only used"),
+        (deviation_arguments(replace=True), "replace is not used with action=record_deviation"),
+        (
+            {"action": "remove_deviation", "rule_id": RULE, "replace": True},
+            "replace is not used with action=remove_deviation",
+        ),
+    ],
+)
+def test_an_option_the_action_does_not_use_fails_before_the_ledger_is_read(
+    capsys: pytest.CaptureFixture[str],
+    store: ledger.Ledger,
+    state: Path,
+    arguments: dict[str, Any],
+    message: str,
+) -> None:
+    code, failed = invoke(capsys, store, arguments)
+    assert code == 1
+    assert failed["failed"] is True
+    assert failed["msg"].startswith(message)
+    assert "error_type" not in failed
+    assert not state.exists()
+
+
+def test_a_misplaced_option_never_touches_an_existing_ledger(
+    capsys: pytest.CaptureFixture[str], store: ledger.Ledger, state: Path
+) -> None:
+    invoke(capsys, store, record_arguments())
+    before = (state / "state.json").read_bytes()
+    fake = raw_run(store, {"action": "remove", "rule_id": RULE, "value": dict(VALUE)})
+    assert fake.exited == []
+    assert fake.failed == [{"msg": "value is only used with action=record"}]
+    assert (state / "state.json").read_bytes() == before
+    for arguments in (record_arguments(replace=True), deviation_arguments(replace=False)):
+        code, _result = invoke(capsys, store, arguments)
+        assert code == 0
+    unused = {"value": None, "deviation": None, "recorded_at": None, "replace": True}
+    assert control_state.misplaced_option({"action": "list", **unused}) is None
+
+
+def test_record_list_and_remove_a_deviation(
+    capsys: pytest.CaptureFixture[str], store: ledger.Ledger, state: Path
+) -> None:
+    invoke(capsys, store, record_arguments())
+    before = (state / "state.json").read_bytes()
+    code, recorded = invoke(capsys, store, deviation_arguments())
+    assert code == 0
+    expected = {
+        **DEVIATION,
+        "rule_id": RULE,
+        "recorded_at": STAMP,
+        "collection_version": "0.1.0",
+    }
+    assert recorded == {
+        "action": "record_deviation",
+        "changed": True,
+        "deviation": expected,
+        "diff": {"before": "", "after": json.dumps(expected, indent=2, sort_keys=True) + "\n"},
+        "ledger_path": f"{state}/state.json",
+    }
+    _code, again = invoke(capsys, store, deviation_arguments(recorded_at="2026-11-01T00:00:00Z"))
+    assert again["changed"] is False
+    assert again["deviation"]["recorded_at"] == STAMP
+    _code, listing = invoke(capsys, store, {"action": "list", "family": "pam"})
+    assert listing["entries"] == []
+    assert listing["deviations"] == [expected]
+    _code, removed = invoke(capsys, store, {"action": "remove_deviation", "rule_id": RULE})
+    assert removed["changed"] is True
+    assert removed["found"] is True
+    assert removed["diff"] == {"before": recorded["diff"]["after"], "after": ""}
+    assert (state / "state.json").read_bytes() == before
+    _code, missing = invoke(capsys, store, {"action": "remove_deviation", "rule_id": RULE})
+    assert (missing["changed"], missing["found"]) == (False, False)
+
+
+def test_a_changed_deviation_is_replaced(
+    capsys: pytest.CaptureFixture[str], store: ledger.Ledger
+) -> None:
+    invoke(capsys, store, deviation_arguments())
+    looser = {**DEVIATION, "effective_value": "6"}
+    _code, replaced = invoke(capsys, store, deviation_arguments(deviation=looser))
+    assert replaced["changed"] is True
+    assert '"effective_value": "8"' in replaced["diff"]["before"]
+    assert replaced["deviation"]["effective_value"] == "6"
+
+
+def test_record_deviation_defaults_the_time_to_now(
+    capsys: pytest.CaptureFixture[str], store: ledger.Ledger
+) -> None:
+    arguments = deviation_arguments()
+    del arguments["recorded_at"]
+    _code, recorded = invoke(capsys, store, arguments)
+    assert recorded["deviation"]["recorded_at"].endswith("Z")
+    assert len(recorded["deviation"]["recorded_at"]) == len(STAMP)
+
+
+def test_check_mode_never_writes_a_deviation(
+    capsys: pytest.CaptureFixture[str], store: ledger.Ledger, state: Path
+) -> None:
+    _code, would = invoke(capsys, store, deviation_arguments(), check=True)
+    assert would["changed"] is True
+    assert not state.exists()
+    _code, nothing = invoke(
+        capsys, store, {"action": "remove_deviation", "rule_id": RULE}, check=True
+    )
+    assert nothing["changed"] is False
+    assert not state.exists()
+    invoke(capsys, store, deviation_arguments())
+    before = (state / "state.json").read_bytes()
+    looser = {**DEVIATION, "effective_value": "6"}
+    _code, replaced = invoke(capsys, store, deviation_arguments(deviation=looser), check=True)
+    assert replaced["changed"] is True
+    _code, removed = invoke(
+        capsys, store, {"action": "remove_deviation", "rule_id": RULE}, check=True
+    )
+    assert removed["changed"] is True
+    assert (state / "state.json").read_bytes() == before
+
+
+@pytest.mark.parametrize(
+    ("changes", "expected"),
+    [
+        ({"rule_id": "short_id"}, "invalid_entry"),
+        ({"collection_version": "one"}, "invalid_entry"),
+        ({"recorded_at": "yesterday"}, "invalid_entry"),
+        ({"deviation": {**DEVIATION, "value_id": "VAR"}}, "invalid_entry"),
+        ({"deviation": {**DEVIATION, "effective_value": "8\x1b"}}, "invalid_entry"),
+    ],
+)
+def test_an_invalid_deviation_fails_with_a_stable_error_type(
+    capsys: pytest.CaptureFixture[str],
+    store: ledger.Ledger,
+    state: Path,
+    changes: dict[str, Any],
+    expected: str,
+) -> None:
+    code, failed = invoke(capsys, store, deviation_arguments(**changes))
+    assert (code, failed["error_type"]) == (1, expected)
+    assert not state.exists()
+    code, failed = invoke(capsys, store, {"action": "remove_deviation", "rule_id": "short_id"})
+    assert (code, failed["error_type"]) == (1, "invalid_entry")
+
+
+def test_a_corrupt_ledger_fails_the_register_actions(
+    capsys: pytest.CaptureFixture[str], store: ledger.Ledger, state: Path
+) -> None:
+    state.mkdir(mode=0o700)
+    target = state / "state.json"
+    target.write_text('{"schema_version": 2, "entries": [], "deviations": []}', encoding="utf-8")
+    target.chmod(0o600)
+    for arguments in (
+        deviation_arguments(),
+        {"action": "remove_deviation", "rule_id": RULE},
+        {"action": "list"},
+    ):
+        code, failed = invoke(capsys, store, arguments)
+        assert (code, failed["error_type"]) == (1, "corrupt")
+    assert target.read_text(encoding="utf-8") == (
+        '{"schema_version": 2, "entries": [], "deviations": []}'
+    )
+
+
+def test_the_documented_value_choices_match_the_ledger() -> None:
+    documentation = yaml.safe_load(control_state.DOCUMENTATION)
+    spec = cast("dict[str, Any]", control_state.argument_spec())
+    for option in ("value", "deviation"):
+        documented = documentation["options"][option]["suboptions"]
+        assert sorted(documented) == sorted(spec[option]["options"])
+        for name, item in documented.items():
+            assert item.get("required", False) is spec[option]["options"][name]["required"]
+    sources = documentation["options"]["value"]["suboptions"]["value_source"]["choices"]
+    assert sources == list(control_state.SOURCES)
+    assert sorted(sources) == sorted(ledger.VALUE_SOURCES)
+    returned = yaml.safe_load(control_state.RETURN)
+    assert sorted(returned["deviation"]["contains"]) == sorted(
+        [*DEVIATION, "collection_version", "recorded_at", "rule_id"]
+    )
+    assert {"value", "value_source"} <= set(returned["entry"]["contains"])

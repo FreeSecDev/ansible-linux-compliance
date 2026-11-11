@@ -72,6 +72,7 @@ import yaml
 from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance import (
     toggles,
 )
+from tools import yaml_loader
 from tools.roles import check_lifecycle_topics, generate_toggles
 
 if TYPE_CHECKING:
@@ -236,7 +237,7 @@ class Tree:
         if text is None:
             return None
         try:
-            return cast("object", yaml.load(text, Loader=yaml.CSafeLoader))
+            return yaml_loader.safe_load(text)
         except yaml.YAMLError as error:
             message = f"{relative} is not valid YAML"
             raise FullMatrixError(message) from error

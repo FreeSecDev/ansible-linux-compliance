@@ -18,6 +18,11 @@ off-platform run, is refused, and so is a file whose own directory or the direct
 above it holds a ``scan-run.json`` that carries the marker, or one that cannot be read.
 Such a run is reported through its ``scan-run.json``, which carries the marker.
 
+XCCDF and ARF files carry no operator deviation either (FREES-203, ADR 0032): the
+scanner reports a pass under a looser value in force as a plain pass. A file next to a
+``scan-run.json`` of a findings schema this report cannot read (schema 1.3) is refused
+the same way, so a flagged pass never counts as a pass through its raw results.
+
 A copy taken out of its bundle is also refused by its content (FREES-164). A TestResult
 that SCC wrote (``test-system`` ``cpe:/a:niwc:scc``) lists, as ``platform`` children,
 the platforms that SCC matched to the target. When the benchmark declares operating system
@@ -52,7 +57,13 @@ from tools.reporting.common import (
     run_parser,
     sha256_hex,
 )
-from tools.reporting.compliance import COMPLETED, ComplianceData, summarize, tally_findings
+from tools.reporting.compliance import (
+    COMPLETED,
+    UNREADABLE_FINDINGS_VERSIONS,
+    ComplianceData,
+    summarize,
+    tally_findings,
+)
 from tools.reporting.xmlsafe import XmlNode, parse_xml
 
 ARF_ROOT_TAG: Final[str] = (
@@ -73,6 +84,11 @@ PLATFORM_REFUSAL: Final[str] = (
 OFF_PLATFORM_REFUSAL: Final[str] = (
     "these are the raw results of an off-platform scan run, which carry no off-platform "
     "marker and are never figured; report the run's scan-run.json instead"
+)
+DEVIATION_REFUSAL: Final[str] = (
+    "these are the raw results of a scan run of findings schema 1.3 (operator deviations), "
+    "which carry no deviation flag, so a flagged pass would count as a pass; they are never "
+    "figured"
 )
 
 
@@ -240,47 +256,53 @@ def _build_arf(data: bytes) -> ComplianceData:
     )
 
 
-def _neighbour_is_off_platform(candidate: Path, max_bytes: int) -> bool:
+def _neighbour(candidate: Path, max_bytes: int) -> model.ScanRun | None:
     try:
         data = read_input(candidate, max_bytes)
     except MissingInputError:
-        return False
+        return None
     except InvalidInputError:
         message = (
             f"{SCAN_RUN_NAME} next to these results cannot be read, so the report cannot tell "
-            "whether they are off-platform"
+            "whether they are off-platform or carry operator deviations"
         )
         raise InvalidInputError(message) from None
     try:
-        return model.loads(decode_text(data)).off_platform is not None
+        return model.loads(decode_text(data))
     except (model.ModelError, InvalidInputError):
         message = (
             f"{SCAN_RUN_NAME} next to these results is not a valid scan run, so the report "
-            "cannot tell whether they are off-platform"
+            "cannot tell whether they are off-platform or carry operator deviations"
         )
         raise InvalidInputError(message) from None
 
 
-def refuse_off_platform(path: Path, max_bytes: int) -> None:
-    """Refuse raw results of an off-platform run.
+def refuse_raw_results(path: Path, max_bytes: int) -> None:
+    """Refuse raw results of an off-platform run or of a run with operator deviations.
 
     Raises:
         InvalidInputError: If the file name ends with ``.off-platform.xml``, or a
             ``scan-run.json`` in its directory or the one above carries the
-            off-platform marker or cannot be read as a scan run.
+            off-platform marker, is of a findings schema version the report cannot
+            read, or cannot be read as a scan run.
     """
     if path.name.endswith(OFF_PLATFORM_SUFFIX):
         raise InvalidInputError(OFF_PLATFORM_REFUSAL)
     for directory in (path.parent, path.parent.parent):
-        if _neighbour_is_off_platform(directory / SCAN_RUN_NAME, max_bytes):
+        run = _neighbour(directory / SCAN_RUN_NAME, max_bytes)
+        if run is None:
+            continue
+        if run.off_platform is not None:
             raise InvalidInputError(OFF_PLATFORM_REFUSAL)
+        if run.schema_version in UNREADABLE_FINDINGS_VERSIONS:
+            raise InvalidInputError(DEVIATION_REFUSAL)
 
 
 def _guarded(
     path: Path, max_bytes: int, build: Callable[[bytes], ComplianceData]
 ) -> Callable[[bytes], ComplianceData]:
     def run(data: bytes) -> ComplianceData:
-        refuse_off_platform(path, max_bytes)
+        refuse_raw_results(path, max_bytes)
         return build(data)
 
     return run

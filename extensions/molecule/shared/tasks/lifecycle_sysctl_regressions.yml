@@ -458,6 +458,152 @@
         "{{ item }}": false
       loop: "{{ regression_toggles }}"
 
+- name: Kernel parameter regressions | Run the regression of a vendor file that a cleanup and an apply write in one run
+  when: regression_has_vendor_file | bool
+  block:
+    - name: Kernel parameter regressions | Add the rule of default.rp_filter, whose line is in the same vendor file
+      ansible.builtin.set_fact:
+        regression_default: xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_default_rp_filter
+        regression_default_toggle: linux_compliance_rule_sysctl_net_ipv4_conf_default_rp_filter_enabled
+        regression_vendor_toggle: >-
+          {{ lifecycle_rules | selectattr('rule_id', 'equalto', regression_vendor) | map(attribute='toggle')
+          | first }}
+        regression_four_rule_ids: "{{ lifecycle_rule_ids }}"
+
+    - name: Kernel parameter regressions | Refuse to run without the rule of default.rp_filter in the profile
+      ansible.builtin.assert:
+        that:
+          - regression_default in linux_compliance_discovered.rule_ids
+          - >-
+            lifecycle_native_rules | selectattr('rule_id', 'equalto', regression_default)
+            | map(attribute='toggle') | list == [regression_default_toggle]
+        fail_msg: "{{ regression_label }} need the rule {{ regression_default }} in the profile"
+        quiet: true
+
+    - name: Kernel parameter regressions | Narrow the runs to the rules of all.rp_filter and default.rp_filter
+      ansible.builtin.set_fact:
+        lifecycle_rule_ids: "{{ [regression_vendor, regression_default] }}"
+
+    - name: Kernel parameter regressions | Write the vendor file whose last line, without a line feed, is all.rp_filter
+      ansible.builtin.copy:
+        content: "net.ipv4.conf.default.rp_filter=2\nnet.ipv4.conf.all.rp_filter=2"
+        dest: "{{ regression_vendor_file }}"
+        mode: "0644"
+        owner: root
+        group: root
+
+    - name: Kernel parameter regressions | Switch all.rp_filter on and default.rp_filter off
+      ansible.builtin.set_fact:
+        "{{ item.name }}": "{{ item.enabled }}"
+      loop:
+        - name: "{{ regression_vendor_toggle }}"
+          enabled: true
+        - name: "{{ regression_default_toggle }}"
+          enabled: false
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: Kernel parameter regressions | Apply all.rp_filter, which edits the last line of the vendor file
+      ansible.builtin.include_tasks:
+        file: lifecycle_remediate.yml
+      vars:
+        lifecycle_check_mode: false
+
+    - name: Kernel parameter regressions | Check that all.rp_filter edited the vendor file
+      ansible.builtin.assert:
+        that:
+          - >-
+            lifecycle_results | items2dict(key_name='rule_id', value_name='status')
+            == {regression_vendor: 'applied'}
+        fail_msg: "{{ regression_label }}, apply of all.rp_filter: {{ lifecycle_results }}"
+        quiet: true
+
+    - name: Kernel parameter regressions | Remove the line feed after the line that the collection wrote, by hand
+      ansible.builtin.copy:
+        content: "net.ipv4.conf.default.rp_filter=2\nnet.ipv4.conf.all.rp_filter=1"
+        dest: "{{ regression_vendor_file }}"
+        mode: "0644"
+        owner: root
+        group: root
+
+    - name: Kernel parameter regressions | Switch all.rp_filter off and default.rp_filter on
+      ansible.builtin.set_fact:
+        "{{ item.name }}": "{{ item.enabled }}"
+      loop:
+        - name: "{{ regression_vendor_toggle }}"
+          enabled: false
+        - name: "{{ regression_default_toggle }}"
+          enabled: true
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: Kernel parameter regressions | Clean up all.rp_filter and apply default.rp_filter in the same vendor file
+      ansible.builtin.include_tasks:
+        file: lifecycle_remediate.yml
+      vars:
+        lifecycle_check_mode: false
+
+    - name: Kernel parameter regressions | Read the vendor file after the cleanup and the apply of one run
+      ansible.builtin.slurp:
+        src: "{{ regression_vendor_file }}"
+      register: regression_vendor_both
+
+    - name: Kernel parameter regressions | Check that the bytes after the cleanup are the ones the apply decided on
+      ansible.builtin.assert:
+        that:
+          - >-
+            lifecycle_results | items2dict(key_name='rule_id', value_name='status')
+            == {regression_vendor: 'restored', regression_default: 'applied'}
+          - >-
+            regression_vendor_both.content | b64decode
+            == 'net.ipv4.conf.default.rp_filter=1\nnet.ipv4.conf.all.rp_filter=2\n'
+        fail_msg: >-
+          {{ regression_label }}, cleanup and apply of one vendor file in one run (a pre-write SHA-256 check that does
+          not expect the line feed that lineinfile adds refuses the apply as modified_since_read):
+          {{ lifecycle_results }}
+        quiet: true
+
+    - name: Kernel parameter regressions | Switch default.rp_filter off
+      ansible.builtin.set_fact:
+        "{{ regression_default_toggle }}": false
+
+    - name: Kernel parameter regressions | Clean up default.rp_filter
+      ansible.builtin.include_tasks:
+        file: lifecycle_remediate.yml
+      vars:
+        lifecycle_check_mode: false
+
+    - name: Kernel parameter regressions | Read the vendor file after the last cleanup
+      ansible.builtin.slurp:
+        src: "{{ regression_vendor_file }}"
+      register: regression_vendor_last
+
+    - name: Kernel parameter regressions | Check that the original lines are back
+      ansible.builtin.assert:
+        that:
+          - >-
+            lifecycle_results | items2dict(key_name='rule_id', value_name='status')
+            == {regression_default: 'restored'}
+          - >-
+            regression_vendor_last.content | b64decode
+            == 'net.ipv4.conf.default.rp_filter=2\nnet.ipv4.conf.all.rp_filter=2\n'
+        fail_msg: "{{ regression_label }}, cleanup of default.rp_filter: {{ lifecycle_results }}"
+        quiet: true
+  always:
+    - name: Kernel parameter regressions | Put the vendor file back as built
+      ansible.builtin.copy:
+        content: "{{ regression_vendor_built.content | b64decode }}"
+        dest: "{{ regression_vendor_file }}"
+        mode: "0644"
+        owner: root
+        group: root
+
+    - name: Kernel parameter regressions | Switch both rp_filter rules off and narrow the runs to the four rules again
+      ansible.builtin.set_fact:
+        "{{ regression_vendor_toggle }}": false
+        "{{ regression_default_toggle }}": false
+        lifecycle_rule_ids: "{{ regression_four_rule_ids }}"
+
 - name: Kernel parameter regressions | Read the ledger after the regressions
   freesecdev.linux_compliance.control_state:
     action: list

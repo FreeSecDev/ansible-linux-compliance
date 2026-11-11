@@ -1,0 +1,14 @@
+---
+minor_changes:
+  - >-
+    findings model - schema 1.3 (FREES-203, ADR 0032): a finding may carry the result flag ``operator_deviation``
+    with a ``deviation`` (``value_id``, ``profile_value``, ``effective_value``), allowed only on ``pass``, ``fail``
+    and ``waived`` and kept when an exception waives the finding. The remediation status ``deviation`` is new, and a
+    remediation result may carry ``value_source``, ``profile_value``, ``effective_value`` and ``deviation``. A run
+    serializes as 1.3 only when it needs to; every other run keeps its bytes and digests. The enumerations moved to the
+    ``vocabulary`` module_utils and the deviation to ``deviations``; ``model`` re-exports them under their names.
+  - >-
+    reporting - a scan run of findings model schema 1.3, read from ``--scan-run``, ``--exceptions-evaluation`` or an
+    evidence bundle, is an input error until the report counts operator deviations, so a flagged pass never counts
+    as a pass (FREES-203). XCCDF and ARF results next to a ``scan-run.json`` of schema 1.3 (in the same directory or
+    the one above) are refused too, because raw results carry no deviation flag.

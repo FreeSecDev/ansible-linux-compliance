@@ -454,8 +454,8 @@ to the lower file), and a read of a directory returns `EISDIR` in both.
 **Open points, for FREES-212.**
 
 - `pam_unread_includes` checks each physical line on its own. libpam joins a line that ends in a backslash with the
-  next one, so `password include \` followed by ` ../security/x` opens `/etc/security/x`, which the collection does not
-  read, and the rule is not refused for it. The function's docstring states this.
+  next one, so a line `password include \` followed by a line that holds `../security/x` opens `/etc/security/x`,
+  which the collection does not read, and the rule is not refused for it. The function's docstring states this.
 - When none of `/etc/pam.d`, `/usr/lib/pam.d` and `/usr/share/pam.d` is a directory, libpam reads `/etc/pam.conf`
   instead (observed on both Molecule images). The role does not read that file, so a `pam_pwquality` argument there is
   missed on such a host and the rule is not refused. Both images ship `/usr/lib/pam.d/systemd-user`, so the case
