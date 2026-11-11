@@ -368,7 +368,7 @@ cannot be staged in Molecule without a program running beside the role, so the r
 test below.
 `tests/unit/roles/test_sysctl_plan_render.py` renders both refusals with the role's own Jinja, from files whose bytes
 on the disk differ from those read or that are gone (a changed vendor file of the cleanup refuses the rules to apply
-that were decided on its old bytes), and the refusal of a vendor file that is a link, and resolves the rules' values with the role's own resolution task instead of
+that were decided on its old bytes, and a file read through a symbolic link whose target changed refuses every rule), and the refusal of a vendor file that is a link, and resolves the rules' values with the role's own resolution task instead of
 the catalogue's raw value; it fails instead of skipping when `CI` is set and `ansible-playbook` or the collection link
 is missing. The adversarial cases of the third to eighth reviews stay open on FREES-208 and are still not in
 `cases.json`: the verdict generator runs `unshare --propagation private` and mounts a tmpfs over `/proc/sys` inside its
