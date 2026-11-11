@@ -180,7 +180,7 @@ the theme button. Each table prints its current page.
 - This cap is below some schema maxima: a report with the schema's maximum of 1,000,000 rules, each with its findings,
   is several hundred megabytes and above the string size a browser can parse. The browser tests use a report at the
   cap, with 1000 inputs in every section except Exceptions (whose evaluations share the compliance inputs), 9000 raw artifacts, detail lists past their 1000-entry cap and about
-  145,000 rules (each rule entry names its host, benchmark, content version and profile).
+  138,000 rules (each rule entry names its host, benchmark, content version, profile and deviation).
 
 ## Security
 
