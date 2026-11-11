@@ -4,13 +4,18 @@
 tool twice around the real readers in the Molecule images:
 
 * ``materialise CASES OUT`` writes every case of ``tests/fixtures/sysctl_reader/cases.json`` below
-  ``OUT/<case>/root`` as regular files, directories and symbolic links, relative to the root of an
-  instance, and ``OUT/proc.list``, the parameters of the private ``/proc/sys`` tree: every key of
-  every case, and each per-interface key for the interfaces ``all``, ``default``, ``eth0`` and
-  ``lo``, so that globs have interfaces to match;
+  ``OUT/<case>/root`` as regular files, directories, FIFOs and symbolic links, relative to the
+  root of an instance, ``OUT/proc.list``, the parameters of the private ``/proc/sys`` tree: every
+  key of every case, and each per-interface key for the interfaces ``all``, ``default``, ``eth0``
+  and ``lo``, so that globs have interfaces to match, and, for a case that names keys to
+  ``trace``, ``OUT/<case>/trace.list``, their paths below ``/proc/sys``;
 * ``parse CASES RAW OUT_JSON`` reads the files of that tree as each reader left them, recorded as
   base64, and writes the verdicts: for each reader (``systemd``, ``procps-4``, ``procps-3``) the
-  value written to every key of the case, or ``null`` when the key still holds the preset ``9``.
+  value written to every key of the case, or ``null`` when the key still holds the preset ``9``;
+  under ``timed_out`` the readers that the container stopped because they did not end in time (a
+  reader may block on a FIFO or read a device without end); and, for a traced case, under
+  ``writes`` every write of each reader to a traced key, in order, as ``[key, value]``
+  (``tools/molecule/sysctl_trace.py``), which must end with the value that the tree holds.
 
 No reader output is parsed: what a reader opened and wrote is what the kernel would have taken.
 Every case key must match the role's own key pattern (``CASE_KEY``), because the container
@@ -25,12 +30,15 @@ from __future__ import annotations
 import argparse
 import base64
 import json
+import os
 import re
 import sys
 from pathlib import Path
 from typing import Final, cast
 
 PRESET: Final[bytes] = b"9\n"
+TIMED_OUT: Final[str] = "timeout"
+FINISHED: Final[str] = "done"
 INTERFACES: Final[tuple[str, ...]] = ("all", "default", "eth0", "lo")
 INTERFACE_KEY: Final[re.Pattern[str]] = re.compile(r"^(net\.ipv[46]\.conf)\.[^.]+\.([^.]+)$")
 CASE_KEY: Final[re.Pattern[str]] = re.compile(r"^[a-z0-9_]+(\.[a-z0-9_]+){1,7}$")
@@ -84,6 +92,21 @@ def case_keys(case: dict[str, object]) -> list[str]:
     return keys
 
 
+def traced_keys(case: dict[str, object]) -> list[str]:
+    """Return the keys of a case whose every write is recorded, in the order of the case.
+
+    Raises:
+        CaseError: If a traced key is not a key of the case.
+    """
+    keys = case_keys(case)
+    traced = [str(key) for key in cast("list[object]", case.get("trace", []))]
+    for key in traced:
+        if key not in keys:
+            message = f"the traced key {key!r} is not a key of the case"
+            raise CaseError(message)
+    return traced
+
+
 def parameters(cases: dict[str, dict[str, object]]) -> list[str]:
     """Return the paths below ``/proc/sys`` of the private tree, sorted."""
     found: set[str] = set()
@@ -107,6 +130,12 @@ def materialise(cases: dict[str, dict[str, object]], out: Path) -> None:
     )
     for name, case in cases.items():
         root = out / name / "root"
+        traced = traced_keys(case)
+        if traced:
+            (out / name).mkdir(parents=True, exist_ok=True)
+            (out / name / "trace.list").write_text(
+                "".join(f"/proc/sys/{key.replace('.', '/')}\n" for key in traced), encoding="utf-8"
+            )
         for raw in cast("list[dict[str, object]]", case["files"]):
             entry = dict(raw)
             target = root / str(entry["path"])
@@ -114,12 +143,14 @@ def materialise(cases: dict[str, dict[str, object]], out: Path) -> None:
             text = file_text(entry)
             if entry.get("directory"):
                 target.mkdir()
+            elif entry.get("fifo"):
+                os.mkfifo(target)
             elif "link" in entry:
                 target.symlink_to(str(entry["link"]))
             elif text is not None:
                 target.write_bytes(text.encode("utf-8"))
             else:
-                message = f"case {name}: {entry['path']} is neither a file, a link nor a directory"
+                message = f"case {name}: {entry['path']} is no file, link, directory or FIFO"
                 raise CaseError(message)
 
 
@@ -143,15 +174,96 @@ def written(record: str) -> dict[str, str | None]:
     return values
 
 
+def timed_out(path: Path) -> bool:
+    """Return whether the status file ``path`` says that the reader was stopped after its time.
+
+    Raises:
+        CaseError: If the file holds neither status.
+    """
+    status = path.read_text(encoding="utf-8").strip()
+    if status not in {TIMED_OUT, FINISHED}:
+        message = f"{path} holds {status!r}, not {TIMED_OUT!r} or {FINISHED!r}"
+        raise CaseError(message)
+    return status == TIMED_OUT
+
+
+def writes(path: Path, traced: list[str]) -> list[list[str]]:
+    """Return the writes that the trace ``path`` recorded, as ``[key, first line of the value]``.
+
+    Raises:
+        CaseError: If the trace names a path that is not one of the ``traced`` keys.
+    """
+    keys = {f"/proc/sys/{key.replace('.', '/')}": key for key in traced}
+    found: list[list[str]] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        written_path, _, encoded = line.partition("\t")
+        if written_path not in keys:
+            message = f"{path} records a write to {written_path}, which the case does not trace"
+            raise CaseError(message)
+        value = base64.b64decode(encoded).split(b"\n", 1)[0].decode("utf-8", "surrogateescape")
+        found.append([keys[written_path], value])
+    return found
+
+
+def check_trace(
+    where: str, found: list[list[str]], values: dict[str, str | None], traced: list[str]
+) -> None:
+    """Make sure that the last recorded write of every traced key is the value the tree holds.
+
+    Raises:
+        CaseError: If a write that the tree shows is missing from the trace.
+    """
+    for key in traced:
+        last = [value for written_key, value in found if written_key == key]
+        if (last[-1] if last else None) != values[key]:
+            message = (
+                f"{where}: the trace of {key} ends with"
+                f" {last[-1] if last else None!r}, the tree holds {values[key]!r}"
+            )
+            raise CaseError(message)
+
+
+def read_reader(
+    stem: Path, case: dict[str, object], traced: list[str]
+) -> tuple[dict[str, str | None], bool, list[list[str]]]:
+    """Return what one reader wrote for a case, whether it was stopped, and its traced writes.
+
+    ``stem`` is ``<raw>/<image>/<case>.<program>``, the prefix of the files that the container
+    recorded for the reader.
+    """
+    values = written(stem.with_name(f"{stem.name}.values").read_text(encoding="utf-8"))
+    found = {key: values[key.replace(".", "/")] for key in case_keys(case)}
+    late = timed_out(stem.with_name(f"{stem.name}.status"))
+    if not traced:
+        return found, late, []
+    trace = writes(stem.with_name(f"{stem.name}.writes"), traced)
+    if not late:
+        check_trace(stem.name, trace, found, traced)
+    return found, late, trace
+
+
 def parse(cases: dict[str, dict[str, object]], raw: Path) -> dict[str, dict[str, object]]:
-    """Return, for every case and reader, the value written to each key of the case, or ``None``."""
+    """Return, for every case and reader, the value written to each key of the case, or ``None``.
+
+    A case also names the readers that were stopped because they did not end in time and, when
+    it traces keys, every write of each reader to them.
+    """
     verdicts: dict[str, dict[str, object]] = {}
     for name, case in cases.items():
         verdict: dict[str, object] = {}
+        stopped: list[str] = []
+        traces: dict[str, list[list[str]]] = {}
+        traced = traced_keys(case)
         for reader, (image, program) in READERS.items():
-            record = (raw / image / f"{name}.{program}.values").read_text(encoding="utf-8")
-            values = written(record)
-            verdict[reader] = {key: values[key.replace(".", "/")] for key in case_keys(case)}
+            found, late, trace = read_reader(raw / image / f"{name}.{program}", case, traced)
+            verdict[reader] = found
+            if late:
+                stopped.append(reader)
+            if traced:
+                traces[reader] = trace
+        verdict["timed_out"] = sorted(stopped)
+        if traced:
+            verdict["writes"] = traces
         verdicts[name] = verdict
     return verdicts
 

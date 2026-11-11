@@ -5,7 +5,11 @@ systemd 255 and procps-ng 4.0.4 in the Ubuntu 24.04 Molecule image and procps-ng
 Linux 9 image wrote each case into a private tmpfs over ``/proc/sys``, and the values were read back
 from it. Every key of every case is compared with every reader. A case that the model cannot
 decide for a reader (a file name that procps expands as a pattern, a procps key with a ``..``
-component, a line at which systemd-sysctl stops reading) must be reported as unsupported instead.
+component, a line at which systemd-sysctl stops reading, an entry on which a reader blocked or
+that it read without end until the generator stopped it) must be reported as unsupported instead.
+For the cases that trace the sample rate and its companion, the readers' writes to both, in the
+order in which they made them, decide whether the kernel refused the last write of the sample
+rate; the model must refuse it then (FREES-208).
 """
 
 from __future__ import annotations
@@ -32,7 +36,10 @@ VERDICTS = cast(
     json.loads((FIXTURES / "verdicts.json").read_text(encoding="utf-8")),
 )
 RP_FILTER = "net.ipv4.conf.all.rp_filter"
-PROCPS_UNSUPPORTED = frozenset(
+BLOCKING = frozenset(
+    {"fifo_named_conf", "link_to_a_fifo", "link_to_dev_zero", "review3_pattern_name_on_a_fifo"}
+)
+PROCPS_UNSUPPORTED = BLOCKING | frozenset(
     {
         "review_filename_glob",
         "review_filename_brace",
@@ -43,9 +50,16 @@ PROCPS_UNSUPPORTED = frozenset(
         "review2_dotdot_above_proc_sys",
         "review2_dotdot_through_missing_directory",
         "dot_dot_component",
+        "review3_second_dash",
+        "review3_second_dash_without_value",
+        "review3_glob_double_slash",
+        "review3_glob_leading_slash",
+        "review3_glob_dot_component",
+        "review3_pattern_name_on_a_directory",
+        "review4_glob_unclosed_bracket",
     }
 )
-SYSTEMD_UNSUPPORTED = frozenset({"review2_line_over_1_mib"})
+SYSTEMD_UNSUPPORTED = frozenset({"review2_line_over_1_mib"}) | BLOCKING
 UFW = "/etc/ufw/sysctl.conf"
 READERS = sysctl_config.READERS
 
@@ -71,6 +85,8 @@ def case_entries(name: str) -> list[dict[str, object]]:
         path = "/" + str(file["path"])
         if file.get("directory"):
             entries.append({"path": path, "kind": "directory", "text": None})
+        elif file.get("fifo"):
+            entries.append({"path": path, "kind": "other", "text": None})
         elif "link" in file:
             target = posixpath.normpath(posixpath.join(posixpath.dirname(path), str(file["link"])))
             text = texts.get(target)
@@ -95,18 +111,35 @@ def model_values(name: str, reader: str) -> dict[str, str | None]:
     }
 
 
+VERDICT_READERS = ("procps-3", "procps-4", "systemd")
+
+
 def test_every_case_has_a_verdict_of_every_reader() -> None:
     assert sorted(VERDICTS) == sorted(CASES)
     for name, verdict in VERDICTS.items():
-        assert sorted(verdict) == ["procps-3", "procps-4", "systemd"]
-        for reader in verdict.values():
-            assert sorted(reader) == sorted(case_keys(name))
+        traced = ["writes"] if "trace" in CASES[name] else []
+        assert sorted(verdict) == sorted([*VERDICT_READERS, "timed_out", *traced])
+        for reader in VERDICT_READERS:
+            assert sorted(verdict[reader]) == sorted(case_keys(name))
 
 
 def test_procps_3_and_4_write_the_same_values_for_every_case() -> None:
     assert {name: verdict["procps-3"] for name, verdict in VERDICTS.items()} == {
         name: verdict["procps-4"] for name, verdict in VERDICTS.items()
     }
+    assert {
+        name: verdict.get("writes", {}).get("procps-3") for name, verdict in VERDICTS.items()
+    } == {name: verdict.get("writes", {}).get("procps-4") for name, verdict in VERDICTS.items()}
+
+
+def test_only_the_blocking_entries_stop_a_reader() -> None:
+    assert {name for name, verdict in VERDICTS.items() if verdict["timed_out"]} == BLOCKING
+
+
+@pytest.mark.parametrize("name", sorted(BLOCKING))
+def test_an_entry_on_which_a_reader_blocks_is_unsupported(name: str) -> None:
+    found = cast("list[str]", sysctl_config.effective(case_entries(name), RP_FILTER)["unsupported"])
+    assert any("FIFO, socket or device" in reason for reason in found)
 
 
 @pytest.mark.parametrize("name", sorted(set(CASES) - SYSTEMD_UNSUPPORTED))
@@ -973,6 +1006,82 @@ def test_ufw_s_file_counts_after_the_boot_files() -> None:
         "systemd": setting,
         "procps": setting,
     }
+
+
+TRACED = sorted(name for name, case in CASES.items() if "trace" in case)
+SYSTEMD_STRICTER = frozenset({"companion_zero_after_the_rate", "companion_zero_between_two_rates"})
+
+
+def kernel_refusal(writes: list[list[str]]) -> str | None:
+    """Return the companion's value at which the kernel refused the last write of the sample rate.
+
+    The kernel checks the companion only when the sample rate is written; it keeps the
+    companion's value when a write of it is out of its range, and starts at its default, which
+    refuses nothing. A value that the kernel may read in another notation counts as refusing.
+    """
+    state: str | None = None
+    last: str | None = None
+    for key, value in writes:
+        if key == SAMPLE_RATE:
+            last = state
+            continue
+        number = sysctl_config.kernel_integer(value)
+        if number is None:
+            state = value
+        elif COMPANION.minimum <= number <= COMPANION.maximum:
+            state = value if number in COMPANION.refused else None
+    return last
+
+
+def traced_refusals(name: str) -> dict[str, dict[str, str] | None]:
+    """Return what the model decides for the sample rate and its companion in a traced case."""
+    return sysctl_config.companion_refusals(case_entries(name), SAMPLE_RATE, COMPANION)
+
+
+def test_the_traced_cases_trace_the_sample_rate_and_its_companion() -> None:
+    assert TRACED
+    for name in TRACED:
+        assert sorted(cast("list[str]", CASES[name]["trace"])) == sorted([CPU_TIME, SAMPLE_RATE])
+
+
+@pytest.mark.parametrize("name", TRACED)
+@pytest.mark.parametrize("reader", ["procps-4", "procps-3"])
+def test_procps_is_refused_exactly_when_the_kernel_refuses_its_last_write(
+    name: str, reader: str
+) -> None:
+    writes = cast("dict[str, list[list[str]]]", VERDICTS[name]["writes"])[reader]
+    found = traced_refusals(name)[sysctl_config.PROCPS]
+    assert (found["value"] if found else None) == kernel_refusal(writes)
+
+
+@pytest.mark.parametrize("name", TRACED)
+def test_systemd_is_refused_whenever_the_kernel_refuses_its_write(name: str) -> None:
+    writes = cast("dict[str, list[list[str]]]", VERDICTS[name]["writes"])["systemd"]
+    refused = kernel_refusal(writes)
+    found = traced_refusals(name)[sysctl_config.SYSTEMD]
+    if refused is not None:
+        assert found is not None
+    assert (found is not None and refused is None) is (name in SYSTEMD_STRICTER)
+
+
+def test_systemd_is_refused_by_a_glob_whose_zero_a_later_glob_overwrites() -> None:
+    found = refusals(
+        {
+            "/etc/sysctl.d/10-a.conf": "kernel.perf_cpu_time_max_perc* = 0\n",
+            "/etc/sysctl.d/30-c.conf": "kernel.perf_cpu_time_max_p* = 1\n",
+        }
+    )
+    assert found["systemd"] == {"value": "0", "source": "/etc/sysctl.d/10-a.conf"}
+
+
+def test_systemd_is_not_refused_by_an_explicit_one_that_hides_a_glob_s_zero() -> None:
+    found = refusals(
+        {
+            "/etc/sysctl.d/10-a.conf": "kernel.perf_cpu_time_max_perc* = 0\n",
+            "/etc/sysctl.d/30-c.conf": f"{CPU_TIME} = 1\n",
+        }
+    )
+    assert found["systemd"] is None
 
 
 def companion_rule(status: str | None, *, write: bool = True) -> dict[str, object]:

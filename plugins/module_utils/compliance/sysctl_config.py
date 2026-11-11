@@ -557,7 +557,13 @@ def _matches(pattern: str, path: str) -> bool:
     return expression is not None and re.fullmatch(expression, path) is not None
 
 
-def _systemd(lines: Sequence[Assignment], path: str) -> tuple[str, str] | None:
+def _systemd_writes(lines: Sequence[Assignment], path: str) -> list[Assignment]:
+    """Return the assignments with which systemd-sysctl writes ``path``, in its order.
+
+    systemd-sysctl writes its table in order: a key that the table holds once, with its value, or,
+    when the table does not hold the key, the value of every glob that matches it, one after the
+    other, so that the last glob wins.
+    """
     table: dict[str, Assignment] = {}
     for item in lines:
         if item.path is None:
@@ -569,12 +575,17 @@ def _systemd(lines: Sequence[Assignment], path: str) -> tuple[str, str] | None:
         table[item.path] = item
     if path in table:
         held = table[path]
-        return None if held.value is None else (held.value, held.source)
-    found = None
-    for pattern, item in table.items():
-        if item.value is not None and _is_glob(pattern) and _matches(pattern, path):
-            found = (item.value, item.source)
-    return found
+        return [] if held.value is None else [held]
+    return [
+        item
+        for pattern, item in table.items()
+        if item.value is not None and _is_glob(pattern) and _matches(pattern, path)
+    ]
+
+
+def _systemd(lines: Sequence[Assignment], path: str) -> tuple[str, str] | None:
+    writes = _systemd_writes(lines, path)
+    return (str(writes[-1].value), writes[-1].source) if writes else None
 
 
 def _procps_writes(lines: Sequence[Assignment], path: str) -> list[int]:
@@ -729,13 +740,17 @@ def _procps_refusal(
     return last
 
 
-def _systemd_refusal(found: tuple[str, str] | None, companion: Companion) -> dict[str, str] | None:
-    if found is None:
-        return None
-    value = kernel_integer(found[0])
-    if value is not None and (value not in companion.refused):
-        return None
-    return {"value": found[0], "source": found[1]}
+def _systemd_refusal(writes: Sequence[Assignment], companion: Companion) -> dict[str, str] | None:
+    """Return the first of ``writes`` of the companion that refuses the key, if any.
+
+    Every write counts, whatever its place in the order: systemd-sysctl may write the companion
+    several times (once for each glob that matches it), and the key in between.
+    """
+    for item in writes:
+        value = kernel_integer(str(item.value))
+        if value is None or value in companion.refused:
+            return _setting(item)
+    return None
 
 
 def companion_refusals(
@@ -747,9 +762,14 @@ def companion_refusals(
     when the parameter is written: ``kernel.perf_event_max_sample_rate`` while
     ``kernel.perf_cpu_time_max_percent`` is 0 or 100. A value of the companion that
     :func:`kernel_integer` does not read counts as refusing (it may be one in another notation).
-    For ``systemd`` the setting is the companion's last value in systemd-sysctl's own table, or,
-    when ufw applies a file after boot, its last value there; either refuses, because
-    systemd-sysctl writes the key at boot with its own value before ufw starts. ``procps`` makes
+    For ``systemd`` the setting is any value that systemd-sysctl writes to the companion (its
+    value in the table, or the value of each glob that matches it, which systemd-sysctl writes
+    one after the other, so that a 0 of one glob may be in force while the key is written and a 1
+    of a later glob set afterwards), or, when ufw applies a file after boot, the companion's last
+    value there; either refuses, because systemd-sysctl writes the key at boot with its own value
+    before ufw starts. This does not follow the order of the table and so refuses some files at
+    which the kernel would take the key (the companion written only after it), never the other
+    way round. ``procps`` makes
     every assignment in turn, so for it the setting is the companion's value at its last write
     of ``key`` (:func:`_procps_refusal`), in the files of ``sysctl --system`` and then in those
     that ufw applies with ``sysctl -p``. The result maps ``systemd`` and ``procps`` to
@@ -768,8 +788,9 @@ def companion_refusals(
     systemd_lines = [
         item for entry in ordered_files(entries, SYSTEMD) for item in assignments(entry, SYSTEMD)
     ]
-    systemd = _systemd_refusal(_systemd(systemd_lines, companion_path), companion) or (
-        _systemd_refusal(_procps(late, companion_path), companion)
+    late_writes = _procps_writes(late, companion_path)
+    systemd = _systemd_refusal(_systemd_writes(systemd_lines, companion_path), companion) or (
+        _systemd_refusal([late[late_writes[-1]]] if late_writes else [], companion)
     )
     return {SYSTEMD: systemd, PROCPS: _procps_refusal((boot, late), key_path, companion)}
 

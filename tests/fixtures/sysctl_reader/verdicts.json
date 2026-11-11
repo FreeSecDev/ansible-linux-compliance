@@ -11,7 +11,8 @@
     "systemd": {
       "kernel.dmesg_restrict": "0",
       "net.ipv4.conf.all.rp_filter": "1 \\"
-    }
+    },
+    "timed_out": []
   },
   "carriage_return": {
     "procps-3": {
@@ -22,7 +23,8 @@
     },
     "systemd": {
       "net.ipv4.conf.all.rp_filter": "0"
-    }
+    },
+    "timed_out": []
   },
   "comments_and_spacing": {
     "procps-3": {
@@ -33,6 +35,588 @@
     },
     "systemd": {
       "net.ipv4.conf.all.rp_filter": "1"
+    },
+    "timed_out": []
+  },
+  "companion_glob_and_rate_glob": {
+    "procps-3": {
+      "kernel.perf_cpu_time_max_percent": "1",
+      "kernel.perf_event_max_sample_rate": "50000"
+    },
+    "procps-4": {
+      "kernel.perf_cpu_time_max_percent": "1",
+      "kernel.perf_event_max_sample_rate": "50000"
+    },
+    "systemd": {
+      "kernel.perf_cpu_time_max_percent": "1",
+      "kernel.perf_event_max_sample_rate": "50000"
+    },
+    "timed_out": [],
+    "writes": {
+      "procps-3": [
+        [
+          "kernel.perf_event_max_sample_rate",
+          "50000"
+        ],
+        [
+          "kernel.perf_cpu_time_max_percent",
+          "1"
+        ]
+      ],
+      "procps-4": [
+        [
+          "kernel.perf_event_max_sample_rate",
+          "50000"
+        ],
+        [
+          "kernel.perf_cpu_time_max_percent",
+          "1"
+        ]
+      ],
+      "systemd": [
+        [
+          "kernel.perf_event_max_sample_rate",
+          "50000"
+        ],
+        [
+          "kernel.perf_cpu_time_max_percent",
+          "1"
+        ]
+      ]
+    }
+  },
+  "companion_in_sysctl_conf": {
+    "procps-3": {
+      "kernel.perf_cpu_time_max_percent": "0",
+      "kernel.perf_event_max_sample_rate": "40000"
+    },
+    "procps-4": {
+      "kernel.perf_cpu_time_max_percent": "0",
+      "kernel.perf_event_max_sample_rate": "40000"
+    },
+    "systemd": {
+      "kernel.perf_cpu_time_max_percent": null,
+      "kernel.perf_event_max_sample_rate": "50000"
+    },
+    "timed_out": [],
+    "writes": {
+      "procps-3": [
+        [
+          "kernel.perf_event_max_sample_rate",
+          "50000"
+        ],
+        [
+          "kernel.perf_cpu_time_max_percent",
+          "0"
+        ],
+        [
+          "kernel.perf_event_max_sample_rate",
+          "40000"
+        ]
+      ],
+      "procps-4": [
+        [
+          "kernel.perf_event_max_sample_rate",
+          "50000"
+        ],
+        [
+          "kernel.perf_cpu_time_max_percent",
+          "0"
+        ],
+        [
+          "kernel.perf_event_max_sample_rate",
+          "40000"
+        ]
+      ],
+      "systemd": [
+        [
+          "kernel.perf_event_max_sample_rate",
+          "50000"
+        ]
+      ]
+    }
+  },
+  "companion_moved_after_the_rate": {
+    "procps-3": {
+      "kernel.perf_cpu_time_max_percent": "1",
+      "kernel.perf_event_max_sample_rate": "50000"
+    },
+    "procps-4": {
+      "kernel.perf_cpu_time_max_percent": "1",
+      "kernel.perf_event_max_sample_rate": "50000"
+    },
+    "systemd": {
+      "kernel.perf_cpu_time_max_percent": "1",
+      "kernel.perf_event_max_sample_rate": "50000"
+    },
+    "timed_out": [],
+    "writes": {
+      "procps-3": [
+        [
+          "kernel.perf_cpu_time_max_percent",
+          "0"
+        ],
+        [
+          "kernel.perf_event_max_sample_rate",
+          "50000"
+        ],
+        [
+          "kernel.perf_cpu_time_max_percent",
+          "1"
+        ]
+      ],
+      "procps-4": [
+        [
+          "kernel.perf_cpu_time_max_percent",
+          "0"
+        ],
+        [
+          "kernel.perf_event_max_sample_rate",
+          "50000"
+        ],
+        [
+          "kernel.perf_cpu_time_max_percent",
+          "1"
+        ]
+      ],
+      "systemd": [
+        [
+          "kernel.perf_event_max_sample_rate",
+          "50000"
+        ],
+        [
+          "kernel.perf_cpu_time_max_percent",
+          "1"
+        ]
+      ]
+    }
+  },
+  "companion_one_hundred_in_one_file": {
+    "procps-3": {
+      "kernel.perf_cpu_time_max_percent": "1",
+      "kernel.perf_event_max_sample_rate": "50000"
+    },
+    "procps-4": {
+      "kernel.perf_cpu_time_max_percent": "1",
+      "kernel.perf_event_max_sample_rate": "50000"
+    },
+    "systemd": {
+      "kernel.perf_cpu_time_max_percent": "1",
+      "kernel.perf_event_max_sample_rate": "50000"
+    },
+    "timed_out": [],
+    "writes": {
+      "procps-3": [
+        [
+          "kernel.perf_cpu_time_max_percent",
+          "100"
+        ],
+        [
+          "kernel.perf_event_max_sample_rate",
+          "50000"
+        ],
+        [
+          "kernel.perf_cpu_time_max_percent",
+          "1"
+        ]
+      ],
+      "procps-4": [
+        [
+          "kernel.perf_cpu_time_max_percent",
+          "100"
+        ],
+        [
+          "kernel.perf_event_max_sample_rate",
+          "50000"
+        ],
+        [
+          "kernel.perf_cpu_time_max_percent",
+          "1"
+        ]
+      ],
+      "systemd": [
+        [
+          "kernel.perf_event_max_sample_rate",
+          "50000"
+        ],
+        [
+          "kernel.perf_cpu_time_max_percent",
+          "1"
+        ]
+      ]
+    }
+  },
+  "companion_out_of_range_after_zero": {
+    "procps-3": {
+      "kernel.perf_cpu_time_max_percent": "200",
+      "kernel.perf_event_max_sample_rate": "50000"
+    },
+    "procps-4": {
+      "kernel.perf_cpu_time_max_percent": "200",
+      "kernel.perf_event_max_sample_rate": "50000"
+    },
+    "systemd": {
+      "kernel.perf_cpu_time_max_percent": "200",
+      "kernel.perf_event_max_sample_rate": "50000"
+    },
+    "timed_out": [],
+    "writes": {
+      "procps-3": [
+        [
+          "kernel.perf_cpu_time_max_percent",
+          "0"
+        ],
+        [
+          "kernel.perf_cpu_time_max_percent",
+          "200"
+        ],
+        [
+          "kernel.perf_event_max_sample_rate",
+          "50000"
+        ]
+      ],
+      "procps-4": [
+        [
+          "kernel.perf_cpu_time_max_percent",
+          "0"
+        ],
+        [
+          "kernel.perf_cpu_time_max_percent",
+          "200"
+        ],
+        [
+          "kernel.perf_event_max_sample_rate",
+          "50000"
+        ]
+      ],
+      "systemd": [
+        [
+          "kernel.perf_cpu_time_max_percent",
+          "200"
+        ],
+        [
+          "kernel.perf_event_max_sample_rate",
+          "50000"
+        ]
+      ]
+    }
+  },
+  "companion_same_value_again": {
+    "procps-3": {
+      "kernel.perf_cpu_time_max_percent": "0",
+      "kernel.perf_event_max_sample_rate": "50000"
+    },
+    "procps-4": {
+      "kernel.perf_cpu_time_max_percent": "0",
+      "kernel.perf_event_max_sample_rate": "50000"
+    },
+    "systemd": {
+      "kernel.perf_cpu_time_max_percent": "0",
+      "kernel.perf_event_max_sample_rate": "50000"
+    },
+    "timed_out": [],
+    "writes": {
+      "procps-3": [
+        [
+          "kernel.perf_cpu_time_max_percent",
+          "0"
+        ],
+        [
+          "kernel.perf_event_max_sample_rate",
+          "50000"
+        ],
+        [
+          "kernel.perf_cpu_time_max_percent",
+          "0"
+        ]
+      ],
+      "procps-4": [
+        [
+          "kernel.perf_cpu_time_max_percent",
+          "0"
+        ],
+        [
+          "kernel.perf_event_max_sample_rate",
+          "50000"
+        ],
+        [
+          "kernel.perf_cpu_time_max_percent",
+          "0"
+        ]
+      ],
+      "systemd": [
+        [
+          "kernel.perf_cpu_time_max_percent",
+          "0"
+        ],
+        [
+          "kernel.perf_event_max_sample_rate",
+          "50000"
+        ]
+      ]
+    }
+  },
+  "companion_two_globs_around_the_rate": {
+    "procps-3": {
+      "kernel.perf_cpu_time_max_percent": "1",
+      "kernel.perf_event_max_sample_rate": "50000"
+    },
+    "procps-4": {
+      "kernel.perf_cpu_time_max_percent": "1",
+      "kernel.perf_event_max_sample_rate": "50000"
+    },
+    "systemd": {
+      "kernel.perf_cpu_time_max_percent": "1",
+      "kernel.perf_event_max_sample_rate": "50000"
+    },
+    "timed_out": [],
+    "writes": {
+      "procps-3": [
+        [
+          "kernel.perf_cpu_time_max_percent",
+          "0"
+        ],
+        [
+          "kernel.perf_event_max_sample_rate",
+          "50000"
+        ],
+        [
+          "kernel.perf_cpu_time_max_percent",
+          "1"
+        ]
+      ],
+      "procps-4": [
+        [
+          "kernel.perf_cpu_time_max_percent",
+          "0"
+        ],
+        [
+          "kernel.perf_event_max_sample_rate",
+          "50000"
+        ],
+        [
+          "kernel.perf_cpu_time_max_percent",
+          "1"
+        ]
+      ],
+      "systemd": [
+        [
+          "kernel.perf_cpu_time_max_percent",
+          "0"
+        ],
+        [
+          "kernel.perf_event_max_sample_rate",
+          "50000"
+        ],
+        [
+          "kernel.perf_cpu_time_max_percent",
+          "1"
+        ]
+      ]
+    }
+  },
+  "companion_zero_after_the_rate": {
+    "procps-3": {
+      "kernel.perf_cpu_time_max_percent": "0",
+      "kernel.perf_event_max_sample_rate": "50000"
+    },
+    "procps-4": {
+      "kernel.perf_cpu_time_max_percent": "0",
+      "kernel.perf_event_max_sample_rate": "50000"
+    },
+    "systemd": {
+      "kernel.perf_cpu_time_max_percent": "0",
+      "kernel.perf_event_max_sample_rate": "50000"
+    },
+    "timed_out": [],
+    "writes": {
+      "procps-3": [
+        [
+          "kernel.perf_event_max_sample_rate",
+          "50000"
+        ],
+        [
+          "kernel.perf_cpu_time_max_percent",
+          "0"
+        ]
+      ],
+      "procps-4": [
+        [
+          "kernel.perf_event_max_sample_rate",
+          "50000"
+        ],
+        [
+          "kernel.perf_cpu_time_max_percent",
+          "0"
+        ]
+      ],
+      "systemd": [
+        [
+          "kernel.perf_event_max_sample_rate",
+          "50000"
+        ],
+        [
+          "kernel.perf_cpu_time_max_percent",
+          "0"
+        ]
+      ]
+    }
+  },
+  "companion_zero_before_the_rate": {
+    "procps-3": {
+      "kernel.perf_cpu_time_max_percent": "0",
+      "kernel.perf_event_max_sample_rate": "50000"
+    },
+    "procps-4": {
+      "kernel.perf_cpu_time_max_percent": "0",
+      "kernel.perf_event_max_sample_rate": "50000"
+    },
+    "systemd": {
+      "kernel.perf_cpu_time_max_percent": "0",
+      "kernel.perf_event_max_sample_rate": "50000"
+    },
+    "timed_out": [],
+    "writes": {
+      "procps-3": [
+        [
+          "kernel.perf_cpu_time_max_percent",
+          "0"
+        ],
+        [
+          "kernel.perf_event_max_sample_rate",
+          "50000"
+        ]
+      ],
+      "procps-4": [
+        [
+          "kernel.perf_cpu_time_max_percent",
+          "0"
+        ],
+        [
+          "kernel.perf_event_max_sample_rate",
+          "50000"
+        ]
+      ],
+      "systemd": [
+        [
+          "kernel.perf_cpu_time_max_percent",
+          "0"
+        ],
+        [
+          "kernel.perf_event_max_sample_rate",
+          "50000"
+        ]
+      ]
+    }
+  },
+  "companion_zero_between_two_rates": {
+    "procps-3": {
+      "kernel.perf_cpu_time_max_percent": "0",
+      "kernel.perf_event_max_sample_rate": "50000"
+    },
+    "procps-4": {
+      "kernel.perf_cpu_time_max_percent": "0",
+      "kernel.perf_event_max_sample_rate": "50000"
+    },
+    "systemd": {
+      "kernel.perf_cpu_time_max_percent": "0",
+      "kernel.perf_event_max_sample_rate": "50000"
+    },
+    "timed_out": [],
+    "writes": {
+      "procps-3": [
+        [
+          "kernel.perf_event_max_sample_rate",
+          "50000"
+        ],
+        [
+          "kernel.perf_cpu_time_max_percent",
+          "0"
+        ],
+        [
+          "kernel.perf_event_max_sample_rate",
+          "50000"
+        ]
+      ],
+      "procps-4": [
+        [
+          "kernel.perf_event_max_sample_rate",
+          "50000"
+        ],
+        [
+          "kernel.perf_cpu_time_max_percent",
+          "0"
+        ],
+        [
+          "kernel.perf_event_max_sample_rate",
+          "50000"
+        ]
+      ],
+      "systemd": [
+        [
+          "kernel.perf_event_max_sample_rate",
+          "50000"
+        ],
+        [
+          "kernel.perf_cpu_time_max_percent",
+          "0"
+        ]
+      ]
+    }
+  },
+  "companion_zero_then_one_before_the_rate": {
+    "procps-3": {
+      "kernel.perf_cpu_time_max_percent": "1",
+      "kernel.perf_event_max_sample_rate": "50000"
+    },
+    "procps-4": {
+      "kernel.perf_cpu_time_max_percent": "1",
+      "kernel.perf_event_max_sample_rate": "50000"
+    },
+    "systemd": {
+      "kernel.perf_cpu_time_max_percent": "1",
+      "kernel.perf_event_max_sample_rate": "50000"
+    },
+    "timed_out": [],
+    "writes": {
+      "procps-3": [
+        [
+          "kernel.perf_cpu_time_max_percent",
+          "0"
+        ],
+        [
+          "kernel.perf_cpu_time_max_percent",
+          "1"
+        ],
+        [
+          "kernel.perf_event_max_sample_rate",
+          "50000"
+        ]
+      ],
+      "procps-4": [
+        [
+          "kernel.perf_cpu_time_max_percent",
+          "0"
+        ],
+        [
+          "kernel.perf_cpu_time_max_percent",
+          "1"
+        ],
+        [
+          "kernel.perf_event_max_sample_rate",
+          "50000"
+        ]
+      ],
+      "systemd": [
+        [
+          "kernel.perf_cpu_time_max_percent",
+          "1"
+        ],
+        [
+          "kernel.perf_event_max_sample_rate",
+          "50000"
+        ]
+      ]
     }
   },
   "cr_only_line_ends": {
@@ -50,7 +634,8 @@
       "net.ipv4.conf.all.rp_filter": "0",
       "net.ipv4.conf.default.rp_filter": null,
       "net.ipv4.conf.eth0.rp_filter": null
-    }
+    },
+    "timed_out": []
   },
   "crlf_line_ends": {
     "procps-3": {
@@ -67,7 +652,8 @@
       "net.ipv4.conf.all.rp_filter": "0",
       "net.ipv4.conf.default.rp_filter": null,
       "net.ipv4.conf.eth0.rp_filter": null
-    }
+    },
+    "timed_out": []
   },
   "dash_prefix": {
     "procps-3": {
@@ -78,7 +664,8 @@
     },
     "systemd": {
       "net.ipv4.conf.all.rp_filter": "0"
-    }
+    },
+    "timed_out": []
   },
   "dash_unset_before_ours": {
     "procps-3": {
@@ -95,7 +682,8 @@
       "net.ipv4.conf.all.rp_filter": "1",
       "net.ipv4.conf.default.rp_filter": null,
       "net.ipv4.conf.eth0.rp_filter": null
-    }
+    },
+    "timed_out": []
   },
   "dash_unset_same_value": {
     "procps-3": {
@@ -112,7 +700,8 @@
       "net.ipv4.conf.all.rp_filter": null,
       "net.ipv4.conf.default.rp_filter": null,
       "net.ipv4.conf.eth0.rp_filter": null
-    }
+    },
+    "timed_out": []
   },
   "dash_unset_then_set": {
     "procps-3": {
@@ -129,7 +718,8 @@
       "net.ipv4.conf.all.rp_filter": "0",
       "net.ipv4.conf.default.rp_filter": null,
       "net.ipv4.conf.eth0.rp_filter": null
-    }
+    },
+    "timed_out": []
   },
   "dash_with_spaces": {
     "procps-3": {
@@ -140,7 +730,8 @@
     },
     "systemd": {
       "net.ipv4.conf.all.rp_filter": "0"
-    }
+    },
+    "timed_out": []
   },
   "directory_named_conf": {
     "procps-3": {
@@ -151,7 +742,8 @@
     },
     "systemd": {
       "net.ipv4.conf.all.rp_filter": "1"
-    }
+    },
+    "timed_out": []
   },
   "dot_dot_component": {
     "procps-3": {
@@ -168,7 +760,8 @@
       "net.ipv4.conf.all.rp_filter": "1",
       "net.ipv4.conf.default.rp_filter": null,
       "net.ipv4.conf.eth0.rp_filter": null
-    }
+    },
+    "timed_out": []
   },
   "dot_first_with_a_slash": {
     "procps-3": {
@@ -179,7 +772,8 @@
     },
     "systemd": {
       "net.ipv4.conf.all.rp_filter": "1"
-    }
+    },
+    "timed_out": []
   },
   "double_slash": {
     "procps-3": {
@@ -196,7 +790,8 @@
       "net.ipv4.conf.all.rp_filter": "0",
       "net.ipv4.conf.default.rp_filter": null,
       "net.ipv4.conf.eth0.rp_filter": null
-    }
+    },
+    "timed_out": []
   },
   "duplicate_in_one_file": {
     "procps-3": {
@@ -207,7 +802,8 @@
     },
     "systemd": {
       "net.ipv4.conf.all.rp_filter": "1"
-    }
+    },
+    "timed_out": []
   },
   "empty_value": {
     "procps-3": {
@@ -218,7 +814,8 @@
     },
     "systemd": {
       "kernel.core_pattern": ""
-    }
+    },
+    "timed_out": []
   },
   "explicit_reassigned_same_value": {
     "procps-3": {
@@ -235,7 +832,8 @@
       "net.ipv4.conf.all.rp_filter": "1",
       "net.ipv4.conf.default.rp_filter": null,
       "net.ipv4.conf.eth0.rp_filter": null
-    }
+    },
+    "timed_out": []
   },
   "ff_value_after_ours": {
     "procps-3": {
@@ -252,7 +850,24 @@
       "net.ipv4.conf.all.rp_filter": "0\f",
       "net.ipv4.conf.default.rp_filter": null,
       "net.ipv4.conf.eth0.rp_filter": null
-    }
+    },
+    "timed_out": []
+  },
+  "fifo_named_conf": {
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": null
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": null
+    },
+    "systemd": {
+      "net.ipv4.conf.all.rp_filter": null
+    },
+    "timed_out": [
+      "procps-3",
+      "procps-4",
+      "systemd"
+    ]
   },
   "filename_question_mark": {
     "procps-3": {
@@ -269,7 +884,8 @@
       "net.ipv4.conf.all.rp_filter": "1",
       "net.ipv4.conf.default.rp_filter": null,
       "net.ipv4.conf.eth0.rp_filter": null
-    }
+    },
+    "timed_out": []
   },
   "filename_star_in_usr_lib": {
     "procps-3": {
@@ -286,7 +902,8 @@
       "net.ipv4.conf.all.rp_filter": "2",
       "net.ipv4.conf.default.rp_filter": null,
       "net.ipv4.conf.eth0.rp_filter": null
-    }
+    },
+    "timed_out": []
   },
   "filename_tilde": {
     "procps-3": {
@@ -303,7 +920,8 @@
       "net.ipv4.conf.all.rp_filter": "0",
       "net.ipv4.conf.default.rp_filter": null,
       "net.ipv4.conf.eth0.rp_filter": null
-    }
+    },
+    "timed_out": []
   },
   "form_feed_and_vertical_tab": {
     "procps-3": {
@@ -317,7 +935,8 @@
     "systemd": {
       "kernel.dmesg_restrict": "1\u000b",
       "net.ipv4.conf.all.rp_filter": "1\f"
-    }
+    },
+    "timed_out": []
   },
   "glob_after_explicit": {
     "procps-3": {
@@ -331,7 +950,8 @@
     "systemd": {
       "net.ipv4.conf.all.rp_filter": "1",
       "net.ipv4.conf.default.rp_filter": "0"
-    }
+    },
+    "timed_out": []
   },
   "glob_before_explicit": {
     "procps-3": {
@@ -345,7 +965,8 @@
     "systemd": {
       "net.ipv4.conf.all.rp_filter": "1",
       "net.ipv4.conf.default.rp_filter": "0"
-    }
+    },
+    "timed_out": []
   },
   "glob_excluded": {
     "procps-3": {
@@ -359,7 +980,8 @@
     "systemd": {
       "net.ipv4.conf.all.rp_filter": null,
       "net.ipv4.conf.default.rp_filter": "0"
-    }
+    },
+    "timed_out": []
   },
   "glob_in_a_later_name": {
     "procps-3": {
@@ -370,7 +992,8 @@
     },
     "systemd": {
       "net.ipv4.conf.all.rp_filter": "2"
-    }
+    },
+    "timed_out": []
   },
   "glob_question_mark": {
     "procps-3": {
@@ -381,7 +1004,8 @@
     },
     "systemd": {
       "net.ipv4.conf.all.rp_filter": "0"
-    }
+    },
+    "timed_out": []
   },
   "glob_reassigned_other_value": {
     "procps-3": {
@@ -398,7 +1022,8 @@
       "net.ipv4.conf.all.rp_filter": "2",
       "net.ipv4.conf.default.rp_filter": "2",
       "net.ipv4.conf.eth0.rp_filter": "2"
-    }
+    },
+    "timed_out": []
   },
   "hidden_file": {
     "procps-3": {
@@ -409,7 +1034,8 @@
     },
     "systemd": {
       "net.ipv4.conf.all.rp_filter": "1"
-    }
+    },
+    "timed_out": []
   },
   "hidden_only": {
     "procps-3": {
@@ -420,7 +1046,8 @@
     },
     "systemd": {
       "net.ipv4.conf.all.rp_filter": null
-    }
+    },
+    "timed_out": []
   },
   "inline_comment": {
     "procps-3": {
@@ -431,7 +1058,8 @@
     },
     "systemd": {
       "net.ipv4.conf.all.rp_filter": "0 # site"
-    }
+    },
+    "timed_out": []
   },
   "key_case": {
     "procps-3": {
@@ -442,7 +1070,8 @@
     },
     "systemd": {
       "net.ipv4.conf.all.rp_filter": "1"
-    }
+    },
+    "timed_out": []
   },
   "later_name_wins": {
     "procps-3": {
@@ -453,7 +1082,24 @@
     },
     "systemd": {
       "net.ipv4.conf.all.rp_filter": "1"
-    }
+    },
+    "timed_out": []
+  },
+  "link_to_a_fifo": {
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": null
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": null
+    },
+    "systemd": {
+      "net.ipv4.conf.all.rp_filter": null
+    },
+    "timed_out": [
+      "procps-3",
+      "procps-4",
+      "systemd"
+    ]
   },
   "link_to_a_file": {
     "procps-3": {
@@ -464,7 +1110,22 @@
     },
     "systemd": {
       "net.ipv4.conf.all.rp_filter": "0"
-    }
+    },
+    "timed_out": []
+  },
+  "link_to_dev_zero": {
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "2"
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "2"
+    },
+    "systemd": {
+      "net.ipv4.conf.all.rp_filter": null
+    },
+    "timed_out": [
+      "systemd"
+    ]
   },
   "long_line": {
     "procps-3": {
@@ -475,7 +1136,8 @@
     },
     "systemd": {
       "net.ipv4.conf.all.rp_filter": "0"
-    }
+    },
+    "timed_out": []
   },
   "masked_by_dev_null": {
     "procps-3": {
@@ -486,7 +1148,8 @@
     },
     "systemd": {
       "net.ipv4.conf.all.rp_filter": "1"
-    }
+    },
+    "timed_out": []
   },
   "names_sort_bytewise": {
     "procps-3": {
@@ -497,7 +1160,8 @@
     },
     "systemd": {
       "net.ipv4.conf.all.rp_filter": "1"
-    }
+    },
+    "timed_out": []
   },
   "no_assignment": {
     "procps-3": {
@@ -508,7 +1172,8 @@
     },
     "systemd": {
       "net.ipv4.conf.all.rp_filter": "1"
-    }
+    },
+    "timed_out": []
   },
   "no_final_newline": {
     "procps-3": {
@@ -519,7 +1184,8 @@
     },
     "systemd": {
       "net.ipv4.conf.all.rp_filter": "0"
-    }
+    },
+    "timed_out": []
   },
   "nul_byte": {
     "procps-3": {
@@ -530,7 +1196,8 @@
     },
     "systemd": {
       "net.ipv4.conf.all.rp_filter": "1"
-    }
+    },
+    "timed_out": []
   },
   "other_suffix": {
     "procps-3": {
@@ -541,7 +1208,8 @@
     },
     "systemd": {
       "net.ipv4.conf.all.rp_filter": "1"
-    }
+    },
+    "timed_out": []
   },
   "review2_dotdot_above_proc_sys": {
     "procps-3": {
@@ -552,7 +1220,8 @@
     },
     "systemd": {
       "net.ipv4.conf.all.rp_filter": "1"
-    }
+    },
+    "timed_out": []
   },
   "review2_dotdot_through_missing_directory": {
     "procps-3": {
@@ -563,7 +1232,8 @@
     },
     "systemd": {
       "net.ipv4.conf.all.rp_filter": "1"
-    }
+    },
+    "timed_out": []
   },
   "review2_filename_backslash": {
     "procps-3": {
@@ -574,7 +1244,8 @@
     },
     "systemd": {
       "net.ipv4.conf.all.rp_filter": "1"
-    }
+    },
+    "timed_out": []
   },
   "review2_line_over_1_mib": {
     "procps-3": {
@@ -585,7 +1256,8 @@
     },
     "systemd": {
       "net.ipv4.conf.all.rp_filter": "0"
-    }
+    },
+    "timed_out": []
   },
   "review2_ufw_disabled": {
     "procps-3": {
@@ -596,6 +1268,267 @@
     },
     "systemd": {
       "net.ipv4.conf.all.accept_redirects": "1"
+    },
+    "timed_out": []
+  },
+  "review3_c_space": {
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "1\u001f",
+      "net.ipv4.conf.default.rp_filter": "1\u0085",
+      "net.ipv4.conf.eth0.rp_filter": "1\u00a0"
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "1\u001f",
+      "net.ipv4.conf.default.rp_filter": "1\u0085",
+      "net.ipv4.conf.eth0.rp_filter": "1\u00a0"
+    },
+    "systemd": {
+      "net.ipv4.conf.all.rp_filter": "1\u001f",
+      "net.ipv4.conf.default.rp_filter": "1\u0085",
+      "net.ipv4.conf.eth0.rp_filter": "1\u00a0"
+    },
+    "timed_out": []
+  },
+  "review3_glob_dot_component": {
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "0",
+      "net.ipv4.conf.default.rp_filter": "0",
+      "net.ipv4.conf.eth0.rp_filter": "0"
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "0",
+      "net.ipv4.conf.default.rp_filter": "0",
+      "net.ipv4.conf.eth0.rp_filter": "0"
+    },
+    "systemd": {
+      "net.ipv4.conf.all.rp_filter": "1",
+      "net.ipv4.conf.default.rp_filter": "0",
+      "net.ipv4.conf.eth0.rp_filter": "0"
+    },
+    "timed_out": []
+  },
+  "review3_glob_double_slash": {
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "0",
+      "net.ipv4.conf.default.rp_filter": "0",
+      "net.ipv4.conf.eth0.rp_filter": "0"
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "0",
+      "net.ipv4.conf.default.rp_filter": "0",
+      "net.ipv4.conf.eth0.rp_filter": "0"
+    },
+    "systemd": {
+      "net.ipv4.conf.all.rp_filter": "1",
+      "net.ipv4.conf.default.rp_filter": "0",
+      "net.ipv4.conf.eth0.rp_filter": "0"
+    },
+    "timed_out": []
+  },
+  "review3_glob_leading_slash": {
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "0",
+      "net.ipv4.conf.default.rp_filter": "0",
+      "net.ipv4.conf.eth0.rp_filter": "0"
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "0",
+      "net.ipv4.conf.default.rp_filter": "0",
+      "net.ipv4.conf.eth0.rp_filter": "0"
+    },
+    "systemd": {
+      "net.ipv4.conf.all.rp_filter": "1",
+      "net.ipv4.conf.default.rp_filter": "0",
+      "net.ipv4.conf.eth0.rp_filter": "0"
+    },
+    "timed_out": []
+  },
+  "review3_glob_negated_bracket": {
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "1",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "1",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    },
+    "systemd": {
+      "net.ipv4.conf.all.rp_filter": "1",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    },
+    "timed_out": []
+  },
+  "review3_pattern_name_on_a_directory": {
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "0",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "0",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    },
+    "systemd": {
+      "net.ipv4.conf.all.rp_filter": "1",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    },
+    "timed_out": []
+  },
+  "review3_pattern_name_on_a_fifo": {
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "0",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "0",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    },
+    "systemd": {
+      "net.ipv4.conf.all.rp_filter": null,
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    },
+    "timed_out": [
+      "systemd"
+    ]
+  },
+  "review3_second_dash": {
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "0",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "0",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    },
+    "systemd": {
+      "net.ipv4.conf.all.rp_filter": "1",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    },
+    "timed_out": []
+  },
+  "review3_second_dash_without_value": {
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "1",
+      "net.ipv4.conf.default.rp_filter": "0",
+      "net.ipv4.conf.eth0.rp_filter": "0"
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "1",
+      "net.ipv4.conf.default.rp_filter": "0",
+      "net.ipv4.conf.eth0.rp_filter": "0"
+    },
+    "systemd": {
+      "net.ipv4.conf.all.rp_filter": "1",
+      "net.ipv4.conf.default.rp_filter": "0",
+      "net.ipv4.conf.eth0.rp_filter": "0"
+    },
+    "timed_out": []
+  },
+  "review4_glob_unclosed_bracket": {
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "1",
+      "net.ipv4.conf.default.rp_filter": "0",
+      "net.ipv4.conf.eth0.rp_filter": null
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "1",
+      "net.ipv4.conf.default.rp_filter": "0",
+      "net.ipv4.conf.eth0.rp_filter": null
+    },
+    "systemd": {
+      "net.ipv4.conf.all.rp_filter": "1",
+      "net.ipv4.conf.default.rp_filter": "0",
+      "net.ipv4.conf.eth0.rp_filter": null
+    },
+    "timed_out": []
+  },
+  "review7_companion_zero_after_a_lone_cr": {
+    "procps-3": {
+      "kernel.perf_cpu_time_max_percent": null,
+      "kernel.perf_event_max_sample_rate": "50000"
+    },
+    "procps-4": {
+      "kernel.perf_cpu_time_max_percent": null,
+      "kernel.perf_event_max_sample_rate": "50000"
+    },
+    "systemd": {
+      "kernel.perf_cpu_time_max_percent": "0",
+      "kernel.perf_event_max_sample_rate": "50000"
+    },
+    "timed_out": [],
+    "writes": {
+      "procps-3": [
+        [
+          "kernel.perf_event_max_sample_rate",
+          "50000"
+        ]
+      ],
+      "procps-4": [
+        [
+          "kernel.perf_event_max_sample_rate",
+          "50000"
+        ]
+      ],
+      "systemd": [
+        [
+          "kernel.perf_cpu_time_max_percent",
+          "0"
+        ],
+        [
+          "kernel.perf_event_max_sample_rate",
+          "50000"
+        ]
+      ]
+    }
+  },
+  "review7_companion_zero_with_a_trailing_slash": {
+    "procps-3": {
+      "kernel.perf_cpu_time_max_percent": null,
+      "kernel.perf_event_max_sample_rate": "50000"
+    },
+    "procps-4": {
+      "kernel.perf_cpu_time_max_percent": null,
+      "kernel.perf_event_max_sample_rate": "50000"
+    },
+    "systemd": {
+      "kernel.perf_cpu_time_max_percent": "0",
+      "kernel.perf_event_max_sample_rate": "50000"
+    },
+    "timed_out": [],
+    "writes": {
+      "procps-3": [
+        [
+          "kernel.perf_event_max_sample_rate",
+          "50000"
+        ]
+      ],
+      "procps-4": [
+        [
+          "kernel.perf_event_max_sample_rate",
+          "50000"
+        ]
+      ],
+      "systemd": [
+        [
+          "kernel.perf_cpu_time_max_percent",
+          "0"
+        ],
+        [
+          "kernel.perf_event_max_sample_rate",
+          "50000"
+        ]
+      ]
     }
   },
   "review_cr_then_line": {
@@ -613,7 +1546,8 @@
       "net.ipv4.conf.all.rp_filter": "0",
       "net.ipv4.conf.default.rp_filter": null,
       "net.ipv4.conf.eth0.rp_filter": null
-    }
+    },
+    "timed_out": []
   },
   "review_dash_unset_after": {
     "procps-3": {
@@ -630,7 +1564,8 @@
       "net.ipv4.conf.all.rp_filter": null,
       "net.ipv4.conf.default.rp_filter": null,
       "net.ipv4.conf.eth0.rp_filter": null
-    }
+    },
+    "timed_out": []
   },
   "review_dot_component": {
     "procps-3": {
@@ -647,7 +1582,8 @@
       "net.ipv4.conf.all.rp_filter": "0",
       "net.ipv4.conf.default.rp_filter": null,
       "net.ipv4.conf.eth0.rp_filter": null
-    }
+    },
+    "timed_out": []
   },
   "review_double_dot": {
     "procps-3": {
@@ -664,7 +1600,8 @@
       "net.ipv4.conf.all.rp_filter": "0",
       "net.ipv4.conf.default.rp_filter": null,
       "net.ipv4.conf.eth0.rp_filter": null
-    }
+    },
+    "timed_out": []
   },
   "review_filename_brace": {
     "procps-3": {
@@ -681,7 +1618,8 @@
       "net.ipv4.conf.all.rp_filter": "1",
       "net.ipv4.conf.default.rp_filter": null,
       "net.ipv4.conf.eth0.rp_filter": null
-    }
+    },
+    "timed_out": []
   },
   "review_filename_glob": {
     "procps-3": {
@@ -698,7 +1636,8 @@
       "net.ipv4.conf.all.rp_filter": "1",
       "net.ipv4.conf.default.rp_filter": null,
       "net.ipv4.conf.eth0.rp_filter": null
-    }
+    },
+    "timed_out": []
   },
   "review_glob_only": {
     "procps-3": {
@@ -715,7 +1654,8 @@
       "net.ipv4.conf.all.rp_filter": "1",
       "net.ipv4.conf.default.rp_filter": "1",
       "net.ipv4.conf.eth0.rp_filter": "1"
-    }
+    },
+    "timed_out": []
   },
   "review_glob_same_value_reassigned": {
     "procps-3": {
@@ -732,7 +1672,8 @@
       "net.ipv4.conf.all.rp_filter": "1",
       "net.ipv4.conf.default.rp_filter": "0",
       "net.ipv4.conf.eth0.rp_filter": "1"
-    }
+    },
+    "timed_out": []
   },
   "review_leading_equals": {
     "procps-3": {
@@ -749,7 +1690,8 @@
       "net.ipv4.conf.all.rp_filter": "1",
       "net.ipv4.conf.default.rp_filter": null,
       "net.ipv4.conf.eth0.rp_filter": null
-    }
+    },
+    "timed_out": []
   },
   "review_leading_slash": {
     "procps-3": {
@@ -766,7 +1708,8 @@
       "net.ipv4.conf.all.rp_filter": "0",
       "net.ipv4.conf.default.rp_filter": null,
       "net.ipv4.conf.eth0.rp_filter": null
-    }
+    },
+    "timed_out": []
   },
   "review_nul_then_line": {
     "procps-3": {
@@ -783,7 +1726,8 @@
       "net.ipv4.conf.all.rp_filter": "0",
       "net.ipv4.conf.default.rp_filter": null,
       "net.ipv4.conf.eth0.rp_filter": null
-    }
+    },
+    "timed_out": []
   },
   "review_trailing_dot": {
     "procps-3": {
@@ -800,7 +1744,8 @@
       "net.ipv4.conf.all.rp_filter": "0",
       "net.ipv4.conf.default.rp_filter": null,
       "net.ipv4.conf.eth0.rp_filter": null
-    }
+    },
+    "timed_out": []
   },
   "review_vt_value_after_ours": {
     "procps-3": {
@@ -817,7 +1762,8 @@
       "net.ipv4.conf.all.rp_filter": "0\u000b",
       "net.ipv4.conf.default.rp_filter": null,
       "net.ipv4.conf.eth0.rp_filter": null
-    }
+    },
+    "timed_out": []
   },
   "same_name_etc_over_usr_lib": {
     "procps-3": {
@@ -828,7 +1774,8 @@
     },
     "systemd": {
       "net.ipv4.conf.all.rp_filter": "1"
-    }
+    },
+    "timed_out": []
   },
   "same_name_run_over_usr_lib": {
     "procps-3": {
@@ -839,7 +1786,8 @@
     },
     "systemd": {
       "net.ipv4.conf.all.rp_filter": "1"
-    }
+    },
+    "timed_out": []
   },
   "same_name_usr_local_over_usr_lib": {
     "procps-3": {
@@ -850,7 +1798,8 @@
     },
     "systemd": {
       "net.ipv4.conf.all.rp_filter": "1"
-    }
+    },
+    "timed_out": []
   },
   "slash_first_with_a_dot": {
     "procps-3": {
@@ -861,7 +1810,8 @@
     },
     "systemd": {
       "net.ipv4.conf.all.rp_filter": "1"
-    }
+    },
+    "timed_out": []
   },
   "slash_form": {
     "procps-3": {
@@ -872,7 +1822,8 @@
     },
     "systemd": {
       "net.ipv4.conf.all.rp_filter": "0"
-    }
+    },
+    "timed_out": []
   },
   "slash_glob": {
     "procps-3": {
@@ -883,7 +1834,8 @@
     },
     "systemd": {
       "net.ipv4.conf.all.rp_filter": "0"
-    }
+    },
+    "timed_out": []
   },
   "spaces_inside_the_key": {
     "procps-3": {
@@ -894,7 +1846,8 @@
     },
     "systemd": {
       "net.ipv4.conf.all.rp_filter": "1"
-    }
+    },
+    "timed_out": []
   },
   "sysctl_conf_and_its_link": {
     "procps-3": {
@@ -905,7 +1858,32 @@
     },
     "systemd": {
       "net.ipv4.conf.all.rp_filter": "1"
-    }
+    },
+    "timed_out": []
+  },
+  "sysctl_conf_fifo": {
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "1"
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "1"
+    },
+    "systemd": {
+      "net.ipv4.conf.all.rp_filter": "1"
+    },
+    "timed_out": []
+  },
+  "sysctl_conf_link_to_dev_zero": {
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "1"
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "1"
+    },
+    "systemd": {
+      "net.ipv4.conf.all.rp_filter": "1"
+    },
+    "timed_out": []
   },
   "sysctl_conf_only": {
     "procps-3": {
@@ -916,7 +1894,8 @@
     },
     "systemd": {
       "net.ipv4.conf.all.rp_filter": null
-    }
+    },
+    "timed_out": []
   },
   "sysctl_conf_without_link": {
     "procps-3": {
@@ -927,7 +1906,8 @@
     },
     "systemd": {
       "net.ipv4.conf.all.rp_filter": "1"
-    }
+    },
+    "timed_out": []
   },
   "tab_inside_key": {
     "procps-3": {
@@ -944,7 +1924,8 @@
       "net.ipv4.conf.all.rp_filter": "0",
       "net.ipv4.conf.default.rp_filter": null,
       "net.ipv4.conf.eth0.rp_filter": null
-    }
+    },
+    "timed_out": []
   },
   "trailing_slash": {
     "procps-3": {
@@ -961,7 +1942,8 @@
       "net.ipv4.conf.all.rp_filter": "0",
       "net.ipv4.conf.default.rp_filter": null,
       "net.ipv4.conf.eth0.rp_filter": null
-    }
+    },
+    "timed_out": []
   },
   "value_with_spaces_and_tabs": {
     "procps-3": {
@@ -972,6 +1954,7 @@
     },
     "systemd": {
       "net.ipv4.ip_local_port_range": "32768\t65535"
-    }
+    },
+    "timed_out": []
   }
 }

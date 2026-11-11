@@ -30,12 +30,14 @@ description:
     edits count only when its plan status is C(applied) or C(compliant); with any other status
     the companion is judged as the files leave it, and without a plan entry the result is
     C(undecided), which the caller refuses.
-  - The kernel checks the companion only when O(key) is written. For C(systemd) the setting is the
-    companion's last value in C(systemd-sysctl)'s own files or, when ufw applies its file after
-    boot, its last value there; either refuses. C(procps) makes every assignment in turn, so for it
-    the setting is the companion's value when it writes O(key) for the last time; an assignment of
-    the companion outside its range leaves the value it had. A value that the filter
-    C(freesecdev.linux_compliance.sysctl_integer) does not read counts as a refused one (ADR 0029).
+  - The kernel checks the companion only when O(key) is written. For C(systemd) the setting is any
+    value that C(systemd-sysctl) writes to the companion (its own value, or that of each glob that
+    matches it, which C(systemd-sysctl) writes one after the other) or, when ufw applies its file
+    after boot, the companion's last value there; either refuses. C(procps) makes every assignment
+    in turn, so for it the setting is the companion's value when it writes O(key) for the last
+    time; an assignment of the companion outside its range leaves the value it had. A value that
+    the filter C(freesecdev.linux_compliance.sysctl_integer) does not read counts as a refused one
+    (ADR 0029).
 options:
   _input:
     description:

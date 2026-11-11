@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import json
 import runpy
+import stat
 import sys
 from pathlib import Path
 
@@ -56,6 +57,12 @@ def write_raw(raw: Path) -> None:
         tree({**base, "net/ipv4/conf/all/rp_filter": b"2\n", "kernel/dmesg_restrict": b"1\n"}),
         encoding="utf-8",
     )
+    for image, program in (
+        ("ubuntu", "systemd"),
+        ("ubuntu", "procps"),
+        ("rhel_compatible", "procps"),
+    ):
+        (raw / image / f"mixed.{program}.status").write_text("done\n", encoding="utf-8")
 
 
 def test_a_case_is_written_with_files_links_and_directories(tmp_path: Path) -> None:
@@ -76,7 +83,7 @@ def test_a_case_is_written_with_files_links_and_directories(tmp_path: Path) -> N
 
 def test_an_entry_of_no_kind_is_refused(tmp_path: Path) -> None:
     cases: dict[str, dict[str, object]] = {"bad": {"keys": [], "files": [{"path": "etc/x.conf"}]}}
-    with pytest.raises(sysctl_reader.CaseError, match="neither a file"):
+    with pytest.raises(sysctl_reader.CaseError, match="no file, link, directory or FIFO"):
         sysctl_reader.materialise(cases, tmp_path)
 
 
@@ -95,6 +102,7 @@ def test_the_values_left_in_the_tree_become_the_verdicts(tmp_path: Path) -> None
             "systemd": {RP_FILTER: "2\f", "kernel.dmesg_restrict": None, **keys},
             "procps-4": {RP_FILTER: "", "kernel.dmesg_restrict": None, **keys},
             "procps-3": {RP_FILTER: "2", "kernel.dmesg_restrict": "1", **keys},
+            "timed_out": [],
         }
     }
 
@@ -133,3 +141,97 @@ def test_a_key_that_the_role_refuses_is_refused(tmp_path: Path, key: str) -> Non
     cases: dict[str, dict[str, object]] = {"bad": {"keys": [key], "files": []}}
     with pytest.raises(sysctl_reader.CaseError, match="not a kernel parameter key"):
         sysctl_reader.materialise(cases, tmp_path)
+
+
+RATE = "kernel.perf_event_max_sample_rate"
+CPU = "kernel.perf_cpu_time_max_percent"
+RATE_PATH = "/proc/sys/kernel/perf_event_max_sample_rate"
+CPU_PATH = "/proc/sys/kernel/perf_cpu_time_max_percent"
+TRACED: dict[str, dict[str, object]] = {
+    "perf": {
+        "keys": [RATE, CPU],
+        "trace": [RATE, CPU],
+        "files": [
+            {"path": "etc/sysctl.d/10-a.conf", "text": f"{CPU} = 0\n{RATE} = 1\n{CPU} = 1\n"},
+            {"path": "etc/sysctl.d/50-fifo.conf", "fifo": True},
+        ],
+    }
+}
+PROGRAMS = (("ubuntu", "systemd"), ("ubuntu", "procps"), ("rhel_compatible", "procps"))
+
+
+def trace_record(writes: list[tuple[str, bytes]]) -> str:
+    """Return a trace as sysctl_trace.py writes it."""
+    return "".join(f"{path}\t{base64.b64encode(data).decode()}\n" for path, data in writes)
+
+
+def write_traced(
+    raw: Path, writes: list[tuple[str, bytes]], status: str = "done", rate: bytes = b"1\n"
+) -> None:
+    """Write the tree, status and trace of every reader for the case ``perf``."""
+    for image, program in PROGRAMS:
+        (raw / image).mkdir(parents=True, exist_ok=True)
+        values = {
+            "kernel/perf_event_max_sample_rate": rate,
+            "kernel/perf_cpu_time_max_percent": b"1\n",
+        }
+        (raw / image / f"perf.{program}.values").write_text(tree(values), encoding="utf-8")
+        (raw / image / f"perf.{program}.status").write_text(f"{status}\n", encoding="utf-8")
+        (raw / image / f"perf.{program}.writes").write_text(trace_record(writes), encoding="utf-8")
+
+
+def test_a_traced_case_gets_its_trace_list_and_a_fifo(tmp_path: Path) -> None:
+    sysctl_reader.materialise(TRACED, tmp_path)
+    assert (tmp_path / "perf" / "trace.list").read_text(encoding="utf-8").split() == [
+        RATE_PATH,
+        CPU_PATH,
+    ]
+    assert stat.S_ISFIFO(
+        (tmp_path / "perf" / "root" / "etc" / "sysctl.d" / "50-fifo.conf").lstat().st_mode
+    )
+    assert not (tmp_path / "mixed").exists()
+
+
+def test_a_traced_key_must_be_a_key_of_the_case(tmp_path: Path) -> None:
+    cases: dict[str, dict[str, object]] = {"bad": {"keys": [RATE], "trace": [CPU], "files": []}}
+    with pytest.raises(sysctl_reader.CaseError, match="not a key of the case"):
+        sysctl_reader.materialise(cases, tmp_path)
+
+
+def test_the_writes_of_a_traced_case_become_part_of_its_verdict(tmp_path: Path) -> None:
+    writes = [(CPU_PATH, b"0\n"), (RATE_PATH, b"1\n"), (CPU_PATH, b"1\n")]
+    write_traced(tmp_path, writes)
+    verdict = sysctl_reader.parse(TRACED, tmp_path)["perf"]
+    recorded = [[CPU, "0"], [RATE, "1"], [CPU, "1"]]
+    assert verdict == {
+        **{reader: {RATE: "1", CPU: "1"} for reader in ("systemd", "procps-4", "procps-3")},
+        "timed_out": [],
+        "writes": dict.fromkeys(("systemd", "procps-4", "procps-3"), recorded),
+    }
+
+
+def test_a_trace_that_misses_the_value_of_the_tree_is_refused(tmp_path: Path) -> None:
+    write_traced(tmp_path, [(CPU_PATH, b"1\n")])
+    with pytest.raises(
+        sysctl_reader.CaseError, match=r"the trace of kernel\.perf_event_max_sample_rate"
+    ):
+        sysctl_reader.parse(TRACED, tmp_path)
+
+
+def test_a_reader_stopped_after_its_time_is_named_and_its_trace_not_checked(tmp_path: Path) -> None:
+    write_traced(tmp_path, [(CPU_PATH, b"1\n")], status="timeout", rate=b"9\n")
+    verdict = sysctl_reader.parse(TRACED, tmp_path)["perf"]
+    assert verdict["timed_out"] == ["procps-3", "procps-4", "systemd"]
+    assert verdict["systemd"] == {RATE: None, CPU: "1"}
+
+
+def test_a_trace_of_a_key_that_the_case_does_not_trace_is_refused(tmp_path: Path) -> None:
+    write_traced(tmp_path, [("/proc/sys/kernel/dmesg_restrict", b"1\n")])
+    with pytest.raises(sysctl_reader.CaseError, match="which the case does not trace"):
+        sysctl_reader.parse(TRACED, tmp_path)
+
+
+def test_a_status_other_than_done_or_timeout_is_refused(tmp_path: Path) -> None:
+    write_traced(tmp_path, [], status="maybe")
+    with pytest.raises(sysctl_reader.CaseError, match="holds 'maybe'"):
+        sysctl_reader.parse(TRACED, tmp_path)

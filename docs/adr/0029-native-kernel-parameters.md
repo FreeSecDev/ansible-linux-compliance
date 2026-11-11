@@ -368,7 +368,9 @@ cannot be staged in Molecule without a program running beside the role, so the r
 test below.
 `tests/unit/roles/test_sysctl_plan_render.py` renders both refusals with the role's own Jinja, from files whose bytes
 on the disk differ from those read or that are gone (a changed vendor file of the cleanup refuses the rules to apply
-that were decided on its old bytes, and a file read through a symbolic link whose target changed refuses every rule), and the refusal of a vendor file that is a link, and resolves the rules' values with the role's own resolution task instead of
+that were decided on its old bytes, and a file read through a symbolic link whose target changed refuses every
+rule), and the refusal of a vendor file that is a link, and resolves the rules' values with the role's own
+resolution task instead of
 the catalogue's raw value; it fails instead of skipping when `CI` is set and `ansible-playbook` or the collection link
 is missing. The adversarial cases of the third to eighth reviews stay open on FREES-208 and are still not in
 `cases.json`: the verdict generator runs `unshare --propagation private` and mounts a tmpfs over `/proc/sys` inside its
@@ -377,7 +379,68 @@ AppArmor host such as the workstation of this change. Running the container with
 (`apparmor=unconfined`) would weaken the generator's isolation and was not done; the generator is unchanged. Until the
 table can be regenerated (a host without AppArmor, or a reviewed AppArmor profile that allows only these mounts), those
 forms stay refused (fail closed) and covered by unit tests, and the companion value that is tracked per write (R6-2)
-is not yet checked against the real readers.
+is not yet checked against the real readers. (Superseded in part by the amendment of 2026-11-11 below: the owner
+allowed `apparmor=unconfined` for the generator's one container, and the table now holds these forms.)
+
+**Amendment (FREES-208, 2026-11-11): the verdict table regenerated under an owner decision.** On 2026-11-10 the
+project owner decided, recorded on FREES-208 on 2026-11-11, that the offline verdict generator
+`tools/molecule/sysctl-reader-verdicts.sh` may run its one container with `--security-opt apparmor=unconfined`. This
+replaces the statement of the previous amendment that running it without AppArmor confinement "was not done".
+
+- **Scope.** Exactly that one `docker run` of the generator, which a person runs with `make sysctl-reader-verdicts`;
+  no CI job runs it. Every other option of that container is unchanged, and no CI job, Molecule scenario (whose
+  guard still refuses any `apparmor=` entry, see the Molecule documentation) or other tool changes.
+- **Why the option is needed.** The oracle's isolation from the host is a user and mount namespace of its own with
+  a private tmpfs mounted over `/proc/sys`; Docker's default AppArmor profile refuses every `mount`, also inside such
+  a namespace, so on a host with AppArmor (Ubuntu, the workstation of this change) the oracle stops before any
+  reader runs. A profile that allowed only these mounts would have to be written, reviewed and loaded into the
+  kernel by root on every machine that regenerates the table.
+- **What still restricts the container.** No network (`--network none`); every capability dropped but
+  `CAP_SYS_ADMIN` and `CAP_SETFCAP`; `no-new-privileges`; Docker's default seccomp profile; Docker's masked and
+  read-only paths, `/proc/sys` among them; the cases, the oracle script and the tracer mounted read-only, and only the
+  output directory writable. The oracle still refuses to go on unless `/proc/sys` is Docker's one read-only mount,
+  and no reader runs unless the private tmpfs is in place; in the new user namespace the read-only flags of Docker's
+  mounts are locked, so no reader and no remount can reach a kernel parameter of the host. What the option removes is
+  the second layer that AppArmor added over those mounts (its own denial of mounts and of writes below `/proc` and
+  `/sys`); the remaining risk is code that runs as root with `CAP_SYS_ADMIN` without that layer, which is limited to
+  the images' own readers, the repository's scripts and the reviewed cases of `cases.json`.
+
+With the table regenerated, `cases.json` holds 100 cases (28 new) and every reader form of the third to eighth
+reviews that a reader decides:
+
+- **Forms of the third and fourth reviews.** A second `-` on a key, procps globs with `//`, `/./` or a leading
+  slash, a negated and an unclosed bracket, a pattern name on a directory and on a FIFO, C white space after a value
+  (`\x1f`, U+0085, U+00A0), a FIFO named `*.conf`, a link to a FIFO and a link to `/dev/zero` in a configuration
+  directory, and `/etc/sysctl.conf` as a FIFO or a link to `/dev/zero`. The model reports every case where it and
+  procps differ as unsupported, so those rules are refused (fail closed); the others match every reader. Each reader
+  runs under `timeout` (10 seconds) and a 1 GiB address space limit, and the table names the readers that were
+  stopped: every reader that opens a FIFO in a configuration directory, or a link to one, blocks before it writes
+  anything (procps does not open a FIFO whose name it expands to another file, but reads that file a second time),
+  `systemd-sysctl` reads a link to `/dev/zero` without end while procps goes on to the next file, and procps ends
+  normally with `/etc/sysctl.conf` as a FIFO or a link to `/dev/zero`, with the values of the model. A unit test
+  requires that exactly the cases with a FIFO or device entry stop a reader and that the model reports each as
+  unsupported.
+- **The companion tracked per write (R6-2, and F1 of the seventh review).** The private tmpfs keeps only the last
+  value of a file, so for the 13 cases of the sample rate and its companion (among them the trailing slash and the
+  lone carriage return of the seventh review) each reader runs under `tools/molecule/sysctl_trace.py`, which traces
+  it with `ptrace(2)` (allowed by Docker's default seccomp profile for a child of the tracer, without another
+  capability) and records, in order, every `write` of it to either file, and stops the generator on any other way to
+  write them or on a new process; the last recorded write of each file must equal what the tree holds. From that
+  order, a unit test computes whether the kernel refused the last write of the sample rate, as the kernel checks it,
+  and requires the model to give exactly that for procps-ng 4.0.4 and 3.3.17 (it does for all 13 cases) and to
+  refuse at least then for `systemd-sysctl`.
+- **A fail-open that the trace found.** `systemd-sysctl` writes a key that its table does not hold once for every
+  glob that matches it, in table order, so `kernel.perf_cpu_time_max_perc* = 0` in one file, the sample rate in a
+  later one and `kernel.perf_cpu_time_max_p* = 1` in a third one make it write 0, then the sample rate, which the
+  kernel refuses, then 1; the model judged `systemd-sysctl` on the last glob's 1 and reported the sample rate
+  `applied`. The model now refuses for `systemd-sysctl` when any value that it writes to the companion refuses (its
+  own value, or that of any matching glob), whatever its place in the table. This does not follow the table's order,
+  so two cases where `systemd-sysctl` writes the refusing value only after the sample rate stay refused although the
+  kernel takes it; the unit test names them.
+
+The `systemd-sysctl` verdicts still come from systemd 255 (the Rocky Linux image has none), as stated above. ufw's
+own start script and the kernel's reading of integer values are not readers that the generator runs; those rules stay
+proven by unit tests against the sources.
 
 ### 2a. A conflicting line in a vendor file is set to the compliant value
 
@@ -604,6 +667,12 @@ The generator of the reader verdicts runs the real readers as root in containers
 their own, where Docker's read-only mounts cannot be remounted, over a private tmpfs on `/proc/sys`, and no reader runs
 unless that tmpfs is in place, so a reader that writes, as `sysctl --system` always does, cannot reach the host
 kernel. The case keys are validated against the role's key pattern before any is written below `/proc/sys`.
+
+**Amendment (FREES-208, 2026-11-11).** By the owner's decision of 2026-11-10, that one container of the generator runs
+with `--security-opt apparmor=unconfined`, because Docker's default AppArmor profile refuses the mounts of the
+oracle's own namespace; no other container, CI job or Molecule scenario changes. The isolation above still holds
+without AppArmor's second layer; the reasons and the remaining restrictions are in the amendment of the same date in
+section 2b.
 
 ## Operational consequences
 

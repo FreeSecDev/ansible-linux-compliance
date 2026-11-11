@@ -1,6 +1,0 @@
----
-trivial:
-  - >-
-    remediate - the sysctl render test now covers a configuration file read through a symbolic link whose target
-    changes between the read and the write, which refuses every rule as ``modified_since_read``, and the same link
-    unchanged, which leaves the rules ``applied`` (FREES-208).
