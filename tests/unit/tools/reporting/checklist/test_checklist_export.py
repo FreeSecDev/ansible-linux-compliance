@@ -339,6 +339,25 @@ def test_compliance_as_code_findings_are_refused_naming_the_mapping_issue(
     assert f"has no entry for benchmark {kit.BENCHMARK} and profile {kit.PROFILE}" in error
 
 
+def test_a_scan_run_with_operator_deviations_is_refused(
+    stig: Any, kit: Any, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    findings = (
+        kit.flagged(stig.finding(1, model.Outcome.PASS)),
+        stig.finding(2, model.Outcome.FAIL),
+    )
+    run_path = tmp_path / "scan-run.json"
+    run_path.write_text(model.dumps(stig.scan_run(findings)), encoding="utf-8")
+    content = tmp_path / "content.xml"
+    content.write_text(stig.benchmark_xml(), encoding="utf-8")
+    error = refused(
+        tmp_path, capsys, "--scan-run", str(run_path), "--checklist-content", str(content)
+    )
+    assert "1 finding(s) of scan run run-web01 carry an operator deviation" in error
+    assert "a run with deviations is never exported" in error
+    assert not (tmp_path / "cklb").exists()
+
+
 def test_xccdf_inputs_are_refused(
     kit: Any, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

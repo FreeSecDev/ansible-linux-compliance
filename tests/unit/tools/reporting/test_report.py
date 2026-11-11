@@ -12,6 +12,7 @@ from jsonschema import Draft202012Validator
 
 from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance import (
     collection,
+    deviations,
     exceptions,
     model,
     placement,
@@ -76,11 +77,12 @@ def test_the_schema_is_a_valid_2020_12_schema() -> None:
 def test_full_report_validates_against_the_schema(kit: Any) -> None:
     document = build(full_inputs(kit))
     assert errors(document) == []
-    assert document["schema_version"] == "2.3"
+    assert document["schema_version"] == "2.4"
     exceptions_summary = document["sections"]["exceptions"]["summary"]
     assert document["overview"] == {
         "available": sorted(SECTIONS),
         "error": [],
+        "deviation": 0,
         "exceptions": exceptions_summary,
         "off_platform": 0,
         "partial": [],
@@ -96,6 +98,7 @@ def test_empty_report_marks_every_section_unavailable_never_pass() -> None:
     assert document["overview"] == {
         "available": [],
         "error": [],
+        "deviation": 0,
         "exceptions": None,
         "off_platform": 0,
         "partial": [],
@@ -111,6 +114,7 @@ def test_empty_report_marks_every_section_unavailable_never_pass() -> None:
     assert sections["compliance"]["rules"] == []
     assert sections["compliance"]["groups"] == []
     assert sections["compliance"]["aggregates"] == []
+    assert sections["compliance"]["deviations"] == []
     assert document["raw_artifacts"] == []
     assert document["metadata"] == dict.fromkeys(
         ("commit", "finished_at", "generated_at", "pull_request", "started_at", "workflow_run")
@@ -162,6 +166,7 @@ def test_missing_and_corrupt_inputs_are_never_available(
     assert document["overview"] == {
         "available": ["lint"],
         "error": ["tests"],
+        "deviation": 0,
         "exceptions": None,
         "off_platform": 0,
         "partial": [],
@@ -736,7 +741,6 @@ def anchored_text(pattern: str) -> str:
     return "^" + pattern + "$"
 
 
-REPORT_2_3_FLAGS = frozenset(model.ResultFlag) - {model.ResultFlag.OPERATOR_DEVIATION}
 LIMIT_RULES: list[tuple[str, Any]] = [
     (r"/(then|else)/.*/maxItems$", STRUCTURAL),
     (
@@ -766,9 +770,21 @@ LIMIT_RULES: list[tuple[str, Any]] = [
     (r"/\$defs/exceptionScope/properties/\w+/maxItems$", exceptions.MAX_SCOPE_ITEMS),
     (r"/properties/findings/maxItems$", model.MAX_FINDINGS),
     (r"/properties/evidence/maxItems$", model.MAX_EVIDENCE_ITEMS),
-    (r"/properties/flags/maxItems$", len(REPORT_2_3_FLAGS)),
+    (r"/properties/flags/maxItems$", len(model.ResultFlag)),
     (r"/properties/rules/maxItems$", report.MAX_RULES),
     (r"/\$defs/complianceSection/properties/off_platform/maxItems$", report.MAX_INPUTS),
+    (r"/\$defs/complianceSection/properties/deviations/maxItems$", report.MAX_RULES),
+    (
+        (
+            r"/\$defs/(deviation|deviationEntry|remediation)/properties/"
+            r"(profile_value|effective_value)(/oneOf/\d+)?/maxLength$"
+        ),
+        deviations.MAX_VALUE_LENGTH,
+    ),
+    (
+        r"/\$defs/(deviation|deviationEntry)/properties/value_id/pattern$",
+        anchored_text(deviations.VALUE_ID_PATTERN),
+    ),
     (r"/properties/(groups|aggregates)/maxItems$", report.MAX_GROUPS),
     (r"/properties/(builds|scenarios)/maxItems$", common.MAX_ENTRIES),
     (

@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 
     from tests.browser.conftest import Dashboard
 
-RULES_PER_INPUT = 145
+RULES_PER_INPUT = 141
 LOAD_SECONDS = 60.0
 ACTION_SECONDS = 10.0
 SCHEMA = json.loads(
@@ -70,7 +70,7 @@ def test_the_maximum_fixture_fills_the_list_limits_and_the_size_cap(
     assert {name: len(section["items"]) for name, section in sections.items()} == expected
     assert len(document["raw_artifacts"]) == 9000
     compliance = sections["compliance"]
-    assert len(compliance["rules"]) > 140_000
+    assert len(compliance["rules"]) > 135_000
     assert compliance["notes"]
     truncated = [
         name

@@ -42,7 +42,6 @@ from tools.reporting.common import (
 from tools.reporting.compliance import (
     KIND_EVALUATION,
     ComplianceData,
-    check_findings_version,
     scan_run_summary,
     summarize,
     tally_findings,
@@ -95,14 +94,12 @@ def evaluation_data(data: bytes, evaluation: exceptions.Evaluation) -> Evaluatio
     """Build the inputs of an evaluation that was verified against its exceptions file.
 
     Raises:
-        InvalidInputError: If the inventory host of the evaluation is not a valid host name,
-            or its scan run has a findings schema version the report cannot represent.
+        InvalidInputError: If the inventory host of the evaluation is not a valid host name.
     """
     if re.fullmatch(exceptions.HOST_PATTERN, evaluation.target.host) is None:
         message = "the inventory host of the evaluation is not a valid host name"
         raise InvalidInputError(message)
     run = evaluation.run
-    check_findings_version(run)
     lapsed = evaluation.lapsed_rule_ids()
     status = run.status.value
     unfinished = 0 if status == "completed" else 1

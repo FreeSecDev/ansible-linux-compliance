@@ -171,13 +171,16 @@ the theme button. Each table prints its current page.
 
 - The embedded report (as escaped JSON) may be at most 128 MiB. For a larger report only the JSON is written, and the
   exit status is 3. Split such a report by benchmark and profile, or by host.
+- A report with [operator deviations](reporting-data-model.md#operator-deviations) (schema 2.4, a non-empty
+  `sections.compliance.deviations`) is not shown yet: only the JSON is written, with a warning, and the exit status is
+  3. Until the dashboard has its deviation section (ADR 0032), the rule list would show a flagged pass as a plain pass.
 - Capacity estimate: the scale fixture works out to about 900 bytes per rule entry (with its findings and sources), so
   one dashboard holds roughly 350 to 400 hosts at 300 to 400 rules each under the cap. Larger fleets need one report
   per benchmark and profile, or per group of hosts.
 - This cap is below some schema maxima: a report with the schema's maximum of 1,000,000 rules, each with its findings,
   is several hundred megabytes and above the string size a browser can parse. The browser tests use a report at the
   cap, with 1000 inputs in every section except Exceptions (whose evaluations share the compliance inputs), 9000 raw artifacts, detail lists past their 1000-entry cap and about
-  145,000 rules (each rule entry names its host, benchmark, content version and profile).
+  138,000 rules (each rule entry names its host, benchmark, content version, profile and deviation).
 
 ## Security
 

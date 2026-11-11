@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import dataclasses
 import datetime as dt
 import json
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import pytest
 
@@ -166,6 +167,38 @@ def evaluation_json(evaluation: exceptions.Evaluation) -> str:
     return json.dumps(evaluation.to_dict(), indent=2, sort_keys=True) + "\n"
 
 
+DEVIATION = model.Deviation("var_password_pam_minlen", "14", "8")
+SUMMARY_DEVIATION_KEYS = ("deviation", "deviation_by_outcome")
+
+
+def flagged(item: model.Finding, deviation: model.Deviation = DEVIATION) -> model.Finding:
+    """Return ``item`` flagged ``operator_deviation`` with ``deviation``."""
+    return dataclasses.replace(
+        item, flags=(*item.flags, model.ResultFlag.OPERATOR_DEVIATION), deviation=deviation
+    )
+
+
+def _summaries(compliance: dict[str, Any]) -> list[object]:
+    figures = [*compliance["groups"], *compliance["aggregates"]]
+    data = [item["data"] for item in compliance["items"] if isinstance(item["data"], dict)]
+    return [compliance["summary"], *(entry["summary"] for entry in figures + data)]
+
+
+def without_deviations(document: dict[str, Any]) -> None:
+    """Strip the schema 2.4 keys, which a 2.0 to 2.3 document never has."""
+    del document["overview"]["deviation"]
+    compliance = document["sections"]["compliance"]
+    del compliance["deviations"]
+    for summary in _summaries(compliance):
+        if isinstance(summary, dict):
+            for key in SUMMARY_DEVIATION_KEYS:
+                del summary[key]
+    for rule in compliance["rules"]:
+        del rule["deviation"]
+        for source in rule["sources"]:
+            del source["deviation"]
+
+
 class Kit:
     """Helpers and fixture paths shared by the reporting tests."""
 
@@ -177,6 +210,9 @@ class Kit:
     evaluation_run = staticmethod(evaluation_run)
     evaluate = staticmethod(evaluate)
     evaluation_json = staticmethod(evaluation_json)
+    flagged = staticmethod(flagged)
+    without_deviations = staticmethod(without_deviations)
+    DEVIATION = DEVIATION
     EVALUATION_FILE = EVALUATION_FILE
     EXCEPTIONS_FILE = EXCEPTIONS_FILE
     CONTROLLER_TIME = CONTROLLER_TIME
