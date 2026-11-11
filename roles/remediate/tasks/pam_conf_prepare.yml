@@ -136,20 +136,58 @@
   tags:
     - always
 
+- name: PAM configuration line | Resolve every PAM directory and every PAM service link without following it
+  ansible.builtin.stat:
+    path: "{{ __linux_compliance_remediate_sc_stack_link }}"
+    follow: false
+    get_checksum: false
+    get_mime: false
+    get_attributes: false
+  loop: >-
+    {{ (__linux_compliance_remediate_sc_directories.results | selectattr('stat', 'defined')
+        | selectattr('stat.isdir', 'defined') | selectattr('stat.isdir')
+        | map(attribute='__linux_compliance_remediate_sc_directory') | list)
+       + (__linux_compliance_remediate_sc_stack_files.files | selectattr('islnk') | map(attribute='path') | sort
+          | list) }}
+  loop_control:
+    loop_var: __linux_compliance_remediate_sc_stack_link
+  register: __linux_compliance_remediate_sc_stack_resolved
+  failed_when: false
+  tags:
+    - always
+
 - name: PAM configuration line | Sort the PAM service entries into the files to read and those that cannot be read
+  vars:
+    __linux_compliance_remediate_sc_link_stats: >-
+      {%- set found = {} -%}
+      {%- for result in __linux_compliance_remediate_sc_stack_links.results | default([]) -%}
+      {%- set _ = found.update({result.__linux_compliance_remediate_sc_stack_link:
+            result.stat if result.stat is defined else {'msg': result.msg | default('')}}) -%}
+      {%- endfor -%}
+      {{ found }}
+    __linux_compliance_remediate_sc_directory_stats: >-
+      {%- set found = {} -%}
+      {%- for result in __linux_compliance_remediate_sc_directories.results
+            | selectattr('skipped', 'undefined') -%}
+      {%- set _ = found.update({result.__linux_compliance_remediate_sc_directory:
+            result.stat if result.stat is defined else {'msg': result.msg | default('')}}) -%}
+      {%- endfor -%}
+      {{ found }}
+    __linux_compliance_remediate_sc_resolutions: >-
+      {%- set found = {} -%}
+      {%- for result in __linux_compliance_remediate_sc_stack_resolved.results | default([]) -%}
+      {%- set _ = found.update({result.__linux_compliance_remediate_sc_stack_link:
+            result.stat if result.stat is defined else {'msg': result.msg | default('')}}) -%}
+      {%- endfor -%}
+      {{ found }}
   ansible.builtin.set_fact:
     __linux_compliance_remediate_sc_stack_entries: >-
       {{ __linux_compliance_remediate_sc_stack_files.files
          | freesecdev.linux_compliance.pam_service_files(
-             dict(__linux_compliance_remediate_sc_stack_links.results | default([])
-                  | map(attribute='__linux_compliance_remediate_sc_stack_link')
-                  | zip(__linux_compliance_remediate_sc_stack_links.results | default([])
-                        | map(attribute='stat', default={}))),
+             __linux_compliance_remediate_sc_link_stats,
              __linux_compliance_remediate_sc_stack_files.skipped_paths | default({}),
-             dict(__linux_compliance_remediate_sc_directories.results | selectattr('skipped', 'undefined')
-                  | map(attribute='__linux_compliance_remediate_sc_directory')
-                  | zip(__linux_compliance_remediate_sc_directories.results | selectattr('skipped', 'undefined')
-                        | map(attribute='stat', default={})))) }}
+             __linux_compliance_remediate_sc_directory_stats,
+             __linux_compliance_remediate_sc_resolutions) }}
   tags:
     - always
 

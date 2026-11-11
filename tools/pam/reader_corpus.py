@@ -16,6 +16,14 @@ decision is ``applied``, the exact ``new_text`` that the role writes with
 ``ansible.builtin.copy``, and for every hand-written case, the file after two rules in a row, so
 the table also records what pam reads after each change. ``assemble`` joins the outputs of every
 image into the table.
+
+The ``libpam`` cases (FREES-212) are layouts of PAM files, not configuration files: the probe
+installs each in the image, runs ``pam_chauthtok`` of the image's real libpam for the service
+``freesecdev-pwq`` with ``pam_pwquality.so`` replaced by a module that records its arguments
+(``tools/pam/oracle/fake_pwquality.c``), and records which argument lists libpam passed to it;
+the table holds them under ``libpam_cases``. They cover the forms of PAM text that the
+``pwquality`` family once read differently from libpam, the link to ``/proc/self/environ`` and the
+fallback to ``/etc/pam.conf``.
 """
 
 from __future__ import annotations
@@ -33,7 +41,7 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
 TABLE: Final[Path] = Path("tests/fixtures/pam_conf/reader_verdicts.json")
-SCHEMA_VERSION: Final[int] = 2
+SCHEMA_VERSION: Final[int] = 3
 STACK_PATHS: Final[dict[str, str]] = {
     "faillock": "/etc/pam.d/common-auth",
     "pwhistory": "/etc/pam.d/system-auth",
@@ -82,6 +90,147 @@ SEQUENCES: Final[dict[str, tuple[tuple[tuple[str, str, str], tuple[str, str, str
         (("remember", "at_least", "24"), ("enforce_for_root", "present", "")),
     ),
 }
+
+
+LIBPAM_SERVICE: Final[str] = "freesecdev-pwq"
+LIBPAM_READING_KEYS: Final[tuple[str, ...]] = ("start", "chauthtok", "calls")
+SERVICE_FILE: Final[str] = f"/etc/pam.d/{LIBPAM_SERVICE}"
+TARGET_FILE: Final[str] = "/etc/security/freesecdev-pwq-target"
+PWQ: Final[str] = "password requisite pam_pwquality.so"
+LOOSE: Final[str] = "minlen=1 enforcing=0"
+PAM_DIRECTORIES: Final[tuple[str, ...]] = ("/etc/pam.d", "/usr/lib/pam.d", "/usr/share/pam.d")
+HOP_FILE: Final[str] = "/etc/security/freesecdev-pwq-hop"
+CWD_TARGET: Final[str] = "/proc/self/cwd" + TARGET_FILE
+RENAMED_MODULE: Final[str] = "pam_freesecdev-pwq.so"
+ELSEWHERE_MODULE: Final[str] = "/usr/local/lib/security/pam_pwquality.so"
+MODULE_DIRECTORIES: Final[tuple[str, ...]] = (
+    "/usr/lib64/security",
+    "/usr/lib/x86_64-linux-gnu/security",
+)
+
+
+@dataclass(frozen=True)
+class LibpamCase:
+    """A layout of PAM files whose service the real libpam of each image runs (FREES-212).
+
+    ``files`` and ``links`` map absolute paths to a text or a link target, and ``copies`` maps
+    an absolute path to the name of a module in the module directory of the image, copied there
+    with one byte appended, so that it loads as that module with another checksum. The probe
+    removes the PAM directories of ``away`` for the run, installs the layout, sets
+    ``environment`` as the value of ``FREESECDEV_PAM_PROBE_LINE``, runs the service and puts
+    every file back.
+    """
+
+    case_id: str
+    files: tuple[tuple[str, str], ...]
+    links: tuple[tuple[str, str], ...] = ()
+    away: tuple[str, ...] = ()
+    environment: str = ""
+    copies: tuple[tuple[str, str], ...] = ()
+
+    @property
+    def stack(self) -> str:
+        """Return the text of the service file in ``/etc/pam.d``, or an empty text."""
+        return dict(self.files).get(SERVICE_FILE, "")
+
+
+def _service(case_id: str, text: str, *extra: tuple[str, str]) -> LibpamCase:
+    return LibpamCase(f"libpam-{case_id}", ((SERVICE_FILE, text), *extra))
+
+
+def _included(case_id: str, text: str) -> LibpamCase:
+    return _service(case_id, text, (TARGET_FILE, f"{PWQ} {LOOSE}\n"))
+
+
+LIBPAM_CASES: Final[tuple[LibpamCase, ...]] = (
+    _service("plain", f"{PWQ} {LOOSE}\n"),
+    _service("plain-required", f"{PWQ} minlen=14\n"),
+    _service("local-users-only", f"{PWQ} minlen=14 local_users_only\n"),
+    _service("comment-backslash", f"# a comment that ends in a backslash \\\n{PWQ} {LOOSE}\n"),
+    _service("comment-1022-bytes", "#" + "x" * 1021 + f"\n{PWQ} minlen=14\n"),
+    _service("comment-1023-bytes", "#" + "x" * 1022 + f"{PWQ} {LOOSE}\n"),
+    _service("nul", f"{PWQ} minlen=14\0 {LOOSE}\n"),
+    _service("bracket-argument", f"{PWQ} [minlen=1]\n"),
+    _service("glued-control", "password [success=ok default=die]pam_pwquality.so minlen=1\n"),
+    _service("upper-type", "PASSWORD requisite pam_pwquality.so minlen=1\n"),
+    _service("silent-type", f"-{PWQ} minlen=1\n"),
+    _service("cr-argument", f"{PWQ} minlen=1\r\n"),
+    _service("continued-arguments", f"{PWQ} minlen=14 \\\n  {LOOSE}\n"),
+    _service("continued-blank", f"{PWQ} minlen=14 \\\n\n  {LOOSE}\n"),
+    _service("continued-comment", f"{PWQ} minlen=14 \\\n# site\n  {LOOSE}\n"),
+    _service("continued-at-end", f"{PWQ} minlen=14\n{PWQ} {LOOSE} \\"),
+    _included("include-upper", f"@INCLUDE {TARGET_FILE}\n"),
+    _included("include-dash", f"-@include {TARGET_FILE}\n"),
+    _included(
+        "include-continued-target", "password include \\\n  ../security/freesecdev-pwq-target\n"
+    ),
+    _included("include-continued-control", f"password \\\n  include {TARGET_FILE}\n"),
+    _included("include-at-continued", f"@include \\\n  {TARGET_FILE}\n"),
+    _included("substack-upper", f"PASSWORD SUBSTACK {TARGET_FILE}\n"),
+    _included("include-silent-type", f"-password include {TARGET_FILE}\n"),
+    _service(
+        "include-name",
+        "password include freesecdev-pwq-included\n",
+        ("/etc/pam.d/freesecdev-pwq-included", f"{PWQ} {LOOSE}\n"),
+    ),
+    LibpamCase(
+        "libpam-environ-link",
+        (),
+        ((SERVICE_FILE, "/proc/self/environ"),),
+        environment=f"\n{PWQ} {LOOSE}\n#",
+    ),
+    LibpamCase(
+        "libpam-pam-conf-fallback",
+        (("/etc/pam.conf", f"{LIBPAM_SERVICE} {PWQ} {LOOSE}\n"),),
+        away=PAM_DIRECTORIES,
+    ),
+    LibpamCase(
+        "libpam-pam-conf-vendor-directory",
+        (
+            ("/etc/pam.conf", f"{LIBPAM_SERVICE} {PWQ} {LOOSE}\n"),
+            (f"/usr/share/pam.d/{LIBPAM_SERVICE}", f"{PWQ} minlen=14\n"),
+        ),
+        away=PAM_DIRECTORIES,
+    ),
+    LibpamCase(
+        "libpam-pam-conf-pam-d-is-a-file",
+        (("/etc/pam.conf", f"{LIBPAM_SERVICE} {PWQ} {LOOSE}\n"), ("/etc/pam.d", "")),
+        away=PAM_DIRECTORIES,
+    ),
+    LibpamCase(
+        "libpam-cwd-link",
+        ((TARGET_FILE, f"{PWQ} {LOOSE}\n"),),
+        ((SERVICE_FILE, CWD_TARGET),),
+    ),
+    LibpamCase(
+        "libpam-chained-link",
+        ((TARGET_FILE, f"{PWQ} {LOOSE}\n"),),
+        ((SERVICE_FILE, HOP_FILE), (HOP_FILE, CWD_TARGET)),
+    ),
+    LibpamCase(
+        "libpam-renamed-module",
+        ((SERVICE_FILE, f"password requisite {RENAMED_MODULE} {LOOSE}\n"),),
+        tuple(
+            (f"{directory}/{RENAMED_MODULE}", "pam_pwquality.so")
+            for directory in MODULE_DIRECTORIES
+        ),
+    ),
+    _service("dot-module", f"password requisite ./pam_pwquality.so {LOOSE}\n"),
+    LibpamCase(
+        "libpam-module-copy-elsewhere",
+        ((SERVICE_FILE, f"password requisite {ELSEWHERE_MODULE} {LOOSE}\n"),),
+        copies=((ELSEWHERE_MODULE, "pam_pwquality.so"),),
+    ),
+    _service("sufficient-skip", f"password sufficient pam_permit.so\n{PWQ} {LOOSE}\n"),
+    _service("sufficient-skip-required", f"password sufficient pam_permit.so\n{PWQ} minlen=14\n"),
+    LibpamCase(
+        "libpam-pam-conf-ignored",
+        (
+            ("/etc/pam.conf", f"{LIBPAM_SERVICE} {PWQ} {LOOSE}\n"),
+            (SERVICE_FILE, f"{PWQ} minlen=14\n"),
+        ),
+    ),
+)
 
 
 @dataclass(frozen=True)
@@ -448,10 +597,36 @@ def all_cases() -> list[Case]:
     return found
 
 
+def write_libpam_case(directory: Path, case: LibpamCase) -> None:
+    """Write one ``libpam`` case: its layout below ``root`` and what the probe needs to run it."""
+    folder = directory / case.case_id
+    root = folder / "root"
+    root.mkdir(parents=True)
+    for path, text in case.files:
+        target = root / path.lstrip("/")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(text.encode("utf-8"))
+    for path, source in case.links:
+        link = root / path.lstrip("/")
+        link.parent.mkdir(parents=True, exist_ok=True)
+        link.symlink_to(source)
+    (folder / "reader").write_text("libpam\n", encoding="utf-8")
+    (folder / "service").write_text(LIBPAM_SERVICE + "\n", encoding="utf-8")
+    (folder / "away").write_text("".join(f"{path}\n" for path in case.away), encoding="utf-8")
+    (folder / "environment").write_bytes(case.environment.encode("utf-8"))
+    (folder / "copies").write_text(
+        "".join(f"{path}\t{module}\n" for path, module in case.copies), encoding="utf-8"
+    )
+    if case.stack:
+        (folder / "stack").write_bytes(case.stack.encode("utf-8"))
+
+
 def write_cases(directory: Path) -> int:
     """Write every case below ``directory`` and return how many there are."""
     cases = all_cases()
     directory.mkdir(parents=True, exist_ok=False)
+    for libpam_case in LIBPAM_CASES:
+        write_libpam_case(directory, libpam_case)
     for case in cases:
         folder = directory / case.case_id
         folder.mkdir()
@@ -462,7 +637,7 @@ def write_cases(directory: Path) -> int:
         )
         if case.stack:
             (folder / "stack").write_bytes(case.stack.encode("utf-8"))
-    return len(cases)
+    return len(cases) + len(LIBPAM_CASES)
 
 
 Outputs = tuple[
@@ -497,6 +672,11 @@ def assemble(outputs: Path, table: Path) -> int:
         for case in cases
         if set(readings.get(case.case_id, {})) != set(platforms)
         or (case.stack and set(stacks.get(case.case_id, {})) != set(platforms))
+    ] + [
+        case.case_id
+        for case in LIBPAM_CASES
+        if set(readings.get(case.case_id, {})) != set(platforms)
+        or (case.stack and set(stacks.get(case.case_id, {})) != set(platforms))
     ]
     if not platforms or missing:
         message = f"the image outputs miss readings for {missing[:5]} or every platform"
@@ -505,7 +685,8 @@ def assemble(outputs: Path, table: Path) -> int:
         "schema_version": SCHEMA_VERSION,
         "generator": "tools/pam/generate-reader-verdicts.sh",
         "platforms": platforms,
-        "reading_keys": {reader: list(keys) for reader, keys in READING_KEYS.items()},
+        "reading_keys": {reader: list(keys) for reader, keys in READING_KEYS.items()}
+        | {"libpam": list(LIBPAM_READING_KEYS)},
     }
     rows = [
         json.dumps(
@@ -532,10 +713,39 @@ def assemble(outputs: Path, table: Path) -> int:
         )
         for case in cases
     ]
+    libpam_rows = [
+        json.dumps(
+            {
+                "id": case.case_id,
+                "files": [list(item) for item in case.files],
+                "links": [list(item) for item in case.links],
+                "away": list(case.away),
+                "environment": case.environment,
+                "copies": [list(item) for item in case.copies],
+                "readings": dict(sorted(readings[case.case_id].items())),
+                **(
+                    {"stack_lines": dict(sorted(stacks[case.case_id].items()))}
+                    if case.stack
+                    else {}
+                ),
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        for case in LIBPAM_CASES
+    ]
     opening = json.dumps(header, sort_keys=True, separators=(",", ":"))[:-1]
     table.parent.mkdir(parents=True, exist_ok=True)
-    table.write_text(opening + ',"cases":[\n' + ",\n".join(rows) + "\n]}\n", encoding="utf-8")
-    return len(cases)
+    table.write_text(
+        opening
+        + ',"cases":[\n'
+        + ",\n".join(rows)
+        + '\n],"libpam_cases":[\n'
+        + ",\n".join(libpam_rows)
+        + "\n]}\n",
+        encoding="utf-8",
+    )
+    return len(cases) + len(LIBPAM_CASES)
 
 
 def main(argv: Sequence[str] | None = None) -> int:

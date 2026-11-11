@@ -326,3 +326,51 @@ directory that is a link was read; only linked files were missed.
 - Open points, for FREES-212: when none of the three PAM directories is a directory, libpam reads `/etc/pam.conf`,
   which the role does not read, so a `pam_faillock` or `pam_pwhistory` argument there is missed (ADR 0021, amendment
   of FREES-213).
+
+## Amendment of 2026-11-10: one PAM reader for all three families, links below /proc, and /etc/pam.conf (FREES-212)
+
+**Context.** The `pwquality` family parsed PAM text with a parser of its own, which missed a live line after a comment
+that ends with a backslash, a comment line that Ubuntu's libpam splits, NUL bytes and include forms that libpam
+accepts ([ADR 0021](0021-native-banners-pwquality-and-profile-values.md), amendment of the same day). The reader of
+this ADR read all of them as libpam does. Two gaps were shared by all three families: a PAM entry that links to a
+per-process file such as `/proc/self/environ` is read in the module's process, while libpam reads it in the process
+that calls it; and when none of the PAM directories is a directory, libpam reads `/etc/pam.conf`, which no family
+reads (the open point of the FREES-213 amendment).
+
+**Decision.**
+
+- The reader moves unchanged into `plugins/module_utils/compliance/pam_reader.py` (`assembled_lines` in both variants,
+  `strtok`, `module_lines`, `module_arguments`, `effective_stack`, and `unassembled`, the NUL and long-line test that
+  `effective_stack` makes); `plugins/filter/pam_conf.py` imports it and keeps its names, and `pam_conf_decision`
+  decides every case as before. The `pwquality` family reads the PAM files with the same module.
+- The verdict table `tests/fixtures/pam_conf/reader_verdicts.json` (schema 3) keeps every row of the corpus as it was
+  and adds `libpam_cases`: layouts of PAM files that the probe installs in throwaway containers of both images, with
+  `pam_pwquality.so` replaced by a module that records its arguments, and runs with the real libpam's `pam_chauthtok`.
+  They prove each form of the ADR 0021 amendment, the link to `/proc/self/environ` and the condition of the
+  `/etc/pam.conf` fallback (`stat` and `S_ISDIR` on `/etc/pam.d`, `/usr/lib/pam.d` and, on Rocky Linux, the vendor
+  directory; no fallback for a missing service file on either image).
+- `pam_service_files` takes a fifth, required argument: the `stat` with `follow: false` of every PAM directory and
+  every link, which `pam_conf_prepare.yml` now runs (`failed_when: false`). A link to a regular file, or a PAM
+  directory, that resolves below `/proc`, `/sys` or `/dev` is the unreadable kind `virtual_file`, and `/etc/pam.conf`
+  is the unreadable kind `pam_conf_fallback` when neither `/etc/pam.d` nor `/usr/lib/pam.d` is a directory; both
+  refuse every rule as `unreadable_stack`, as any other unreadable entry does. Reading `/etc/pam.conf` would need its
+  own format and was not small, so the fallback is refused rather than read.
+- The `msg` of a `stat` that failed on a link or a PAM directory is passed to the filter (a mapping with only `msg`
+  instead of an empty one) and follows the entry in the reason, for example `... is a PAM directory that stat could
+  not inspect (...): Too many levels of symbolic links`.
+- The faillock regression group `stack` adds, on both platforms, a service file that links to `/proc/self/environ`
+  and the vendor directory `/usr/share/pam.d` made a link to itself (both rules `unreadable_stack`, the resolved path
+  or the `stat` message named; the empty directory of Rocky Linux is put back with its mode). The group declares
+  `/usr/share/pam.d` as rewritten, as the pwquality group `readers` does. The link to itself now also checks the
+  `stat` message.
+
+- After the review of FREES-212, a link (or a PAM directory) is read only when its `lnk_target`, made absolute, is the
+  path that `lnk_source` gives. A target that names a path below `/proc`, `/sys` or `/dev` (`/proc/self/cwd/x`, which
+  the module resolves into its own working directory) is `virtual_file`, and a target reached through a further link
+  or a `..` after a name is the new unreadable kind `indirect_link`; both make every rule of these families
+  `unreadable_stack`. The `pwquality` family also identifies `pam_pwquality` by the file that libpam loads, not by its
+  name (ADR 0021, same amendment); these families still find `pam_faillock` and `pam_pwhistory` lines by the module's
+  file name, as before.
+
+**The open point of the FREES-213 amendment is closed:** the `/etc/pam.conf` fallback refuses every rule of the
+three families.

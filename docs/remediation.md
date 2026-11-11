@@ -405,7 +405,7 @@ statuses that refuse to act, with nothing changed and the entry kept:
 | `not_directory` | `pwquality.conf.d` exists but is not a directory, for example a symbolic link; nothing is written through it |
 | `not_regular_file` | The main file or a drop-in is a symbolic link or another non-regular file |
 | `not_owned` | A file at the drop-in's path does not carry the collection's header, with or without a ledger entry |
-| `overridden` (apply) | A file that libpwquality reads later sets another value, or a `pam_pwquality` argument in any file of `/etc/pam.d`, `/usr/lib/pam.d` or the vendor directory `/usr/share/pam.d` sets the setting to another value (FREES-200, FREES-211); the reason names the file and the line or the argument. Also every rule other than `_enforcing` when `enforcing` is 0 in the files or in a `pam_pwquality` argument, in any form that the library reads as 0 (`enforcing=0`, `enforcing=00`, `enforcing=+00`, `enforcing=-0`), because libpwquality then only warns; every rule when a PAM line includes a path with a `/` (`@include /etc/site/password`, `password include ../security/x`), which Linux-PAM opens outside the PAM files that the collection reads (a relative target is looked up in each PAM directory in turn, as a service name is); and every rule when an entry of a PAM directory is a symbolic link to nothing, a link to something that is neither a regular file nor a directory (a FIFO, a device), a link that `stat` cannot follow (a loop, or a path through something that is not a directory), or neither a regular file, a directory nor a link, or when `find` could not list a PAM directory or inspect one of its entries or `stat` could not inspect a PAM directory (a loop), which libpam may open but the collection does not read (FREES-213); the reason names the entry |
+| `overridden` (apply) | A file that libpwquality reads later sets another value, or a `pam_pwquality` argument in any file of `/etc/pam.d`, `/usr/lib/pam.d` or the vendor directory `/usr/share/pam.d` sets the setting to another value (FREES-200, FREES-211); the reason names the file and the line or the argument. Also every rule other than `_enforcing` when `enforcing` is 0 in the files or in a `pam_pwquality` argument, in any form that the library reads as 0 (`enforcing=0`, `enforcing=00`, `enforcing=+00`, `enforcing=-0`), because libpwquality then only warns; every rule when a PAM line includes a path with a `/` (`@include /etc/site/password`, `password include ../security/x`), which Linux-PAM opens outside the PAM files that the collection reads (a relative target is looked up in each PAM directory in turn, as a service name is); and every rule when an entry of a PAM directory is a symbolic link to nothing, a link to something that is neither a regular file nor a directory (a FIFO, a device), a link that `stat` cannot follow (a loop, or a path through something that is not a directory), or neither a regular file, a directory nor a link, or when `find` could not list a PAM directory or inspect one of its entries or `stat` could not inspect a PAM directory (a loop), which libpam may open but the collection does not read (FREES-213), with the error message of a failed `stat` in the reason; and every rule when a link or a PAM directory resolves to a path below `/proc`, `/sys` or `/dev`, such as a link to `/proc/self/environ`, which can read differently in the process that calls libpam, or when its target names such a path although the module resolves it elsewhere (`/proc/self/cwd/x`), or when its target is reached through a further link (`indirect_link`), when a PAM line loads a module that the collection cannot identify (an unknown platform, `$ISA`, a module path that `stat` could not inspect), when neither `/etc/pam.d` nor `/usr/lib/pam.d` is a directory, so that libpam reads `/etc/pam.conf` instead, which the collection does not read, when a PAM file has a NUL byte or a line of 1023 bytes or more (Ubuntu's libpam splits such a line, also a comment, and runs the rest), or when the lines of a PAM file that load `pam_pwquality` or include a file are assembled differently by the line readers of libpam 1.5.1 and 1.5.3 (a continued line with a blank or comment line inside it) (FREES-212); the reason names the entry or the file |
 | `modified_since_read` | The main file changed between the read and the write, of an apply or of a cleanup (its SHA-256 is read again right before the write); nothing is written, and the next run reads it again |
 | `write_mismatch` (cleanup) | After the main file was written back, its SHA-256 is not that of the text written; unlike the other reasons, the file was written, and the entry is kept so that the next run checks it again |
 | `unreadable_file` (apply) | libpwquality stops reading at a line before the rule's value (an unknown setting, a value that is not an integer, a NUL, a line of 1023 bytes or more, also in a drop-in read before the main file), a drop-in that it reads is a symbolic link or not a regular file, or the main file is not UTF-8 text or holds a NUL |
@@ -429,7 +429,27 @@ file, such as the `system-auth` that authselect links into `/etc/authselect`, is
 in the PAM directory, and a PAM directory that is a link to a directory is read through it (FREES-213). A directory
 entry, or a link to one, is left out, because libpam reads no line from it; libpam still stops its lookup of that name
 there, so a service named like the directory falls back to `other`, while the family still reads a regular file of the
-name in a lower PAM directory, which can only add a refusal. With the main file, a setting that is set on
+name in a lower PAM directory, which can only add a refusal. Since FREES-212 every PAM file is read with the reader of
+the `faillock` and `pwhistory` families (`plugins/module_utils/compliance/pam_reader.py`), in both line assembly
+variants of libpam: a line continued with a backslash is joined, a comment line ends where libpam ends it (a live
+`pam_pwquality` line after `# comment \` is read, as libpam runs it), each line is split as `_pam_StrTok` splits it,
+the type is read in any case and with a leading `-`, and every `include`, `substack` and `@include` (in any case and
+with a leading `-`, also on a continued line) of a path with a `/` refuses the rule. `@include` is read as an include
+on both platforms, although only Ubuntu's libpam accepts it (Rocky Linux's refuses the line), which can only add a
+refusal. `tests/unit/tools/test_pam_libpam_verdicts.py` checks each form against what the real libpam of both
+Molecule images passes to `pam_pwquality` (`libpam_cases` of `tests/fixtures/pam_conf/reader_verdicts.json`,
+`make pam-reader-verdicts`). A line loads `pam_pwquality` when the file name of the path that libpam loads for its
+module path holds `pam_pwquality`, in any directory (also a build installed elsewhere, such as
+`/usr/local/lib/security/pam_pwquality.so`), or when that path is a regular file with the SHA-256 of
+`pam_pwquality.so` of the module directory (a link or a copy under another name): the role inspects every module path
+with `stat` (filter `pwquality_pam_modules`, the module directory from the OS family and the architecture), and an
+unknown platform, a path with `$ISA`, a module that could not be inspected, or a module directory without
+`pam_pwquality.so` (which may then not be the directory that libpam loads from, as on a Debian system whose `/usr` is
+not merged) refuses every rule. A build of the module under another name and with another checksum is not
+recognised (ADR 0021). The family decides the values that
+`pam_pwquality` would use, not whether libpam runs it: a `sufficient` module or a jump before the line, a line of
+another type, or a stack without `pam_pwquality` leave the rule `compliant` or `applied` although no quality check
+happens; the stack rules that enable the module stay audit-only (FREES-212). With the main file, a setting that is set on
 more than one line, in any case or spacing, is `duplicate_setting` and not touched. With drop-ins, a rule is
 `overridden`, with nothing changed and the overriding file named, when the main file or a later drop-in sets another
 value; a file at the
@@ -744,9 +764,12 @@ time above 604800 seconds, which `pam_faillock` ignores, or a `deny` above 65535
 service file that the collection does not read as it does: an include of a file outside the PAM directories, a NUL
 byte or a line of 1023 bytes or more, or an entry of a PAM directory that is a symbolic link to nothing, a link to
 something that is neither a regular file nor a directory, a link that `stat` cannot follow, such as a loop, or neither
-a regular file, a directory nor a link, or a PAM directory or entry that `find` or `stat` could not inspect, FREES-213;
-an entry that is a directory, or a link to one, is left out, and a regular file of its name in a lower PAM directory is
-still read, which can only add a refusal), `overridden` (a `pam_faillock` or `pam_pwhistory` line of a service file that
+a regular file, a directory nor a link, or a PAM directory or entry that `find` or `stat` could not inspect, FREES-213,
+with the error message of a failed `stat` in the reason; a link or a PAM directory that resolves below `/proc`, `/sys`
+or `/dev`, or whose target names such a path (`/proc/self/cwd/x`), a link whose target is reached through a further
+link (`indirect_link`), or `/etc/pam.conf` when neither `/etc/pam.d` nor `/usr/lib/pam.d` is a directory and libpam
+reads it instead, FREES-212; an entry that is a directory, or a link to one, is left out, and a regular file of its name in a
+lower PAM directory is still read, which can only add a refusal), `overridden` (a `pam_faillock` or `pam_pwhistory` line of a service file that
 libpam opens, in any case, across continued lines and split as `_pam_StrTok` splits it, carries `conf=` or sets the
 option, which pam takes over the file), `unreadable_file` (a NUL byte or a line of 1023 bytes or more, on which
 `pam_faillock` fails, or a file that is not UTF-8), `unreadable_value` (`deny` above 65535, which pam wraps at 16

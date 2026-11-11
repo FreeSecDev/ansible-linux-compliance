@@ -37,12 +37,23 @@ def write_outputs(directory: Path, *, skip: str | None = None) -> None:
             if "stack_lines" in entry:
                 row["stack"] = cast("dict[str, object]", entry["stack_lines"])[platform]
             lines.append(json.dumps(row))
+        for entry in cast("list[dict[str, object]]", document["libpam_cases"]):
+            if entry["id"] == skip:
+                continue
+            row = {
+                "id": entry["id"],
+                "reading": cast("dict[str, object]", entry["readings"])[platform],
+            }
+            if "stack_lines" in entry:
+                row["stack"] = cast("dict[str, object]", entry["stack_lines"])[platform]
+            lines.append(json.dumps(row))
         (directory / f"{platform}.jsonl").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def test_the_cases_are_written_with_the_file_the_reader_and_the_arguments(tmp_path: Path) -> None:
     out = tmp_path / "cases"
-    assert reader_corpus.write_cases(out) == len(reader_corpus.all_cases())
+    count = len(reader_corpus.all_cases()) + len(reader_corpus.LIBPAM_CASES)
+    assert reader_corpus.write_cases(out) == count
     case = next(case for case in reader_corpus.all_cases() if case.args)
     folder = out / case.case_id
     assert (folder / "conf").read_bytes() == case.text.encode("utf-8")
@@ -58,7 +69,8 @@ def test_the_cases_are_written_with_the_file_the_reader_and_the_arguments(tmp_pa
 def test_the_table_assembled_from_the_outputs_is_the_committed_table(tmp_path: Path) -> None:
     write_outputs(tmp_path / "out")
     table = tmp_path / "table" / "verdicts.json"
-    assert reader_corpus.assemble(tmp_path / "out", table) == len(reader_corpus.all_cases())
+    count = len(reader_corpus.all_cases()) + len(reader_corpus.LIBPAM_CASES)
+    assert reader_corpus.assemble(tmp_path / "out", table) == count
     assert table.read_text(encoding="utf-8") == TABLE.read_text(encoding="utf-8")
 
 
@@ -75,7 +87,7 @@ def test_assembly_refuses_outputs_that_miss_a_case_or_every_platform(tmp_path: P
 def test_the_command_line_writes_cases_and_assembles(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    count = len(reader_corpus.all_cases())
+    count = len(reader_corpus.all_cases()) + len(reader_corpus.LIBPAM_CASES)
     assert reader_corpus.main(["cases", "--out", str(tmp_path / "cases")]) == 0
     assert capsys.readouterr().out == f"cases: {count} cases\n"
     write_outputs(tmp_path / "out")
@@ -91,3 +103,39 @@ def test_the_command_line_writes_cases_and_assembles(
     assert exit_info.value.code == 0
     assert capsys.readouterr().out == f"assemble: {count} cases\n"
     assert table.read_text(encoding="utf-8") == TABLE.read_text(encoding="utf-8")
+
+
+def test_a_libpam_case_is_written_as_the_layout_that_the_probe_installs(tmp_path: Path) -> None:
+    out = tmp_path / "cases"
+    reader_corpus.write_cases(out)
+    by_id = {case.case_id: case for case in reader_corpus.LIBPAM_CASES}
+    included = out / "libpam-include-upper"
+    assert (included / "reader").read_text(encoding="utf-8") == "libpam\n"
+    assert (included / "service").read_text(encoding="utf-8") == "freesecdev-pwq\n"
+    assert (included / "away").read_text(encoding="utf-8") == ""
+    assert (included / "stack").read_text(encoding="utf-8") == by_id[included.name].stack
+    target = included / "root" / reader_corpus.TARGET_FILE.lstrip("/")
+    assert target.read_text(encoding="utf-8") == f"{reader_corpus.PWQ} {reader_corpus.LOOSE}\n"
+    environ = out / "libpam-environ-link"
+    link = environ / "root" / reader_corpus.SERVICE_FILE.lstrip("/")
+    assert link.is_symlink()
+    assert str(link.readlink()) == "/proc/self/environ"
+    assert not (environ / "stack").exists()
+    assert (environ / "environment").read_bytes() == by_id[environ.name].environment.encode()
+    fallback = out / "libpam-pam-conf-fallback"
+    assert (fallback / "away").read_text(encoding="utf-8").splitlines() == list(
+        reader_corpus.PAM_DIRECTORIES
+    )
+    assert (fallback / "copies").read_text(encoding="utf-8") == ""
+    copied = out / "libpam-module-copy-elsewhere"
+    assert (copied / "copies").read_text(encoding="utf-8") == (
+        f"{reader_corpus.ELSEWHERE_MODULE}\tpam_pwquality.so\n"
+    )
+    assert not (copied / "root" / reader_corpus.ELSEWHERE_MODULE.lstrip("/")).exists()
+
+
+def test_assembly_refuses_outputs_that_miss_a_libpam_case(tmp_path: Path) -> None:
+    first = reader_corpus.LIBPAM_CASES[0].case_id
+    write_outputs(tmp_path / "out", skip=first)
+    with pytest.raises(SystemExit, match=first):
+        reader_corpus.assemble(tmp_path / "out", tmp_path / "table.json")

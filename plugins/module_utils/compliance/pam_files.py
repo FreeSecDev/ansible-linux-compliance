@@ -6,7 +6,7 @@ on Rocky Linux 9, 1.5.3 on Ubuntu 24.04). ``fopen`` follows symbolic links, so o
 authselect makes ``/etc/pam.d/system-auth`` a link into ``/etc/authselect``, libpam reads the
 file that the link names. ``ansible.builtin.find`` with ``file_type: file`` keeps only regular
 files, whatever ``follow`` says, so the families list every entry with ``file_type: any``, stat
-every link through it, and sort the entries here:
+every link through it and without following it, and sort the entries here:
 
 - a regular file, or a link that resolves to one, is read; it keeps the name in the PAM
   directory, which is the name that libpam opens;
@@ -26,7 +26,23 @@ every link through it, and sort the entries here:
   inspect through a link (a loop, for example), because the collection cannot list what libpam
   might find there. The families refuse their rules on any of them, because
   the collection cannot read what libpam would read there; nothing is read through them, so a
-  link to ``/dev/zero`` or to a FIFO is never opened.
+  link to ``/dev/zero`` or to a FIFO is never opened. The error message of a failed ``stat`` is
+  kept in the entry's ``detail`` and in the reason (FREES-212);
+- a link, or a PAM directory, that resolves to a path below ``/proc``, ``/sys`` or ``/dev`` is
+  unreadable too (FREES-212): such a file can read differently in the process that calls libpam
+  than in the module that reads it for the collection; ``/proc/self/environ``, for example, is
+  the environment of whichever process opens it. So is a link whose target names such a path,
+  although the module resolves it elsewhere: ``/proc/self/cwd/x`` is ``x`` in the working
+  directory of whichever process opens it. And a link is read only when its target, made
+  absolute, is the very path that the module resolves it to; a target reached through a further
+  link, which could itself go through ``/proc``, or through a ``..`` after a name, is unreadable,
+  because the collection does not inspect the hops one by one;
+- when neither ``/etc/pam.d`` nor ``/usr/lib/pam.d`` is a directory, libpam reads
+  ``/etc/pam.conf`` instead of any service file (FREES-212). Ubuntu's libpam 1.5.3 has no vendor
+  directory; libpam 1.5.1 on Rocky Linux 9 also needs ``/usr/share/pam.d`` to be missing, so the
+  condition here holds whenever either reads ``/etc/pam.conf``. The collection does not read that
+  file, whose lines carry the service name first, so ``/etc/pam.conf`` is returned as
+  unreadable and the families refuse.
 
 Only the Python standard library is used, and nothing here touches a host.
 """
@@ -44,6 +60,13 @@ SPECIAL: Final[str] = "special"
 UNFOLLOWED_LINK: Final[str] = "unfollowed_link"
 UNINSPECTED_DIRECTORY: Final[str] = "uninspected_directory"
 UNLISTED: Final[str] = "unlisted"
+VIRTUAL: Final[str] = "virtual_file"
+INDIRECT_LINK: Final[str] = "indirect_link"
+UNRESOLVED: Final[str] = "unresolved"
+PAM_CONF_FALLBACK: Final[str] = "pam_conf_fallback"
+PAM_CONF: Final[str] = "/etc/pam.conf"
+CONFIGURATION_DIRECTORIES: Final[tuple[str, ...]] = ("/etc/pam.d", "/usr/lib/pam.d")
+VIRTUAL_ROOTS: Final[tuple[str, ...]] = ("/proc", "/sys", "/dev")
 KINDS: Final[Mapping[str, str]] = {
     BROKEN_LINK: "is a symbolic link that resolves to nothing",
     LINK: "is a symbolic link to something that is neither a regular file nor a directory",
@@ -57,6 +80,18 @@ KINDS: Final[Mapping[str, str]] = {
         "is not a directory, or another error)"
     ),
     UNLISTED: "could not be inspected when the PAM directories were listed",
+    VIRTUAL: (
+        "resolves to a path below /proc, /sys or /dev, which can read differently in the process "
+        "that calls libpam than in the collection's"
+    ),
+    INDIRECT_LINK: (
+        "is a symbolic link whose target is reached through a further symbolic link or a .. after"
+        " a name, whose hops the collection does not follow one by one"
+    ),
+    PAM_CONF_FALLBACK: (
+        "is what libpam reads instead of the service files, because neither /etc/pam.d nor "
+        "/usr/lib/pam.d is a directory, and the collection does not read it"
+    ),
 }
 
 
@@ -91,6 +126,17 @@ def _flag(entry: Mapping[str, object], name: str, what: str) -> bool:
     return value
 
 
+def _message(stat: Mapping[str, object]) -> str | None:
+    """Return the error message of a failed ``stat`` (its ``msg``), or None when it has none."""
+    message = stat.get("msg")
+    return message if isinstance(message, str) and message else None
+
+
+def is_virtual(path: str) -> bool:
+    """Return whether a resolved path lies below ``/proc``, ``/sys`` or ``/dev``."""
+    return any(path == root or path.startswith(root + "/") for root in VIRTUAL_ROOTS)
+
+
 def _kind_of_target(path: str, target: Mapping[str, object]) -> str:
     """Return ``file``, ``directory`` or the unreadable kind of a link from its followed stat.
 
@@ -110,42 +156,126 @@ def _kind_of_target(path: str, target: Mapping[str, object]) -> str:
     return LINK
 
 
-def _uninspected(directories: Mapping[str, object]) -> list[str]:
-    """Return every PAM directory whose stat failed, so that it has no ``exists``."""
-    found: list[str] = []
+def _first_hop(path: str, target: str) -> str | None:
+    """Return the path that the target of the link ``path`` names, absolute and without ``.``.
+
+    A relative target is taken from the directory of the link. A ``..`` before every name of the
+    target leaves that directory, as the kernel does when the directory is not a link; a ``..``
+    after a name is returned as None, because the kernel resolves it after the name, which can be a
+    link of its own.
+    """
+    parts = [] if target.startswith("/") else [part for part in path.split("/")[:-1] if part]
+    named = False
+    for part in target.split("/"):
+        if part in {"", "."}:
+            continue
+        if part != "..":
+            named = True
+            parts.append(part)
+        elif named:
+            return None
+        elif parts:
+            parts.pop()
+    return "/" + "/".join(parts)
+
+
+def _resolution(path: str, resolved: Mapping[str, object]) -> tuple[str | None, str | None]:
+    """Return None twice when ``path`` resolves alike in every process, else a kind and its detail.
+
+    ``resolved`` holds the ``ansible.builtin.stat`` with ``follow: false`` of the path; for a
+    symbolic link it carries ``lnk_target``, the target as the link holds it, and ``lnk_source``,
+    the path that ``os.path.realpath`` resolves it to in the module's process. The kind is
+    :data:`UNRESOLVED` when the path was not resolved, with the reason; :data:`VIRTUAL` when
+    ``lnk_source``, or the first hop that ``lnk_target`` names, lies below ``/proc``, ``/sys`` or
+    ``/dev``, with that path: a hop such as ``/proc/self/cwd`` resolves differently in each
+    process, so ``lnk_source`` alone does not show it (FREES-212); and :data:`INDIRECT_LINK` when
+    the first hop is not ``lnk_source`` itself, that is a further link (or a ``..`` after a name)
+    lies on the way, whose hops the collection does not inspect one by one.
+    """
+    if path not in resolved:
+        return UNRESOLVED, "it was not resolved"
+    stat = _mapping(resolved[path], f"the resolution of {path}")
+    if "exists" not in stat:
+        return UNRESOLVED, _message(stat) or "it could not be resolved"
+    what = f"the resolution of {path}"
+    if not _flag(stat, "exists", what) or not _flag(stat, "islnk", what):
+        return None, None
+    return _hops(path, stat, what)
+
+
+def _hops(path: str, stat: Mapping[str, object], what: str) -> tuple[str | None, str | None]:
+    """Return None twice when the link ``path`` reaches ``lnk_source`` in one hop, else why not."""
+    source = stat.get("lnk_source")
+    if not isinstance(source, str) or not source.startswith("/"):
+        message = f"{what} needs the absolute lnk_source of a symbolic link, got {source!r}"
+        raise PamEntryError(message)
+    target = stat.get("lnk_target")
+    if not isinstance(target, str) or not target:
+        message = f"{what} needs the lnk_target of a symbolic link, got {target!r}"
+        raise PamEntryError(message)
+    hop = _first_hop(path, target)
+    if is_virtual(source):
+        return VIRTUAL, source
+    if hop is not None and is_virtual(hop):
+        return VIRTUAL, target
+    if hop != source:
+        return INDIRECT_LINK, f"{target}, which resolves to {source}"
+    return None, None
+
+
+def _directories(
+    directories: Mapping[str, object], resolved: Mapping[str, object]
+) -> tuple[dict[str, tuple[str, str | None]], bool]:
+    """Return the unreadable PAM directories and whether libpam reads the PAM directories.
+
+    The second value says whether ``/etc/pam.d`` or ``/usr/lib/pam.d`` is a directory, as libpam
+    tests with ``stat``; when neither is, libpam reads ``/etc/pam.conf`` instead. Nothing below an
+    unreadable directory is read.
+    """
+    unreadable: dict[str, tuple[str, str | None]] = {}
+    configured = False
     for name, stat in directories.items():
         what = f"the stat of the PAM directory {name}"
         directory = _mapping(stat, what)
         path = _path({"path": name}, "every PAM directory")
         if "exists" not in directory:
-            found.append(path)
-        else:
-            _flag(directory, "exists", what)
-    return found
+            unreadable[path] = (UNINSPECTED_DIRECTORY, _message(directory))
+            continue
+        if not _flag(directory, "exists", what) or not _flag(directory, "isdir", what):
+            continue
+        configured = configured or path in CONFIGURATION_DIRECTORIES
+        kind, detail = _resolution(path, resolved)
+        if kind is not None:
+            unreadable[path] = (UNINSPECTED_DIRECTORY if kind == UNRESOLVED else kind, detail)
+    return unreadable, configured
 
 
-def sort_entries(
+def _link(
+    path: str, targets: Mapping[str, object], resolved: Mapping[str, object]
+) -> tuple[str, str | None]:
+    """Return ``file``, ``directory`` or the unreadable kind of a link, with its detail."""
+    if path not in targets:
+        return UNFOLLOWED_LINK, None
+    target = _mapping(targets[path], f"the stat of the link {path}")
+    kind = _kind_of_target(path, target)
+    if kind == UNFOLLOWED_LINK:
+        return kind, _message(target)
+    if kind != "file":
+        return kind, None
+    problem, detail = _resolution(path, resolved)
+    if problem is not None:
+        return UNFOLLOWED_LINK if problem == UNRESOLVED else problem, detail
+    return kind, None
+
+
+def _entries(
     entries: Sequence[object],
     targets: Mapping[str, object],
-    skipped: Sequence[object],
-    directories: Mapping[str, object],
-) -> dict[str, list[object]]:
-    """Return the paths to read and the unreadable entries of the PAM directories.
-
-    ``entries`` are the files of ``ansible.builtin.find`` with ``file_type: any`` and
-    ``follow: false``, each with ``path``, ``isreg``, ``isdir`` and ``islnk`` from ``lstat``.
-    ``targets`` maps the path of every entry that is a link to its ``ansible.builtin.stat``
-    result with ``follow: true``; a link that has no stat there, or whose stat has no ``exists``
-    because ``stat`` failed on it, is :data:`UNFOLLOWED_LINK`, never read. ``skipped`` holds the
-    paths of the ``skipped_paths`` of the find. ``directories`` maps every PAM directory to its
-    ``ansible.builtin.stat`` result with ``follow: true``; one whose stat has no ``exists``,
-    because ``stat`` failed on it, is :data:`UNINSPECTED_DIRECTORY`. A directory that does not
-    exist, or is not a directory, is left out, as libpam leaves it out. The result holds
-    ``read``, the sorted paths to read, and ``unreadable``, every entry to refuse on, with
-    ``path`` and ``kind`` (one of :data:`KINDS`).
-    """
+    resolved: Mapping[str, object],
+    unreadable: dict[str, tuple[str, str | None]],
+) -> set[str]:
+    """Return the entries to read, and add every entry that cannot be read to ``unreadable``."""
     read: set[str] = set()
-    unreadable: dict[str, str] = {}
     for item in entries:
         entry = _mapping(item, "every PAM directory entry")
         path = _path(entry, "every PAM directory entry")
@@ -155,32 +285,71 @@ def sort_entries(
         elif _flag(entry, "isdir", what):
             continue
         elif _flag(entry, "islnk", what):
-            kind = (
-                _kind_of_target(path, _mapping(targets[path], f"the stat of the link {path}"))
-                if path in targets
-                else UNFOLLOWED_LINK
-            )
+            kind, detail = _link(path, targets, resolved)
             if kind == "file":
                 read.add(path)
             elif kind != "directory":
-                unreadable[path] = kind
+                unreadable[path] = (kind, detail)
         else:
-            unreadable[path] = SPECIAL
+            unreadable[path] = (SPECIAL, None)
+    return read
+
+
+def sort_entries(
+    entries: Sequence[object],
+    targets: Mapping[str, object],
+    skipped: Sequence[object],
+    directories: Mapping[str, object],
+    resolved: Mapping[str, object],
+) -> dict[str, list[object]]:
+    """Return the paths to read and the unreadable entries of the PAM directories.
+
+    ``entries`` are the files of ``ansible.builtin.find`` with ``file_type: any`` and
+    ``follow: false``, each with ``path``, ``isreg``, ``isdir`` and ``islnk`` from ``lstat``.
+    ``targets`` maps the path of every entry that is a link to its ``ansible.builtin.stat``
+    result with ``follow: true``, or to a mapping with the ``msg`` of a stat that failed; a link
+    that has no stat there, or whose stat has no ``exists`` because ``stat`` failed on it, is
+    :data:`UNFOLLOWED_LINK`, never read. ``skipped`` holds the paths of the ``skipped_paths`` of
+    the find. ``directories`` maps every PAM directory to its ``ansible.builtin.stat`` result
+    with ``follow: true``, or to the ``msg`` of a stat that failed; one whose stat has no
+    ``exists`` is :data:`UNINSPECTED_DIRECTORY`. A directory that does not exist, or is not a
+    directory, is left out, as libpam leaves it out; when neither ``/etc/pam.d`` nor
+    ``/usr/lib/pam.d`` is a directory, ``/etc/pam.conf`` is :data:`PAM_CONF_FALLBACK`.
+    ``resolved`` maps every PAM directory that is a directory and every link that resolves to a
+    regular file to its ``ansible.builtin.stat`` with ``follow: false``, whose ``lnk_source`` is
+    the path a link resolves to, and whose ``lnk_target`` is the target the link holds; one that
+    resolves, or whose target points, below ``/proc``, ``/sys`` or ``/dev`` is :data:`VIRTUAL`,
+    one whose target is not the path it resolves to is :data:`INDIRECT_LINK`, and one missing
+    there, or whose stat failed, is unreadable as well. The
+    result holds ``read``, the sorted paths to read, and ``unreadable``, every entry to refuse
+    on, with ``path``, ``kind`` (one of :data:`KINDS`) and, when there is one, ``detail``: the
+    error message of the failed stat, the path below ``/proc``, ``/sys`` or ``/dev``, or the
+    target of an indirect link.
+    """
+    unreadable, configured = _directories(directories, resolved)
+    refused = set(unreadable)
+    read = _entries(entries, targets, resolved, unreadable)
     for name in skipped:
         if not isinstance(name, str) or not name.startswith("/"):
             message = f"a skipped PAM path must be absolute, got {name!r}"
             raise PamEntryError(message)
         read.discard(name)
-        unreadable[name] = UNLISTED
-    unreadable.update(dict.fromkeys(_uninspected(directories), UNINSPECTED_DIRECTORY))
+        unreadable[name] = (UNLISTED, None)
+    read = {path for path in read if path.rpartition("/")[0] not in refused}
+    if not configured:
+        unreadable[PAM_CONF] = (PAM_CONF_FALLBACK, None)
     return {
         "read": cast("list[object]", sorted(read)),
-        "unreadable": [{"path": path, "kind": unreadable[path]} for path in sorted(unreadable)],
+        "unreadable": [_unreadable(path, *unreadable[path]) for path in sorted(unreadable)],
     }
 
 
+def _unreadable(path: str, kind: str, detail: str | None) -> dict[str, str]:
+    return {"path": path, "kind": kind} | ({} if detail is None else {"detail": detail})
+
+
 def describe(unreadable: object) -> list[str]:
-    """Return ``<path> <what it is>`` for every unreadable entry of :func:`sort_entries`."""
+    """Return ``<path> <what it is>[: <detail>]`` for every unreadable entry of the sort."""
     if not isinstance(unreadable, (list, tuple)):
         message = "the unreadable PAM entries must be a list"
         raise PamEntryError(message)
@@ -192,5 +361,9 @@ def describe(unreadable: object) -> list[str]:
         if not isinstance(kind, str) or kind not in KINDS:
             message = f"the unreadable PAM entry {path} needs a kind of {sorted(KINDS)}"
             raise PamEntryError(message)
-        found.append(f"{path} {KINDS[kind]}")
+        detail = entry.get("detail")
+        if detail is not None and not isinstance(detail, str):
+            message = f"the unreadable PAM entry {path} needs a text detail, got {detail!r}"
+            raise PamEntryError(message)
+        found.append(f"{path} {KINDS[kind]}" + (f": {detail}" if detail else ""))
     return sorted(found)

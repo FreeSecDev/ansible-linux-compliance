@@ -840,7 +840,20 @@ removed again), with `pam_pwquality.so minlen=8 enforcing=0`, makes `minlen` `ov
 file refuses both rules with the file below `/usr/share/pam.d` named (the empty directory of Rocky Linux is put back
 with its mode); and a link to nothing next to a link to `/dev/null` and a link to itself refuses both rules with all
 three named; and the vendor directory made a link to itself refuses both rules with `/usr/share/pam.d` named; nothing
-is written in any of them. The test declares `/usr/share/pam.d` as rewritten, so the whole-instance comparison leaves out
+is written in any of them. Then (FREES-212) `/etc/pam.d/freesecdev-readers` with a comment line that ends with a
+backslash followed by `pam_pwquality.so minlen=8 enforcing=0`, which libpam runs, refuses both rules with the arguments
+named; the same file with `password include \` and `../security/freesecdev-readers-included` on the next line, which
+libpam joins and opens, refuses both rules with the include named; the same file with a comment line of exactly 1023
+bytes followed by the loose line, which Ubuntu's fixed-buffer reader splits off and runs, refuses both rules on both
+platforms with the long line named; and `/etc/pam.d/freesecdev-readers-environ`, a link to `/proc/self/environ`, refuses
+both rules with the resolved `/proc/<pid>/environ` named; the reasons of the link to itself and of the looping
+directory carry the message of the failed `stat` (`Too many levels of symbolic links`). After the review of FREES-212,
+`/etc/pam.d/freesecdev-readers-rooted`, a link to `/proc/self/root/etc/security/freesecdev-readers-included`, which the
+module resolves outside `/proc`, refuses both rules with the target named; `/etc/pam.d/freesecdev-readers-chained`, a
+link to the link `/etc/security/freesecdev-readers-hop`, refuses both rules as a link reached through a further link;
+and `/etc/pam.d/freesecdev-readers` loading `/etc/security/freesecdev-readers-module.so`, a link to the platform's
+`pam_pwquality.so`, with `minlen=8 enforcing=0` refuses both rules with the arguments named, because the module is
+identified by its file, not by its name. The test declares `/usr/share/pam.d` as rewritten, so the whole-instance comparison leaves out
 the times and the inode of that directory and the times of `/usr/share`. It ends with the whole-instance comparison.
 
 The auditd topics ([ADR 0030](adr/0030-native-auditd-settings-and-audit-rules.md), FREES-110) select their rules
@@ -948,9 +961,14 @@ deny=3`, make `deny` `overridden` with that file named; an include of `/etc/secu
 collection does not read, makes both rules `unreadable_stack`; `deny=3` in a service file that is a symbolic link to
 a file in `/etc/security`, as authselect links them (FREES-213), makes `deny` `overridden` with the link named, and a
 service file that is a link to nothing, and one that is a link to itself, make both rules `unreadable_stack` with the
-link named (the order of `/etc/pam.d`, `/usr/lib/pam.d` and
-`/usr/share/pam.d` is unit-tested only, because the whole-instance record keeps the times of `/usr`, which a file
-written there changes for good); no
+link named, the latter with the message of the failed `stat`; and (FREES-212) a service file that is a link to
+`/proc/self/environ` makes both rules `unreadable_stack` with the resolved `/proc/<pid>/environ` named, and the vendor
+directory `/usr/share/pam.d` made a link to itself (the empty directory of Rocky Linux is put back with its mode, and
+the link removed again on Ubuntu) makes both rules `unreadable_stack` with the directory and the message of the failed
+`stat` named. The group declares `/usr/share/pam.d` as rewritten, so the whole-instance comparison leaves out the
+times and the inode of that directory and the times of `/usr/share` (the order of `/etc/pam.d`, `/usr/lib/pam.d` and
+`/usr/share/pam.d` is unit-tested only, because a file written below `/usr` other than that directory changes times
+that the whole-instance record keeps); no
 scan runs, because both contents put the faillock rules below a group limited to `system_with_kernel`, so a container
 scan reports them `notapplicable` even with the module in the stack; each cleanup restores the file byte for byte and the stack files are put back at the end.
 `profiles` (`lifecycle_faillock_other_profiles.yml`) applies in check mode and for real, repeats and cleans up the rules
