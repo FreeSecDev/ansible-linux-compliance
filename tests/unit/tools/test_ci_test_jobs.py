@@ -3,7 +3,9 @@
 ``test`` runs only ``make test-coverage``, which runs pytest on ``PYTEST_WORKERS`` workers and
 keeps both 100% gates on the combined data. ``test-suites`` runs the audit-exception, golden
 content and browser tests alongside it. The check-mode playbooks of the former ``test-playbooks``
-job run in ``test-playbooks-remediate`` (``make test-remediate-check``) and
+job run in ``test-playbooks-remediate`` (``make test-remediate-check-role``),
+``test-playbooks-native`` (``make test-remediate-check-native``; FREES-214 split
+``make test-remediate-check`` into these two targets, which it still runs) and
 ``test-playbooks-evidence`` (evidence, role guards and verify). Every one of these jobs runs on
 every event without a condition, on the job or on any of its steps, only the Molecule legs read the
 plan of ``molecule-plan``, so no plan can skip them, and ``ci-gate`` needs every job of the
@@ -14,7 +16,7 @@ job the outputs of the jobs it needs only (FREES-206).
 from __future__ import annotations
 
 import re
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import cast
 
 import pytest
@@ -33,7 +35,8 @@ EXPECTED_COMMANDS = {
         "make test-content-golden",
         "make test-browser",
     ],
-    "test-playbooks-remediate": ["make test-remediate-check"],
+    "test-playbooks-remediate": ["make test-remediate-check-role"],
+    "test-playbooks-native": ["make test-remediate-check-native"],
     "test-playbooks-evidence": [
         "make test-evidence",
         "make test-role-guards",
@@ -41,6 +44,16 @@ EXPECTED_COMMANDS = {
     ],
 }
 PLANNED_JOBS = frozenset({"molecule-lifecycle", "molecule-libvirt"})
+REMEDIATE_CHECK_PARTS = ("test-remediate-check-role", "test-remediate-check-native")
+FORMER_REMEDIATE_CHECK = [
+    "$(REMEDIATE_CHECK) --diff tests/playbooks/remediate-check-mode.yml",
+    "$(REMEDIATE_CHECK) --skip-tags file_permissions tests/playbooks/remediate-check-mode.yml",
+    "$(REMEDIATE_CHECK) --diff tests/playbooks/remediate-native-check.yml",
+    "$(REMEDIATE_CHECK) --diff tests/playbooks/remediate-login-defs-check.yml",
+    "$(REMEDIATE_CHECK) --diff tests/playbooks/remediate-pam-conf-check.yml",
+    "$(REMEDIATE_CHECK) --skip-tags always tests/playbooks/remediate-skip-always.yml",
+]
+PLAYBOOKS = REPOSITORY_ROOT / "tests" / "playbooks"
 
 
 def jobs() -> dict[str, dict[str, object]]:
@@ -109,6 +122,24 @@ def test_coverage_runs_in_parallel_and_keeps_both_gates_on_the_combined_data() -
         "$(RUN) coverage report --include='tools/*' --fail-under=100",
         "$(RUN) coverage report --include='plugins/*' --fail-under=100",
     ]
+
+
+def prerequisites(target: str) -> list[str]:
+    lines = MAKEFILE.read_text(encoding="utf-8").splitlines()
+    line = next(line for line in lines if line.startswith(f"{target}:"))
+    return line.partition(":")[2].split()
+
+
+def test_the_remediate_check_targets_split_the_playbooks_without_loss() -> None:
+    assert prerequisites("test-remediate-check") == list(REMEDIATE_CHECK_PARTS)
+    assert recipe("test-remediate-check") == []
+    assert "test-remediate-disruptive" in prerequisites("test-remediate-check-role")
+    runs = [line for part in REMEDIATE_CHECK_PARTS for line in recipe(part)]
+    assert sorted(runs) == sorted(FORMER_REMEDIATE_CHECK)
+    run_playbooks = {PurePosixPath(line.split()[-1]).name for line in runs}
+    assert "tests/playbooks/remediate-disruptive.yml" in MAKEFILE.read_text(encoding="utf-8")
+    run_playbooks.add("remediate-disruptive.yml")
+    assert run_playbooks == {path.name for path in PLAYBOOKS.glob("remediate-*.yml")}
 
 
 def test_only_the_molecule_legs_depend_on_the_plan() -> None:

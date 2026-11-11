@@ -309,8 +309,10 @@ Tests
   test-name-sets        Check the guard name sets on one interpreter (NAME_SET_PYTHON=3.9.25)
   test-audit-exceptions Run the audit role's exceptions path on localhost with synthetic scan runs, without oscap
   test-evidence         Collect evidence bundles of synthetic audit results on localhost and report on them
-  test-remediate-check  Run the remediate role and the audit toggle resolution against localhost in check mode, without become
-  test-remediate-disruptive  Check in check mode that a disruptive rule is skipped without the allow-list (run by test-remediate-check)
+  test-remediate-check  Run the remediate role and the audit toggle resolution against localhost in check mode, without become (both targets below)
+  test-remediate-check-role  The role plays of test-remediate-check: opt-in, toggles, catalogue, disruptive gate and skip guard
+  test-remediate-check-native  The native topic plays of test-remediate-check: every native family against localhost in check mode
+  test-remediate-disruptive  Check in check mode that a disruptive rule is skipped without the allow-list (run by test-remediate-check-role)
   test-role-guards      Check in check mode that forged internal variables and role outputs are refused before any change
   test-verify           Run the verify role on localhost with synthetic baseline and later audits, without oscap
   test-integration      [pending FREES-60] Integration tests
@@ -676,13 +678,19 @@ test-remediate-disruptive: require-uv collection-link
 	$(REMEDIATE_CHECK) -e disruptive_rule='$(REMEDIATE_DISRUPTIVE_RULE)' -e disruptive_family='$(REMEDIATE_DISRUPTIVE_FAMILY)' \
 		tests/playbooks/remediate-disruptive.yml
 
-test-remediate-check: require-uv collection-link test-remediate-disruptive
+.PHONY: test-remediate-check-role test-remediate-check-native
+
+test-remediate-check: test-remediate-check-role test-remediate-check-native
+
+test-remediate-check-role: require-uv collection-link test-remediate-disruptive
 	$(REMEDIATE_CHECK) --diff tests/playbooks/remediate-check-mode.yml
 	$(REMEDIATE_CHECK) --skip-tags file_permissions tests/playbooks/remediate-check-mode.yml
+	$(REMEDIATE_CHECK) --skip-tags always tests/playbooks/remediate-skip-always.yml
+
+test-remediate-check-native: require-uv collection-link
 	$(REMEDIATE_CHECK) --diff tests/playbooks/remediate-native-check.yml
 	$(REMEDIATE_CHECK) --diff tests/playbooks/remediate-login-defs-check.yml
 	$(REMEDIATE_CHECK) --diff tests/playbooks/remediate-pam-conf-check.yml
-	$(REMEDIATE_CHECK) --skip-tags always tests/playbooks/remediate-skip-always.yml
 
 ROLE_GUARDS_DIR := build/test-role-guards
 ROLE_GUARDS_FORGED_PLAN := {"__linux_compliance_remediate_plan": {"enabled": true, "errors": [], \

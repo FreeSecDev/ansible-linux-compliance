@@ -1,0 +1,17 @@
+---
+trivial:
+  - >-
+    CI: test-playbooks-remediate, which took up to 15.0 minutes against its 15-minute timeout, is split in two jobs
+    that run alongside each other: test-playbooks-remediate runs make test-remediate-check-role (the check-mode and
+    skip-always playbooks, with test-remediate-disruptive) and test-playbooks-native runs make
+    test-remediate-check-native (the native, login.defs and PAM check-mode playbooks, timeout 12). make
+    test-remediate-check runs both targets. ci-gate needs both, and a unit test pins that the two targets run exactly
+    the former playbook runs (FREES-214).
+  - >-
+    CI: only a run for a pull request shares a concurrency group (one per pull request) and is cancelled by a newer
+    push; every merge group, push, scheduled and manual run has a group of its own, so none is cancelled or waits for
+    another run. Before, a pending scheduled run on main was cancelled when the next push queued (FREES-214).
+  - >-
+    CI: for a pull request, molecule-plan decides the affected legs against the first parent of the merge commit when
+    its second parent is the pull request's head, because the event's base SHA can lag behind it and count the newer
+    commits of main as changes of the pull request (FREES-214).
