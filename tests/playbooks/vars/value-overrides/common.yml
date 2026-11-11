@@ -1,0 +1,34 @@
+---
+value_override_cases:
+  - name: unknown key
+    overrides:
+      var_password_pam_minlenn: 16
+    expect: "var_password_pam_minlenn' is not the value of a native rule of the catalogue"
+  - name: full XCCDF value identifier
+    overrides:
+      xccdf_org.ssgproject.content_value_var_password_pam_minlen: 16
+    expect: "is a full XCCDF value identifier; use the short identifier"
+  - name: unknown key with the opt-in
+    enabled: true
+    overrides:
+      var_password_pam_minlenn: 16
+    expect: "var_password_pam_minlenn' is not the value of a native rule of the catalogue"
+  - name: banner key
+    overrides:
+      login_banner_text: Authorized users only.
+    expect: "login_banner_text is a banner value.*choose the banner text with linux_compliance_remediate_banner_text"
+  - name: banner key with the opt-in
+    enabled: true
+    overrides:
+      motd_banner_text: Authorized users only.
+    expect: "motd_banner_text is a banner value"
+  - name: every refusal at once
+    overrides:
+      var_password_pam_minlenn: 16
+      remote_login_banner_text: x
+    expect: "remote_login_banner_text is a banner value.*; .*var_password_pam_minlenn' is not the value"
+  - name: overrides that are a list
+    overrides:
+      - var_password_pam_minlen
+    expect: "(?s)Validation of arguments failed.*linux_compliance_remediate_value_overrides"
+    task: arguments

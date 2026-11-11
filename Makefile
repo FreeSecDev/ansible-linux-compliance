@@ -310,7 +310,7 @@ Tests
   test-audit-exceptions Run the audit role's exceptions path on localhost with synthetic scan runs, without oscap
   test-evidence         Collect evidence bundles of synthetic audit results on localhost and report on them
   test-remediate-check  Run the remediate role and the audit toggle resolution against localhost in check mode, without become (both targets below)
-  test-remediate-check-role  The role plays of test-remediate-check: opt-in, toggles, catalogue, disruptive gate and skip guard
+  test-remediate-check-role  The role plays of test-remediate-check: opt-in, toggles, catalogue, disruptive gate, skip guard and value overrides
   test-remediate-check-native  The native topic plays of test-remediate-check: every native family against localhost in check mode
   test-remediate-disruptive  Check in check mode that a disruptive rule is skipped without the allow-list (run by test-remediate-check-role)
   test-role-guards      Check in check mode that forged internal variables and role outputs are refused before any change
@@ -686,6 +686,7 @@ test-remediate-check-role: require-uv collection-link test-remediate-disruptive
 	$(REMEDIATE_CHECK) --diff tests/playbooks/remediate-check-mode.yml
 	$(REMEDIATE_CHECK) --skip-tags file_permissions tests/playbooks/remediate-check-mode.yml
 	$(REMEDIATE_CHECK) --skip-tags always tests/playbooks/remediate-skip-always.yml
+	$(REMEDIATE_CHECK) --diff tests/playbooks/remediate-value-overrides-check.yml
 
 test-remediate-check-native: require-uv collection-link
 	$(REMEDIATE_CHECK) --diff tests/playbooks/remediate-native-check.yml

@@ -1069,7 +1069,8 @@ a half times its longest 6.6 minutes. Neither has a condition or `needs`, and on
 runners. Since FREES-214 its playbooks are split across two jobs that run alongside each other, by two `Makefile`
 targets that `make test-remediate-check` runs both of. `test-playbooks-remediate` runs `make test-remediate-check-role`
 (with `test-remediate-disruptive`): the two runs of `remediate-check-mode.yml` and `remediate-skip-always.yml`, 5.2 to
-7.6 minutes of those runs (disruptive 12 to 18 seconds, each check-mode run 140 to 223). It keeps
+7.6 minutes of those runs (disruptive 12 to 18 seconds, each check-mode run 140 to 223), and since FREES-203
+`remediate-value-overrides-check.yml`, 40 seconds on the test worker, where the whole target took 431. It keeps
 its timeout of 20 minutes (below).
 `test-playbooks-native` runs `make test-remediate-check-native`: `remediate-native-check.yml`,
 `remediate-login-defs-check.yml` and `remediate-pam-conf-check.yml`, 4.4 to 7.1 minutes of those runs (173 to 276, 46 to

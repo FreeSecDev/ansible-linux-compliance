@@ -116,6 +116,17 @@ argument_specs:
           - "With false, only the persistent value is written and the running kernel is neither read nor changed;"
           - "it takes the value at the next boot. Cleanup still sets back a running value that the ledger recorded."
           - "See ADR 0029."
+      linux_compliance_remediate_value_overrides:
+        type: dict
+        default: {}
+        description:
+          - "Maps the short identifier of an XCCDF value, such as var_password_pam_minlen, to the value that replaces"
+          - "the profile's value as the target of every native rule with that value (ADR 0032)."
+          - "A value is a YAML integer or a string; a umask is a quoted string such as '027'."
+          - "An unknown key, a banner value, a value whose rules name no comparison yet and a value that the comparison"
+          - "does not take fail the role before anything is read or changed, also when remediation is disabled."
+          - "A key that the profile, the toggles or the allow-list leave unused is listed in unused_overrides."
+          - "The keys and their comparisons are listed in docs/remediation-variables.md."
       linux_compliance_file_permissions_enabled:
         type: bool
         default: true

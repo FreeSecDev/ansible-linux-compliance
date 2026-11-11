@@ -52,6 +52,7 @@ FORMER_REMEDIATE_CHECK = [
     "$(REMEDIATE_CHECK) --diff tests/playbooks/remediate-login-defs-check.yml",
     "$(REMEDIATE_CHECK) --diff tests/playbooks/remediate-pam-conf-check.yml",
     "$(REMEDIATE_CHECK) --skip-tags always tests/playbooks/remediate-skip-always.yml",
+    "$(REMEDIATE_CHECK) --diff tests/playbooks/remediate-value-overrides-check.yml",
 ]
 PLAYBOOKS = REPOSITORY_ROOT / "tests" / "playbooks"
 

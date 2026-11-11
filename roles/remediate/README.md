@@ -102,6 +102,7 @@ choices in both files are generated from `vars/rules.yml` with `make toggles`; `
 | `linux_compliance_remediate_allow_disruptive` | `list` | `[]` | Disruptive families that may be applied or cleaned up; only the disruptive families of the registry are accepted. |
 | `linux_compliance_remediate_profile` | `str` | `"cis_level1_server"` | ComplianceAsCode profile short identifier, without the XCCDF prefix. With the opt-in it must equal the profile the `discover` role verified. A profile is never substituted silently. |
 | `linux_compliance_remediate_banner_text` | `str` | `"Authorized users only. All activity may be monitored and reported."` | Text of the login banners and the message of the day. It must not contain a backslash, control characters other than newline and tab, or the operating system name, and must match the profile's XCCDF value where the profile requires one (the STIG profiles require the DoD notice). |
+| `linux_compliance_remediate_value_overrides` | `dict` | `{}` | Maps the short identifier of an XCCDF value, such as `var_password_pam_minlen`, to the value that replaces the profile's value as the target of every native rule with that value (ADR 0032). An unknown key, a banner value, a value that is not overridable yet and a value that its comparison does not take fail the role before anything is read or changed, also with remediation disabled; a key that this run does not use is listed in `unused_overrides`. No value is overridable yet. The keys are listed in the [remediation variable reference](../../docs/remediation-variables.md#value-overrides). |
 | `linux_compliance_remediate_sysctl_runtime` | `bool` | `true` | Whether the kernel parameter families also set the running value where the check rejects it, recording the value before for cleanup. With `false` only the persistent drop-in is written, which the kernel loads at the next boot, and the running kernel is neither read nor changed; where `/proc/sys` is read-only, `true` refuses such a rule as `runtime_unavailable`. |
 
 Toggles ([ADR 0011](../../docs/adr/0011-control-toggles-and-cleanup.md)) are flat booleans:
@@ -116,7 +117,7 @@ reads the same toggles with the same resolution, so a rule or topic switched off
 The fact `linux_compliance_remediated` holds `enabled`, `check_mode`, `profile`, `allow_disruptive`, `summary` (rules
 per action), `rules` (action, reason and controlling variable per rule), `results` (one per applied or cleaned-up
 rule and one with the status `not_implemented` per `audit_only` rule that would be applied), `disabled_rules`,
-`orphaned` and `notices`.
+`orphaned`, `unused_overrides` (the value overrides that no applied rule uses, with the reason) and `notices`.
 
 ## Running
 

@@ -15,6 +15,13 @@ INCLUDES = ("ansible.builtin.include_tasks", "ansible.builtin.import_tasks")
 COMPLETENESS = "Remediate | Check that every planned rule has exactly one result"
 DISPATCHED = "Remediate | Record that the dispatch completed"
 DISPATCH = "Remediate | Dispatch every family with work, in registry order"
+PLAN_ERRORS = "Remediate | Stop on unknown toggles, allow-list entries or catalogue errors"
+VALUES = "Remediate | Resolve the target of every rule to apply, with the value overrides"
+VALUES_SHAPE = "Remediate | Check the type and shape of the resolved values"
+VALUES_ERRORS = (
+    "Remediate | Stop on a value override that is unknown, not overridable yet or invalid"
+)
+PUBLISH = "Remediate | Publish the plan and the results"
 
 
 def load(path: Path) -> list[dict[str, object]]:
@@ -121,3 +128,43 @@ def test_pwquality_and_the_pam_conf_families_read_the_same_pam_directories() -> 
     assert "__linux_compliance_remediate_pwquality_pam_directories" not in variables
     assert [task.get("loop") for task in pwquality] == [shared]
     assert len(pam_conf) == 1
+
+
+def test_the_value_overrides_are_validated_before_any_family_runs() -> None:
+    names = [task["name"] for task in load(TASKS / "main.yml")]
+    position = names.index(PLAN_ERRORS)
+    assert names[position + 1 : position + 4] == [VALUES, VALUES_SHAPE, VALUES_ERRORS]
+    assert names.index(VALUES_ERRORS) < names.index(DISPATCH)
+    resolved = str(
+        cast("dict[str, object]", by_name(VALUES)["ansible.builtin.set_fact"])[
+            "__linux_compliance_remediate_values"
+        ]
+    )
+    assert "__linux_compliance_remediate_rules | freesecdev.linux_compliance.value_overrides(" in (
+        resolved
+    )
+    for option in ("overrides", "plan", "content_sha256", "profile"):
+        assert f"'{option}':" in resolved
+    assert "'overrides': linux_compliance_remediate_value_overrides," in resolved
+    assertion = cast("dict[str, object]", by_name(VALUES_ERRORS)["ansible.builtin.assert"])
+    assert assertion["that"] == ["__linux_compliance_remediate_values.errors | length == 0"]
+    assert "no change was made to the host" in str(assertion["fail_msg"])
+
+
+def test_the_value_overrides_must_be_a_mapping() -> None:
+    assertion = cast(
+        "dict[str, object]", by_name("Remediate | Validate inputs")["ansible.builtin.assert"]
+    )
+    assert "linux_compliance_remediate_value_overrides is mapping" in cast(
+        "list[str]", assertion["that"]
+    )
+
+
+def test_the_results_publish_the_unused_overrides_and_their_notices() -> None:
+    published = cast("dict[str, dict[str, object]]", by_name(PUBLISH)["ansible.builtin.set_fact"])[
+        "linux_compliance_remediated"
+    ]
+    assert published["unused_overrides"] == (
+        "{{ __linux_compliance_remediate_values.unused_overrides }}"
+    )
+    assert "+ __linux_compliance_remediate_values.notices" in str(published["notices"])

@@ -199,6 +199,31 @@ Never hard-code a value that a profile refines, and never fall back to another p
 operator chooses (the banner text) is a role variable with the content's default, validated against the profile's
 value before anything changes (ADR 0021).
 
+### Wiring a family for value overrides
+
+The operator's `linux_compliance_remediate_value_overrides` is checked by the dispatcher before any family runs
+([remediation guide](remediation.md#value-overrides)): an unknown key, a banner value, a value whose rules name no
+`value_comparison` and a value that the comparator refuses stop the role. For every rule to apply, the fact
+`__linux_compliance_remediate_values.rules[<rule_id>]` then holds `value_id`, `value_source` (`profile` or
+`override`), `profile_value`, `target` and `comparison`; `target` is `none` when the catalogue has no value of the
+profile for the content, and the family must then fail closed as it does today. A family is wired for overrides by
+changing only its own files:
+
+1. Add `value_comparison` to the family's rules in `content/catalogue.yml` and run `make catalogue`, which also
+   regenerates the family's rows in `docs/remediation-variables.md` (`make toggles`).
+2. Take each rule's target from `__linux_compliance_remediate_values.rules[rule_id].target` instead of the family's own
+   lookup of `profile_values`, and keep the family's own validation of that value, so the family's validator guards an
+   override as it guards a profile value.
+3. Judge the value in force after the run (written, or kept because the host already holds a stricter one) against
+   `profile_value` with the rule's comparator; a looser value is the status `deviation`, never `applied` or
+   `compliant`, and is recorded in the deviation register before anything is written (ADR 0032 §3, decisions J
+   and S).
+4. Add the family's refusals and cases to `tests/playbooks/vars/value-overrides/<family>.yml`, which
+   `tests/playbooks/remediate-value-overrides-check.yml` reads with every other file there, and add lifecycle
+   regressions for a stricter, a looser and an already stricter value.
+
+Until a family is wired, every key of its values is refused, so the variable never changes what a family writes.
+
 ## 4. Write the family file and its helpers
 
 Add the rules to `native_rules` with their strategy and the parameters your family file interprets, run

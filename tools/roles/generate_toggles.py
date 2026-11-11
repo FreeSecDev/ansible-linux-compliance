@@ -11,7 +11,9 @@ family toggle unless it is set. This tool derives, from ``roles/remediate/vars/r
   ``bool`` with descriptions;
 * the variable reference ``docs/remediation-variables.md``, which lists every topic toggle and
   every rule toggle, per family, with the rules of other families that a toggle switches off
-  through subsystem tags (FREES-165).
+  through subsystem tags (FREES-165), and, per family, the XCCDF values of its rules: the keys
+  of ``linux_compliance_remediate_value_overrides`` (ADR 0032), with the rules of each value,
+  the comparison that makes it overridable and the value of every profile.
 
 Rule toggles are not declared in the roles (amendment of FREES-53 to ADR 0011): with the full
 catalogue there are more than a thousand, and declaring each as a default and an argument spec
@@ -39,13 +41,14 @@ from typing import TYPE_CHECKING, Final, cast
 
 import yaml
 
+from ansible_collections.freesecdev.linux_compliance.plugins.filter import value_overrides
 from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance import (
     toggles,
 )
 from tools import yaml_loader
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Mapping, Sequence
 
 CATALOGUE: Final[Path] = Path("roles/remediate/vars/rules.yml")
 TOGGLE_ROLES: Final[tuple[str, ...]] = ("remediate", "audit")
@@ -72,6 +75,11 @@ PLAIN_VALUE: Final[re.Pattern[str]] = re.compile(r"[a-z][a-z0-9_]*")
 PLAIN_VALUE_KEYS: Final[frozenset[str]] = frozenset({"elements", "type"})
 RESERVED_WORDS: Final[frozenset[str]] = frozenset(
     {"y", "n", "yes", "no", "on", "off", "true", "false", "null"}
+)
+NOT_OVERRIDABLE: Final[str] = "not overridable yet"
+VALUE_ROWS_HEADER: Final[tuple[str, ...]] = (
+    "| Key | Rules | Comparison | Profile values |",
+    "|---|---|---|---|",
 )
 GENERATED_NOTE: Final[str] = "Generated; see docs/remediation-variables.md."
 DISRUPTIVE_NOTE: Final[str] = "Disruptive: needs linux_compliance_remediate_allow_disruptive."
@@ -194,6 +202,28 @@ REFERENCE_INTRO: Final[tuple[str, ...]] = (
     "`include_role` parameters outside `vars`): the role argument validation rejects an",
     "undeclared role parameter before anything runs. Topic toggles are declared and work as",
     "role parameters too.",
+    "",
+    "## Value overrides",
+    "",
+    "A native rule writes the value that the selected profile gives its XCCDF `Value`.",
+    "`linux_compliance_remediate_value_overrides` maps the short identifier of such a value",
+    "to the value that replaces the profile's value as the target of every rule with that",
+    "value ([ADR 0032](adr/0032-operator-control-community-modules-and-value-overrides.md)),",
+    "for example `{var_password_pam_minlen: 16}`. A value is a YAML integer or a string; a",
+    "umask is a quoted string such as `'027'`. Each family section below lists the values of",
+    "its rules, the comparison that makes a value overridable and the value of every profile",
+    "per datastream. A value is overridable only once its rules name a comparison: until",
+    "its family is wired for overrides the table says `not overridable yet`, and an override",
+    "of it fails the role. The banner values are patterns to match and are not listed; the",
+    "banner text is chosen with `linux_compliance_remediate_banner_text`.",
+    "",
+    "The role refuses an unknown key, a banner value, a value that is not overridable yet",
+    "and a value that the comparison does not take before it reads or changes anything, also",
+    "when remediation is disabled. A key that the profile, the toggles or the disruptive",
+    "allow-list leave unused, or that has no profile value for the discovered content, is not",
+    "refused: it is listed in `unused_overrides` of `linux_compliance_remediated` with the",
+    "reason, and in the notices. How a value in force is judged against the profile is in",
+    "[the remediation guide](remediation.md#value-overrides).",
     "",
     "## Topic toggles",
     "",
@@ -410,6 +440,54 @@ def specs(catalogue: toggles.Catalogue, current: dict[str, object]) -> dict[str,
     return result
 
 
+def _cell(text: str) -> str:
+    """Return ``text`` as a code span that a Markdown table cell can hold."""
+    return "`" + text.replace("|", "\\|") + "`"
+
+
+def _profile_values(entries: Sequence[Mapping[str, object]]) -> str:
+    """Return the value of every profile of a rule, per datastream, as one table cell."""
+    return "; ".join(
+        f"{_cell(str(entry['datastream']))} "
+        f"{', '.join(cast('Sequence[str]', entry['profiles']))}: "
+        f"{_cell(''.join(cast('Sequence[str]', entry['value'])))}"
+        for entry in entries
+    )
+
+
+def value_rows(catalogue: toggles.Catalogue, family: str) -> list[str]:
+    """Return the table of the XCCDF values of the rules of ``family``, or no lines.
+
+    One row per value, in the order of its first rule: the key, the short identifiers of its
+    rules, the comparison of its rules (``value_comparison``) or that it is not overridable yet,
+    and the value of every profile of its first rule. The banner values are not overridable
+    (ADR 0032 §2) and get no table.
+    """
+    if family in value_overrides.UNCOMPARED_FAMILIES:
+        return []
+    grouped: dict[str, list[Mapping[str, object]]] = {}
+    for rule in catalogue.rules:
+        parameters = cast("Mapping[str, object]", rule["parameters"])
+        if rule["family"] == family and "value_id" in parameters:
+            grouped.setdefault(str(parameters["value_id"]), []).append(rule)
+    if not grouped:
+        return []
+    lines = [
+        "",
+        f"Values of the `{family}` rules, the keys of `{value_overrides.OVERRIDES_VARIABLE}`:",
+        "",
+        *VALUE_ROWS_HEADER,
+    ]
+    for value_id, members in grouped.items():
+        first = cast("Mapping[str, object]", members[0]["parameters"])
+        comparison = first.get(value_overrides.COMPARISON_KEY)
+        rules = ", ".join(_cell(toggles.rule_short_id(str(rule["rule_id"]))) for rule in members)
+        shown = NOT_OVERRIDABLE if comparison is None else _cell(str(comparison))
+        entries = cast("Sequence[Mapping[str, object]]", first.get("profile_values", []))
+        lines.append(f"| {_cell(value_id)} | {rules} | {shown} | {_profile_values(entries)} |")
+    return lines
+
+
 def _rule_rows(catalogue: toggles.Catalogue, family: str) -> list[str]:
     members = [rule for rule in catalogue.rules if rule["family"] == family]
     lines = [f"### `{family}`", ""]
@@ -438,6 +516,7 @@ def _rule_rows(catalogue: toggles.Catalogue, family: str) -> list[str]:
             f"`{rule['family']}` |"
             for rule in extra
         )
+    lines.extend(value_rows(catalogue, family))
     return [*lines, ""]
 
 

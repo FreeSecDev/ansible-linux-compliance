@@ -1811,6 +1811,9 @@
       - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_unaccounted$') == [] or
         '__linux_compliance_remediate_unaccounted' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_values$') == [] or
+        '__linux_compliance_remediate_values' in (hostvars[inventory_hostname] | list)
     fail_msg: >-
       An internal variable of the remediate role (__linux_compliance_remediate_*) is set from outside the role as a
       parameter: a role parameter, a variable of a roles entry, an include parameter (vars of include_role, import_role,
@@ -2282,6 +2285,7 @@
     __linux_compliance_remediate_ssh_write: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_written: __linux_compliance_unset__
     __linux_compliance_remediate_toggle_names: __linux_compliance_unset__
+    __linux_compliance_remediate_values: __linux_compliance_unset__
   tags:
     - always
 
@@ -2726,6 +2730,7 @@
       - __linux_compliance_remediate_ssh_write == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ssh_written == '__linux_compliance_unset__'
       - __linux_compliance_remediate_toggle_names == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_values == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ac_changed_ids == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ac_changing == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ac_effect == '__linux_compliance_unset__'
@@ -3850,6 +3855,7 @@
     __linux_compliance_remediate_ssh_write: __linux_compliance_unset_again__
     __linux_compliance_remediate_ssh_written: __linux_compliance_unset_again__
     __linux_compliance_remediate_toggle_names: __linux_compliance_unset_again__
+    __linux_compliance_remediate_values: __linux_compliance_unset_again__
   tags:
     - always
 
@@ -4294,6 +4300,7 @@
       - __linux_compliance_remediate_ssh_write == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ssh_written == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_toggle_names == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_values == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ac_changed_ids == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ac_changing == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ac_effect == '__linux_compliance_unset_again__'
@@ -5062,5 +5069,6 @@
     __linux_compliance_remediate_ssh_write: __linux_compliance_unset__
     __linux_compliance_remediate_ssh_written: __linux_compliance_unset__
     __linux_compliance_remediate_toggle_names: __linux_compliance_unset__
+    __linux_compliance_remediate_values: __linux_compliance_unset__
   tags:
     - always

@@ -586,3 +586,26 @@ content compare more narrowly than these comparators: `ClientAliveCountMax` and 
 `equals`, and `MaxAuthTries` must be above 0. A stricter value there meets the profile by the comparator but fails the
 check, which the scan reports as a failure, never as a pass. The pull request that wires the `ssh` family decides with
 its golden test against the checks whether these rules take these comparators or an exact one.
+
+## Amendment of 2026-11-11: the variable and its validation (FREES-203)
+
+`linux_compliance_remediate_value_overrides` exists from this pull request on, with the default `{}`, as a role
+default and an argument specification option of type `dict`. The sentence of the acceptance section that it "does not
+exist" until the pull requests of §2 to §5 merge is therefore outdated; the rest of that sentence holds: nothing that
+the role writes changes yet.
+
+The filter `freesecdev.linux_compliance.value_overrides` checks the variable in `tasks/main.yml` right after the plan's
+own error check and before the dispatch, so a refused override stops the role before any family reads or changes the
+host, also when remediation is disabled (decision K). It refuses, all at once: a key that is not the `value_id` of a
+native rule (a full `xccdf_org.ssgproject.content_value_` identifier is refused with its short form in the message), a
+value of the `banners` family, naming `linux_compliance_remediate_banner_text`, a value whose rules name no
+`value_comparison` or different ones, and a value that the comparator's `validate` refuses, which covers decision M.
+Since no catalogue rule names a comparator yet, every key is refused today.
+
+For every rule that the plan applies and that has a value, the filter resolves `value_id`, `value_source`,
+`profile_value`, `target` and `comparison` into the internal fact `__linux_compliance_remediate_values`, with the
+lookup that the family files make in Jinja; no family reads it yet. An override of a rule without a profile value
+for the content is not used (decision N): `value_source` stays `profile` and `target` stays `none`, so the family
+still fails closed. A key that no applied rule uses is listed in `unused_overrides` of `linux_compliance_remediated`
+and in the notices. For a value that several rules share, decision K's reason is that of the first of its rules by
+rule identifier, and the key counts as used when any of its rules applies it.
