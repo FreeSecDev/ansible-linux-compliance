@@ -97,7 +97,8 @@ readonly SNAPSHOT_PATHS=(/etc/pam.d /usr/lib/pam.d /usr/share/pam.d /etc/pam.con
 
 run_libpam_case() {
   local case_dir="$1"
-  local snapshot log path calls reading environment
+  local snapshot log path module parent calls reading environment
+  local -a created=() copies=()
   snapshot="$(mktemp -d)"
   log="$(mktemp)"
   for path in "${SNAPSHOT_PATHS[@]}"; do
@@ -109,10 +110,28 @@ run_libpam_case() {
     [[ -n "${path}" ]] && rm -rf -- "${path}"
   done <"${case_dir}away"
   cp -R -P "${case_dir}root/." /
+  while IFS=$'\t' read -r path module || [[ -n "${path}" ]]; do
+    [[ -n "${path}" ]] || continue
+    parent="$(dirname "${path}")"
+    while [[ ! -e "${parent}" ]]; do
+      created+=("${parent}")
+      parent="$(dirname "${parent}")"
+    done
+    mkdir -p -- "$(dirname "${path}")"
+    cp -- "${module_dir}/${module}" "${path}"
+    printf '\n' >>"${path}"
+    copies+=("${path}")
+  done <"${case_dir}copies"
   environment="$(cat "${case_dir}environment")"
   reading="$(FREESECDEV_PAM_PROBE_LOG="${log}" FREESECDEV_PAM_PROBE_LINE="${environment}" \
     "${work}/probe_libpam" "$(cat "${case_dir}service")" 2>/dev/null)"
   calls="[$(paste -sd, "${log}")]"
+  for path in "${copies[@]}"; do
+    rm -f -- "${path}"
+  done
+  for path in "${created[@]}"; do
+    rmdir -- "${path}"
+  done
   while IFS= read -r path; do
     rm -f -- "/${path}"
   done < <(cd "${case_dir}root" && find . -mindepth 1 ! -type d -printf '%P\n')

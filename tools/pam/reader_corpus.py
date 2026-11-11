@@ -102,6 +102,7 @@ PAM_DIRECTORIES: Final[tuple[str, ...]] = ("/etc/pam.d", "/usr/lib/pam.d", "/usr
 HOP_FILE: Final[str] = "/etc/security/freesecdev-pwq-hop"
 CWD_TARGET: Final[str] = "/proc/self/cwd" + TARGET_FILE
 RENAMED_MODULE: Final[str] = "pam_freesecdev-pwq.so"
+ELSEWHERE_MODULE: Final[str] = "/usr/local/lib/security/pam_pwquality.so"
 MODULE_DIRECTORIES: Final[tuple[str, ...]] = (
     "/usr/lib64/security",
     "/usr/lib/x86_64-linux-gnu/security",
@@ -112,9 +113,12 @@ MODULE_DIRECTORIES: Final[tuple[str, ...]] = (
 class LibpamCase:
     """A layout of PAM files whose service the real libpam of each image runs (FREES-212).
 
-    ``files`` and ``links`` map absolute paths to a text or a link target. The probe removes the
-    PAM directories of ``away`` for the run, installs the layout, sets ``environment`` as the
-    value of ``FREESECDEV_PAM_PROBE_LINE``, runs the service and puts every file back.
+    ``files`` and ``links`` map absolute paths to a text or a link target, and ``copies`` maps
+    an absolute path to the name of a module in the module directory of the image, copied there
+    with one byte appended, so that it loads as that module with another checksum. The probe
+    removes the PAM directories of ``away`` for the run, installs the layout, sets
+    ``environment`` as the value of ``FREESECDEV_PAM_PROBE_LINE``, runs the service and puts
+    every file back.
     """
 
     case_id: str
@@ -122,6 +126,7 @@ class LibpamCase:
     links: tuple[tuple[str, str], ...] = ()
     away: tuple[str, ...] = ()
     environment: str = ""
+    copies: tuple[tuple[str, str], ...] = ()
 
     @property
     def stack(self) -> str:
@@ -211,6 +216,11 @@ LIBPAM_CASES: Final[tuple[LibpamCase, ...]] = (
         ),
     ),
     _service("dot-module", f"password requisite ./pam_pwquality.so {LOOSE}\n"),
+    LibpamCase(
+        "libpam-module-copy-elsewhere",
+        ((SERVICE_FILE, f"password requisite {ELSEWHERE_MODULE} {LOOSE}\n"),),
+        copies=((ELSEWHERE_MODULE, "pam_pwquality.so"),),
+    ),
     _service("sufficient-skip", f"password sufficient pam_permit.so\n{PWQ} {LOOSE}\n"),
     _service("sufficient-skip-required", f"password sufficient pam_permit.so\n{PWQ} minlen=14\n"),
     LibpamCase(
@@ -604,6 +614,9 @@ def write_libpam_case(directory: Path, case: LibpamCase) -> None:
     (folder / "service").write_text(LIBPAM_SERVICE + "\n", encoding="utf-8")
     (folder / "away").write_text("".join(f"{path}\n" for path in case.away), encoding="utf-8")
     (folder / "environment").write_bytes(case.environment.encode("utf-8"))
+    (folder / "copies").write_text(
+        "".join(f"{path}\t{module}\n" for path, module in case.copies), encoding="utf-8"
+    )
     if case.stack:
         (folder / "stack").write_bytes(case.stack.encode("utf-8"))
 
@@ -708,6 +721,7 @@ def assemble(outputs: Path, table: Path) -> int:
                 "links": [list(item) for item in case.links],
                 "away": list(case.away),
                 "environment": case.environment,
+                "copies": [list(item) for item in case.copies],
                 "readings": dict(sorted(readings[case.case_id].items())),
                 **(
                     {"stack_lines": dict(sorted(stacks[case.case_id].items()))}

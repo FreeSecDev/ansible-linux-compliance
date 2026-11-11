@@ -438,11 +438,15 @@ with a leading `-`, also on a continued line) of a path with a `/` refuses the r
 on both platforms, although only Ubuntu's libpam accepts it (Rocky Linux's refuses the line), which can only add a
 refusal. `tests/unit/tools/test_pam_libpam_verdicts.py` checks each form against what the real libpam of both
 Molecule images passes to `pam_pwquality` (`libpam_cases` of `tests/fixtures/pam_conf/reader_verdicts.json`,
-`make pam-reader-verdicts`). A line loads `pam_pwquality` when the file that libpam loads for its module path is
-`pam_pwquality.so` of the module directory, or a regular file with the same SHA-256 (a link or a copy under another
-name), not when the path merely names it: the role inspects every module path with `stat` (filter
-`pwquality_pam_modules`, the module directory from the OS family and the architecture), and an unknown platform, a
-path with `$ISA` or a module that could not be inspected refuses every rule. The family decides the values that
+`make pam-reader-verdicts`). A line loads `pam_pwquality` when the file name of the path that libpam loads for its
+module path holds `pam_pwquality`, in any directory (also a build installed elsewhere, such as
+`/usr/local/lib/security/pam_pwquality.so`), or when that path is a regular file with the SHA-256 of
+`pam_pwquality.so` of the module directory (a link or a copy under another name): the role inspects every module path
+with `stat` (filter `pwquality_pam_modules`, the module directory from the OS family and the architecture), and an
+unknown platform, a path with `$ISA`, a module that could not be inspected, or a module directory without
+`pam_pwquality.so` (which may then not be the directory that libpam loads from, as on a Debian system whose `/usr` is
+not merged) refuses every rule. A build of the module under another name and with another checksum is not
+recognised (ADR 0021). The family decides the values that
 `pam_pwquality` would use, not whether libpam runs it: a `sufficient` module or a jump before the line, a line of
 another type, or a stack without `pam_pwquality` leave the rule `compliant` or `applied` although no quality check
 happens; the stack rules that enable the module stay audit-only (FREES-212). With the main file, a setting that is set on

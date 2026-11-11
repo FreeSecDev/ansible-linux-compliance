@@ -23,9 +23,11 @@ description:
     that directory, so that the role can inspect each path with C(ansible.builtin.stat) and its
     SHA-256 checksum.
   - The C(pwquality_decide) filter then counts the arguments of a line as C(pam_pwquality)
-    arguments when the file that libpam loads for it is C(pam_pwquality.so) of the module
-    directory, or a regular file with the same checksum, such as a link or a copy of the module
-    under another name, not when its path merely names C(pam_pwquality) (FREES-212).
+    arguments when the file name of the path that libpam loads for it holds C(pam_pwquality),
+    in any directory, or when that path is a regular file with the checksum of
+    C(pam_pwquality.so) of the module directory, such as a link or a copy of the module under
+    another name (FREES-212). When C(pam_pwquality.so) is missing from the module directory, any
+    other module path refuses the rule.
   - libpam takes a module path that starts with a slash as it is and puts its module directory in
     front of any other. The directory is C(/usr/lib64/security/) on the C(RedHat) family and
     C(/usr/lib/<multiarch>/security/) on the C(Debian) family, for C(x86_64) and C(aarch64).

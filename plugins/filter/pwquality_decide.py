@@ -86,12 +86,15 @@ options:
         directory that the C(pwquality_pam_modules) filter returns (or C(None)), and C(stats),
         the C(ansible.builtin.stat) with C(follow=true) and the SHA-256 C(checksum) of every path
         that it returns, by path, or a mapping with only the C(msg) of a stat that failed.
-      - The arguments of a line count as C(pam_pwquality) arguments when the file that libpam
-        loads for it is C(pam_pwquality.so) of the module directory, or a regular file with its
-        checksum, such as a link or a copy under another name (FREES-212). A line whose module
-        cannot be told, because the module directory is not known, the path holds C($ISA), or a
-        path that must be compared was not inspected or could not be read, makes the rule
-        C(overridden).
+      - The arguments of a line count as C(pam_pwquality) arguments when the file name of the
+        path that libpam loads for it holds C(pam_pwquality), in any directory (a build of the
+        module installed elsewhere, such as C(/usr/local/lib/security/pam_pwquality.so)), or
+        when that path is a regular file with the checksum of C(pam_pwquality.so) of the module
+        directory, such as a link or a copy under another name (FREES-212). A line whose module
+        cannot be told, because the module directory is not known, the path holds C($ISA), a
+        path that must be compared was not inspected or could not be read, or
+        C(pam_pwquality.so) is missing from the module directory (which may then not be the one
+        that libpam loads from), makes the rule C(overridden).
       - Whether libpam runs C(pam_pwquality) at all is not decided. A line of another type than
         C(password), a jump or a C(sufficient) module before it, or a stack without it are not
         looked at; the rule decides the values that C(pam_pwquality) would use.

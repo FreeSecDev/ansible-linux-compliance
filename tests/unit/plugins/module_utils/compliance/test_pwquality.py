@@ -488,6 +488,14 @@ def test_every_module_path_of_both_readers_is_listed_with_pam_pwquality() -> Non
 
 LINKED = "/opt/site/pam_pwq.so"
 ELSEWHERE = "/opt/site/pam_other.so"
+ELSEWHERE_PWQ = "/usr/local/lib/security/pam_pwquality.so"
+
+
+def missing_reference(path: str) -> str:
+    return (
+        f"{PWQ_MODULE} is missing or not a regular file, so {path} cannot be compared with"
+        " pam_pwquality.so and the module directory of libpam may be another one"
+    )
 
 
 @pytest.mark.parametrize(
@@ -504,9 +512,28 @@ ELSEWHERE = "/opt/site/pam_other.so"
         ),
         (LINKED, {LINKED: UNIX_STAT, PWQ_MODULE: PWQ_STAT}, False),
         ("pam_unix.so", MODULE_STATS, False),
-        (LINKED, {LINKED: {"exists": False}}, False),
-        (LINKED, {LINKED: {"exists": True, "isreg": False}}, False),
-        (LINKED, {LINKED: PWQ_STAT, PWQ_MODULE: {"exists": False}}, False),
+        (LINKED, {LINKED: {"exists": False}} | MODULE_STATS, False),
+        (LINKED, {LINKED: {"exists": True, "isreg": False}} | MODULE_STATS, False),
+        (ELSEWHERE_PWQ, {}, True),
+        (ELSEWHERE_PWQ, {ELSEWHERE_PWQ: UNIX_STAT, PWQ_MODULE: PWQ_STAT}, True),
+        (ELSEWHERE_PWQ, {PWQ_MODULE: {"exists": False}}, True),
+        ("/opt/site/pam_pwquality.so.1", {}, True),
+        (LINKED, {LINKED: PWQ_STAT, PWQ_MODULE: {"exists": False}}, missing_reference(LINKED)),
+        (
+            LINKED,
+            {LINKED: PWQ_STAT, PWQ_MODULE: {"exists": True, "isreg": False}},
+            missing_reference(LINKED),
+        ),
+        (
+            "pam_unix.so",
+            {UNIX_MODULE: {"exists": False}, PWQ_MODULE: {"exists": False}},
+            missing_reference(UNIX_MODULE),
+        ),
+        (
+            LINKED,
+            {LINKED: UNIX_STAT, PWQ_MODULE: {"msg": "Permission denied"}},
+            f"stat could not inspect {PWQ_MODULE}: Permission denied",
+        ),
         (LINKED, {}, f"{LINKED} was not inspected"),
         (LINKED, {LINKED: PWQ_STAT}, f"{PWQ_MODULE} was not inspected"),
         (
@@ -567,6 +594,51 @@ def test_a_renamed_pam_pwquality_that_loosens_the_rule_overrides_the_file() -> N
 
 
 @pytest.mark.parametrize(
+    "stats",
+    [
+        MODULE_STATS | {ELSEWHERE_PWQ: UNIX_STAT},
+        {PWQ_MODULE: {"exists": False}},
+        {PWQ_MODULE: {"msg": "Permission denied"}},
+    ],
+)
+def test_a_pam_pwquality_build_outside_the_module_directory_overrides_the_file(
+    stats: dict[str, dict[str, object]],
+) -> None:
+    text = f"password requisite {ELSEWHERE_PWQ} minlen=1 enforcing=0\n"
+    modules = pwquality.Modules(MODULE_DIRECTORY, stats)
+    assert pwquality.read_pam(stack([(SERVICE, text)], modules)).arguments == (
+        (SERVICE, "minlen=1"),
+        (SERVICE, "enforcing=0"),
+    )
+    decision = pwquality.decide(rule(), [], "minlen = 14\n", stack([(SERVICE, text)], modules))
+    assert (decision["status"], decision["text"]) == ("overridden", None)
+    assert decision["reason"] == f"pam_pwquality arguments override the file: {SERVICE}: minlen=1"
+
+
+def test_a_module_directory_without_pam_pwquality_refuses_every_other_module() -> None:
+    """A Debian system whose /usr is not merged loads its modules from /lib/<multiarch>/security."""
+    stats: dict[str, dict[str, object]] = {
+        PWQ_MODULE: {"exists": False},
+        UNIX_MODULE: {"exists": False},
+    }
+    text = f"password requisite pam_unix.so\n{PWQ} minlen=14\n"
+    decision = pwquality.decide(
+        rule(),
+        [],
+        "minlen = 14\n",
+        stack([(SERVICE, text)], pwquality.Modules(MODULE_DIRECTORY, stats)),
+    )
+    assert (decision["status"], decision["text"]) == ("overridden", None)
+    assert str(decision["reason"]).startswith(
+        f"{SERVICE} loads the module pam_unix.so, but {missing_reference(UNIX_MODULE)}"
+    )
+    alone = pwquality.Modules(MODULE_DIRECTORY, stats)
+    assert pwquality.read_pam(stack([(SERVICE, f"{PWQ} minlen=14\n")], alone)).arguments == (
+        (SERVICE, "minlen=14"),
+    )
+
+
+@pytest.mark.parametrize(
     ("modules", "reason"),
     [
         (
@@ -579,6 +651,12 @@ def test_a_renamed_pam_pwquality_that_loosens_the_rule_overrides_the_file() -> N
                 f"{SERVICE} loads the module pam_unix.so, but the collection does not know the"
                 " directory that libpam loads pam_unix.so from on this platform"
             ),
+        ),
+        (
+            pwquality.Modules(
+                MODULE_DIRECTORY, {PWQ_MODULE: {"exists": False}, UNIX_MODULE: {"exists": False}}
+            ),
+            f"{SERVICE} loads the module pam_unix.so, but {missing_reference(UNIX_MODULE)}",
         ),
     ],
 )

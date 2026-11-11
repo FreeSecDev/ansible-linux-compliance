@@ -126,6 +126,12 @@ def test_a_libpam_case_is_written_as_the_layout_that_the_probe_installs(tmp_path
     assert (fallback / "away").read_text(encoding="utf-8").splitlines() == list(
         reader_corpus.PAM_DIRECTORIES
     )
+    assert (fallback / "copies").read_text(encoding="utf-8") == ""
+    copied = out / "libpam-module-copy-elsewhere"
+    assert (copied / "copies").read_text(encoding="utf-8") == (
+        f"{reader_corpus.ELSEWHERE_MODULE}\tpam_pwquality.so\n"
+    )
+    assert not (copied / "root" / reader_corpus.ELSEWHERE_MODULE.lstrip("/")).exists()
 
 
 def test_assembly_refuses_outputs_that_miss_a_libpam_case(tmp_path: Path) -> None:

@@ -23,9 +23,11 @@ bugfixes:
     module path, so the module loaded under another name (a link or a copy, ``pam_pwq.so``) was not read while libpam
     ran it with its arguments. Every module path of the PAM lines is now resolved as libpam resolves it (its module
     directory, from the OS family and the architecture, before a relative path; the new ``pwquality_pam_modules``
-    filter) and inspected with ``stat`` and its SHA-256; a line loads ``pam_pwquality`` when that file is
-    ``pam_pwquality.so`` of the module directory or has its checksum. An unknown platform, a path with ``$ISA`` and a
-    module that could not be inspected make the rule ``overridden``. The ``pwquality_decide`` filter takes the modules
+    filter) and inspected with ``stat`` and its SHA-256; a line loads ``pam_pwquality`` when the file name of that
+    path holds ``pam_pwquality``, in any directory, or when the file has the checksum of ``pam_pwquality.so`` of the
+    module directory. An unknown platform, a path with ``$ISA``, a module that could not be inspected, and a module
+    directory without ``pam_pwquality.so`` (as on a Debian system whose ``/usr`` is not merged) make the rule
+    ``overridden``. The ``pwquality_decide`` filter takes the modules
     as its fifth argument, and the kind of the drop-in directory moves into the rule as ``directory`` (FREES-212).
   - >-
     remediate - all three PAM families resolved a link with ``lnk_source`` only, the path that the Ansible module's own

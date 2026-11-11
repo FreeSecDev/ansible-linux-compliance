@@ -606,3 +606,33 @@ end with is the profile's value, and the family refuses with a reason whenever i
 
 **The open points of the FREES-213 amendment are closed:** an include whose target or control is on a continued
 line is read as libpam reads it and refused, and the `/etc/pam.conf` fallback is refused.
+
+**Second review (2026-11-11): module identity fails closed.** The independent review of the follow-ups found that
+identifying `pam_pwquality` by its file alone failed open where the earlier text match had refused: a line that loads
+`/usr/local/lib/security/pam_pwquality.so minlen=1 enforcing=0`, a real build of the module that is not byte for byte
+the packaged one (a libpwquality built from source installs there, or an older copy left behind), was taken as another
+module, and the rule was `compliant` while libpam passed the looser arguments; so was every line when
+`pam_pwquality.so` was missing from the module directory. The identity now takes both signals, so that it never reads
+less than either:
+
+- A line loads `pam_pwquality` when the file name of the path that libpam loads for it holds `pam_pwquality`, in any
+  directory and whatever the file is (`pam_pwquality.so`, `pam_pwquality.so.1`, also a path that does not exist, whose
+  arguments can then only refuse), or when that path is a regular file with the SHA-256 of `pam_pwquality.so` of the
+  module directory (a link, a hard link or a copy under another name).
+- When `pam_pwquality.so` of the module directory is missing, is not a regular file, or could not be inspected or
+  read, no other module path can be compared with it, and a line that loads one refuses every rule (`overridden`, the
+  line and the reason named) instead of being taken as another module. This also covers a Debian system whose `/usr`
+  is not merged: its libpam loads modules from `/lib/<multiarch>/security/`, the collection looks in
+  `/usr/lib/<multiarch>/security/`, finds no `pam_pwquality.so` there and refuses. Neither pinned datastream targets
+  such a host. A host with `pwquality.conf` but without the PAM module is refused the same way.
+- The boundary that remains: a build of the module under another name (no `pam_pwquality` in its file name) with
+  another checksum than the packaged module is not recognised, and its arguments are not read. Nothing on the host
+  tells such a file apart from any other PAM module short of loading it; placing it and naming it in the stack needs
+  root, as the renamed link of the first follow-up did. The family does not claim this case.
+- Evidence: the `libpam_cases` row `libpam-module-copy-elsewhere` (`make pam-reader-verdicts` now also installs
+  copies of a module with one byte appended, field `copies` of `LibpamCase`): the copy of the recording module at
+  `/usr/local/lib/security/pam_pwquality.so` gets `minlen=1 enforcing=0` from the real libpam of both images, and the
+  decision is `overridden` by the arguments. The unit tests of `pwquality` cover a build elsewhere with another
+  checksum, with the packaged module missing and with it uninspectable (each `overridden` by the arguments), a missing
+  or non-regular packaged module for a module of another name, and the Debian layout without `pam_pwquality.so` in
+  the module directory (refused, the reason named).

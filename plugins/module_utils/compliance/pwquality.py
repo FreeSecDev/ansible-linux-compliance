@@ -97,6 +97,7 @@ UNRECORDABLE: Final[str] = (
 )
 SURROGATE: Final[str] = r"[\ud800-\udfff]"
 PAM_MODULE: Final[str] = "pam_pwquality.so"
+MODULE_NAME: Final[str] = "pam_pwquality"
 MODULE_DIRECTORIES: Final[Mapping[str, Mapping[str, str]]] = {
     "RedHat": {"x86_64": "/usr/lib64/security/", "aarch64": "/usr/lib64/security/"},
     "Debian": {
@@ -387,13 +388,23 @@ class Modules:
     def identify(self, module: str) -> bool | str:
         """Return whether a module path loads ``pam_pwquality``, or why it cannot be told.
 
-        A path that libpam resolves to ``pam_pwquality.so`` in the module directory loads it,
-        also when that file is missing (the arguments are read then, which can only refuse). Any
-        other path loads it when it is a regular file with the checksum of that file: a link, a
-        hard link or a copy of the module under another name, as libpam loads it (FREES-212). A
-        path that does not exist or is not a regular file loads nothing. Without the module
-        directory, with ``$ISA`` in the path, or when a file that must be compared could not be
-        inspected, the text is the reason why the family cannot tell.
+        A path whose file name holds ``pam_pwquality`` loads it, in any directory and whatever
+        the file is: ``pam_pwquality.so`` of the module directory, a build of the module installed
+        elsewhere (``/usr/local/lib/security/pam_pwquality.so`` of a libpwquality built from
+        source, or an older copy left behind), or a file that is missing, whose arguments are
+        read then, which can only refuse. Any other path loads it when it is a regular file with
+        the checksum of ``pam_pwquality.so`` of the module directory: a link, a hard link or a
+        copy of the module under another name, as libpam loads it (FREES-212). A path that does
+        not exist or is not a regular file loads nothing.
+
+        The text is the reason why the family cannot tell: without the module directory, with
+        ``$ISA`` in the path, when a file that must be compared could not be inspected or read,
+        and when ``pam_pwquality.so`` is missing from the module directory or is not a regular
+        file. Without that module no other path can be compared with it, and a module directory
+        without it may not be the one that libpam loads from (``/lib/<multiarch>/security/`` of
+        a Debian system whose ``/usr`` is not merged), so the family refuses rather than taking
+        such a line as another module. A build of the module under another name with another
+        checksum is not recognised (ADR 0021).
         """
         if self.directory is None:
             return (
@@ -403,17 +414,24 @@ class Modules:
         path = module_path(module, self.directory)
         if path is None:
             return f"{module} holds {ISA_MARK}, which libpam replaces and the collection does not"
-        return path == self.directory + PAM_MODULE or self._same_as_module(path, self.directory)
+        if MODULE_NAME in path.rpartition("/")[2]:
+            return True
+        return self._same_as_module(path, self.directory + PAM_MODULE)
 
-    def _same_as_module(self, path: str, directory: str) -> bool | str:
-        """Return whether ``path`` is a regular file with the checksum of ``pam_pwquality.so``."""
+    def _same_as_module(self, path: str, reference: str) -> bool | str:
+        """Return whether ``path`` is a regular file with the checksum of ``reference``."""
         checksum, problem = self._checksum(path)
         if problem is not None:
             return problem
-        if checksum is None:
-            return False
-        expected, problem = self._checksum(directory + PAM_MODULE)
-        return problem if problem is not None else checksum == expected
+        expected, problem = self._checksum(reference)
+        if problem is not None:
+            return problem
+        if expected is None:
+            return (
+                f"{reference} is missing or not a regular file, so {path} cannot be compared with"
+                f" {PAM_MODULE} and the module directory of libpam may be another one"
+            )
+        return checksum == expected
 
 
 @dataclass(frozen=True)
@@ -497,8 +515,8 @@ def read_pam(stack: PamStack) -> PamReading:
     although only the Ubuntu libpam accepts it (Rocky Linux's refuses the line as an illegal type):
     reading it as an include can only add a refusal. Every line of every file is read, also of
     a file that libpam does not open, which can only add a refusal too. Which lines load
-    ``pam_pwquality`` is decided by the file that libpam loads for the module path
-    (:meth:`Modules.identify`), not by its name; a line whose module cannot be identified is a
+    ``pam_pwquality`` is decided by the file that libpam loads for the module path, by its name
+    or its checksum (:meth:`Modules.identify`); a line whose module cannot be identified is a
     problem.
 
     A file with a NUL byte or a line of 1023 bytes or more is a problem: the Ubuntu reader splits

@@ -106,6 +106,7 @@ EXPECTED: dict[str, tuple[str, str | None]] = {
     "libpam-chained-link": ("overridden", INDIRECT),
     "libpam-renamed-module": ("overridden", ARGUMENTS),
     "libpam-dot-module": ("overridden", ARGUMENTS),
+    "libpam-module-copy-elsewhere": ("overridden", ARGUMENTS),
     "libpam-sufficient-skip": ("overridden", ARGUMENTS),
     "libpam-sufficient-skip-required": ("compliant", None),
 }
@@ -158,13 +159,17 @@ def module_stat(case: reader_corpus.LibpamCase, platform: str, path: str) -> dic
     """Return the stat, through links and with a checksum, of a module path on the image.
 
     The modules of :data:`SHIPPED_MODULES` are in the module directory of the image, each with
-    its own checksum; a link of the case leads to one of them.
+    its own checksum; a link of the case leads to one of them, and a copy of the case is a
+    regular file with a checksum of its own.
     """
     directory = str(pwquality.module_directory(*FACTS[platform]))
     links = dict(case.links)
     path = posixpath.normpath(path)
     while path in links:
         path = hop(path, links[path])
+    copies = dict(case.copies)
+    if path in copies:
+        return {"exists": True, "isreg": True, "checksum": f"sha256 of a copy of {copies[path]}"}
     name = path.removeprefix(directory)
     if name not in SHIPPED_MODULES:
         return {"exists": False}
@@ -243,6 +248,7 @@ def test_the_table_records_every_libpam_case_of_the_corpus_on_both_images() -> N
         assert row["links"] == [list(item) for item in case.links]
         assert row["away"] == list(case.away)
         assert row["environment"] == case.environment
+        assert row["copies"] == [list(item) for item in case.copies]
         readings = cast("dict[str, dict[str, object]]", row["readings"])
         assert set(readings) == set(PLATFORMS)
         assert all(
