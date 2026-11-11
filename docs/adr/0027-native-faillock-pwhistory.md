@@ -364,5 +364,13 @@ reads (the open point of the FREES-213 amendment).
   `/usr/share/pam.d` as rewritten, as the pwquality group `readers` does. The link to itself now also checks the
   `stat` message.
 
+- After the review of FREES-212, a link (or a PAM directory) is read only when its `lnk_target`, made absolute, is the
+  path that `lnk_source` gives. A target that names a path below `/proc`, `/sys` or `/dev` (`/proc/self/cwd/x`, which
+  the module resolves into its own working directory) is `virtual_file`, and a target reached through a further link
+  or a `..` after a name is the new unreadable kind `indirect_link`; both make every rule of these families
+  `unreadable_stack`. The `pwquality` family also identifies `pam_pwquality` by the file that libpam loads, not by its
+  name (ADR 0021, same amendment); these families still find `pam_faillock` and `pam_pwhistory` lines by the module's
+  file name, as before.
+
 **The open point of the FREES-213 amendment is closed:** the `/etc/pam.conf` fallback refuses every rule of the
 three families.

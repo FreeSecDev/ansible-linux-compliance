@@ -123,8 +123,11 @@ reviews catch most often:
   directory to list is inspected with `follow: true` when the program follows a linked directory, again with
   `failed_when: false`, refusing on a directory that `stat` cannot inspect. Pass the error message of a failed `stat`
   into the reason. Resolve every link and every linked directory with a `stat` and `follow: false` (its `lnk_source`
-  is the resolved path) and refuse on one that resolves below `/proc`, `/sys` or `/dev`: such a file, like
-  `/proc/self/environ`, reads differently in the module's process than in the program's. Know the program's fallback
+  is the resolved path, its `lnk_target` the target as the link holds it) and refuse on one that resolves below
+  `/proc`, `/sys` or `/dev`, or whose target names such a path: such a file, like `/proc/self/environ` or
+  `/proc/self/cwd/x`, reads differently in the module's process than in the program's, and `lnk_source` is computed
+  in the module's process. Read a link only when its target, made absolute, is `lnk_source` itself, and refuse a link
+  reached through a further link, whose hops the module does not see. Know the program's fallback
   when its directories are missing (libpam reads `/etc/pam.conf` when neither `/etc/pam.d` nor `/usr/lib/pam.d` is a
   directory) and refuse when it would apply, unless the family reads the fallback too. The PAM families do this with
   the filter `pam_service_files` (FREES-213, FREES-212).
@@ -133,6 +136,11 @@ reviews catch most often:
   PAM lines with a parser of its own that missed a live line after `# comment \`, a split long line and include forms
   that libpam accepts, while `pam_conf` read them right (FREES-212). Where the pinned platforms read a file
   differently, read it both ways and refuse when the readings disagree on anything that the rule depends on.
+- Identify what the program loads by the file it loads, not by its name. libpam runs `pam_pwquality.so` reached
+  through a link or a copy under any name, so the `pwquality` family resolves every module path as libpam does and
+  compares the file with `pam_pwquality.so` by SHA-256, refusing when it cannot tell (FREES-212). State what a family
+  does not decide: the `pwquality` family decides the values that the module would use, not whether the stack runs
+  it.
 - Check mode must report every planned change and change nothing. When a later task depends on something an earlier
   rule would create (a directory, a file), predict it from a fact instead of failing or reporting nothing; skip a
   module in check mode only when it cannot run without the prediction and another task already reports the change.

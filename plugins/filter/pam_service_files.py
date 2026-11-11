@@ -31,7 +31,11 @@ description:
     C(pwhistory) families refuse their rules on any of them.
   - A link, or a PAM directory, that resolves to a path below C(/proc), C(/sys) or C(/dev) is
     unreadable too, because such a file can read differently in the process that calls libpam
-    (C(/proc/self/environ) is the environment of whichever process opens it). When neither
+    (C(/proc/self/environ) is the environment of whichever process opens it), and so is a link
+    whose target names such a path although the module resolves it elsewhere
+    (C(/proc/self/cwd/x)). A link is read only when its target, made absolute, is the path that
+    it resolves to; a target reached through a further link or a C(..) after a name is
+    unreadable as C(indirect_link), because the collection does not inspect each hop. When neither
     C(/etc/pam.d) nor C(/usr/lib/pam.d) is a directory, libpam reads C(/etc/pam.conf) instead,
     which the collection does not read, so C(/etc/pam.conf) is returned as unreadable (FREES-212).
 author:
@@ -75,13 +79,16 @@ options:
   resolved:
     description:
       - The C(stat) with C(follow=false) of every PAM directory and of every entry that is a
-        symbolic link, by path, whose C(lnk_source) is the path that a link resolves to.
+        symbolic link, by path, whose C(lnk_source) is the path that a link resolves to and whose
+        C(lnk_target) is the target that the link holds.
       - A PAM directory or a link to a regular file that resolves below C(/proc), C(/sys) or
-        C(/dev) is unreadable as C(virtual_file), with that path as its C(detail); nothing below
-        such a directory is read. A PAM directory or a link to a regular file that has no value
-        here, or whose stat failed (a mapping with only its C(msg)), is unreadable too, as
-        C(uninspected_directory) or C(unfollowed_link). It has no default, so that a caller
-        cannot leave the resolution out by mistake.
+        C(/dev), or whose target names such a path, is unreadable as C(virtual_file), with that
+        path as its C(detail); one whose target, made absolute, is not the path that it resolves
+        to is unreadable as C(indirect_link), with the target and that path as its C(detail).
+        Nothing below such a directory is read. A PAM directory or a link to a regular file that
+        has no value here, or whose stat failed (a mapping with only its C(msg)), is unreadable
+        too, as C(uninspected_directory) or C(unfollowed_link). It has no default, so that a
+        caller cannot leave the resolution out by mistake.
     type: dict
     required: true
 """
@@ -122,16 +129,19 @@ _value:
               link. C(unlisted) is an entry, or a PAM directory, that C(find) could not inspect.
               C(uninspected_directory) is a PAM directory that C(stat) could not inspect, such as
               a link loop. C(virtual_file) is a link or a PAM directory that resolves below
-              C(/proc), C(/sys) or C(/dev). C(pam_conf_fallback) is C(/etc/pam.conf), which libpam
+              C(/proc), C(/sys) or C(/dev), or whose target names such a path. C(indirect_link) is
+              a link or a PAM directory whose target is reached through a further link or a C(..)
+              after a name. C(pam_conf_fallback) is C(/etc/pam.conf), which libpam
               reads when neither C(/etc/pam.d) nor C(/usr/lib/pam.d) is a directory.
           type: str
-          choices: [broken_link, link, pam_conf_fallback, special, unfollowed_link,
-                    uninspected_directory, unlisted, virtual_file]
+          choices: [broken_link, indirect_link, link, pam_conf_fallback, special,
+                    unfollowed_link, uninspected_directory, unlisted, virtual_file]
         detail:
           description:
             - The error message of the failed C(stat) of an C(unfollowed_link) or an
-              C(uninspected_directory), or the path below C(/proc), C(/sys) or C(/dev) of a
-              C(virtual_file). Absent when there is none.
+              C(uninspected_directory), the path below C(/proc), C(/sys) or C(/dev) of a
+              C(virtual_file), or the target of an C(indirect_link) and the path that it resolves
+              to. Absent when there is none.
           type: str
 """
 

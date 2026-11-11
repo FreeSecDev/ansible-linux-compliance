@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import functools
 import json
+import posixpath
 from pathlib import Path
 from typing import cast
 
@@ -26,6 +27,7 @@ from ansible_collections.freesecdev.linux_compliance.plugins.filter import (
     pam_conf,
     pam_service_files,
     pwquality_decide,
+    pwquality_pam_modules,
 )
 from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance import (
     pam_reader,
@@ -42,6 +44,9 @@ SHIPPED_DIRECTORIES = {
     "rhel_compatible": reader_corpus.PAM_DIRECTORIES,
 }
 PROCESS_ENVIRON = "/proc/4242/environ"
+MODULE_CWD = "/home/ansible"
+FACTS = {"ubuntu": ("Debian", "x86_64"), "rhel_compatible": ("RedHat", "x86_64")}
+SHIPPED_MODULES = ("pam_deny.so", "pam_permit.so", "pam_pwquality.so", "pam_unix.so")
 FILE_STAT = {"exists": True, "isreg": True, "isdir": False}
 DIRECTORY_STAT = {"exists": True, "isreg": False, "isdir": True}
 NOT_A_LINK = {"exists": True, "islnk": False}
@@ -65,6 +70,7 @@ UNASSEMBLED = "has a NUL byte or a line of 1023 bytes or more"
 DIFFERENTLY = "assemble differently"
 INCLUDES = "includes "
 VIRTUAL = "resolves to a path below /proc, /sys or /dev"
+INDIRECT = "is a symbolic link whose target is reached through a further symbolic link"
 PAM_CONF = "/etc/pam.conf is what libpam reads instead of the service files"
 EXPECTED: dict[str, tuple[str, str | None]] = {
     "libpam-plain": ("overridden", ARGUMENTS),
@@ -96,6 +102,12 @@ EXPECTED: dict[str, tuple[str, str | None]] = {
     "libpam-pam-conf-vendor-directory": ("overridden", PAM_CONF),
     "libpam-pam-conf-pam-d-is-a-file": ("overridden", PAM_CONF),
     "libpam-pam-conf-ignored": ("compliant", None),
+    "libpam-cwd-link": ("overridden", VIRTUAL),
+    "libpam-chained-link": ("overridden", INDIRECT),
+    "libpam-renamed-module": ("overridden", ARGUMENTS),
+    "libpam-dot-module": ("overridden", ARGUMENTS),
+    "libpam-sufficient-skip": ("overridden", ARGUMENTS),
+    "libpam-sufficient-skip-required": ("compliant", None),
 }
 CASES = {case.case_id: case for case in reader_corpus.LIBPAM_CASES}
 
@@ -119,6 +131,56 @@ def loosens(argument: str) -> bool:
     return pwquality.option_override(data, "minlen", 14) or (
         pwquality.option_value(data) == ("enforcing", 0)
     )
+
+
+def hop(link: str, target: str) -> str:
+    """Return the path that the target of ``link`` names, as the kernel joins it."""
+    return posixpath.normpath(posixpath.join(posixpath.dirname(link), target))
+
+
+def module_realpath(case: reader_corpus.LibpamCase, path: str) -> str:
+    """Return what ``os.path.realpath`` gives for ``path`` in the Ansible module's process.
+
+    The links of the case are followed; ``/proc/self/environ`` is the module's own environment
+    and ``/proc/self/cwd`` its working directory, which is not where libpam runs.
+    """
+    links = dict(case.links)
+    while path in links:
+        path = hop(path, links[path])
+    if path == "/proc/self/environ":
+        return PROCESS_ENVIRON
+    if path.startswith("/proc/self/cwd/"):
+        return MODULE_CWD + path.removeprefix("/proc/self/cwd")
+    return path
+
+
+def module_stat(case: reader_corpus.LibpamCase, platform: str, path: str) -> dict[str, object]:
+    """Return the stat, through links and with a checksum, of a module path on the image.
+
+    The modules of :data:`SHIPPED_MODULES` are in the module directory of the image, each with
+    its own checksum; a link of the case leads to one of them.
+    """
+    directory = str(pwquality.module_directory(*FACTS[platform]))
+    links = dict(case.links)
+    path = posixpath.normpath(path)
+    while path in links:
+        path = hop(path, links[path])
+    name = path.removeprefix(directory)
+    if name not in SHIPPED_MODULES:
+        return {"exists": False}
+    return {"exists": True, "isreg": True, "checksum": f"sha256 of {name}"}
+
+
+def modules_of(
+    case: reader_corpus.LibpamCase, platform: str, view: list[object]
+) -> dict[str, object]:
+    """Return what the role passes to ``pwquality_decide`` as the modules of the PAM lines."""
+    plan = pwquality_pam_modules.pwquality_pam_modules(view, *FACTS[platform])
+    paths = cast("list[str]", plan["paths"])
+    return {
+        "directory": plan["directory"],
+        "stats": {path: module_stat(case, platform, path) for path in paths},
+    }
 
 
 def role_view(case: reader_corpus.LibpamCase, platform: str) -> list[object]:
@@ -150,14 +212,11 @@ def role_view(case: reader_corpus.LibpamCase, platform: str) -> list[object]:
         for path in links
         if path.rpartition("/")[0] in listed
     ]
-    sources = {
-        path: PROCESS_ENVIRON if target == "/proc/self/environ" else target
-        for path, target in links.items()
-    }
+    sources = {path: module_realpath(case, path) for path in links}
     resolved: dict[str, object] = dict.fromkeys(listed, NOT_A_LINK)
     resolved.update(
         {
-            path: {"exists": True, "islnk": True, "lnk_source": source}
+            path: {"exists": True, "islnk": True, "lnk_source": source, "lnk_target": links[path]}
             for path, source in sources.items()
         }
     )
@@ -171,7 +230,9 @@ def role_view(case: reader_corpus.LibpamCase, platform: str) -> list[object]:
 
 
 def decide(case: reader_corpus.LibpamCase, platform: str) -> dict[str, object]:
-    return pwquality_decide.pwquality_decide(MINLEN, [], "minlen = 14\n", role_view(case, platform))
+    view = role_view(case, platform)
+    modules = modules_of(case, platform, view)
+    return pwquality_decide.pwquality_decide(MINLEN, [], "minlen = 14\n", view, modules)
 
 
 def test_the_table_records_every_libpam_case_of_the_corpus_on_both_images() -> None:
@@ -212,7 +273,10 @@ def test_every_argument_that_libpam_passes_is_read_when_the_files_are_read(case_
             for item in cast("list[dict[str, object]]", view)
             if "content" in item
         ]
-        reading = pwquality.read_pam(files)
+        modules = modules_of(case, platform, view)
+        stats = cast("dict[str, dict[str, object]]", modules["stats"])
+        identities = pwquality.Modules(cast("str", modules["directory"]), stats)
+        reading = pwquality.read_pam(pwquality.PamStack(files, identities))
         if reading.problems or reading.includes or len(files) < len(view):
             continue
         model = [argument for _path, argument in reading.arguments]
@@ -272,7 +336,13 @@ def test_the_service_file_is_assembled_as_libpam_does_wherever_the_family_reads_
 
 @pytest.mark.parametrize(
     "case_id",
-    ["libpam-environ-link", "libpam-pam-conf-fallback", "libpam-pam-conf-pam-d-is-a-file"],
+    [
+        "libpam-environ-link",
+        "libpam-pam-conf-fallback",
+        "libpam-pam-conf-pam-d-is-a-file",
+        "libpam-cwd-link",
+        "libpam-chained-link",
+    ],
 )
 def test_the_faillock_and_pwhistory_families_refuse_on_the_same_entries(case_id: str) -> None:
     for platform in PLATFORMS:
@@ -281,3 +351,23 @@ def test_the_faillock_and_pwhistory_families_refuse_on_the_same_entries(case_id:
         stack = {str(item["path"]): str(item["content"]) for item in view if "content" in item}
         decision = pam_conf.pam_conf_decision("deny = 4\n", DENY, stack, unreadable)
         assert (decision["status"], decision["new_text"]) == ("unreadable_stack", None)
+
+
+def test_a_module_reached_under_another_name_is_read_as_libpam_loads_it() -> None:
+    case = CASES["libpam-renamed-module"]
+    assert "pam_pwquality" not in reader_corpus.RENAMED_MODULE
+    for platform in PLATFORMS:
+        assert calls(case.case_id, platform) == [["minlen=1", "enforcing=0"]]
+        decision = decide(case, platform)
+        assert decision["reason"] == (
+            f"pam_pwquality arguments override the file: {reader_corpus.SERVICE_FILE}: minlen=1"
+        )
+
+
+def test_the_family_decides_the_values_not_whether_libpam_runs_pam_pwquality() -> None:
+    for platform in PLATFORMS:
+        for case_id in ("libpam-sufficient-skip", "libpam-sufficient-skip-required"):
+            assert calls(case_id, platform) == []
+        required = decide(CASES["libpam-sufficient-skip-required"], platform)
+        assert required["status"] == "compliant"
+        assert decide(CASES["libpam-sufficient-skip"], platform)["status"] == "overridden"

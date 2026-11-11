@@ -31,7 +31,12 @@ every link through it and without following it, and sort the entries here:
 - a link, or a PAM directory, that resolves to a path below ``/proc``, ``/sys`` or ``/dev`` is
   unreadable too (FREES-212): such a file can read differently in the process that calls libpam
   than in the module that reads it for the collection; ``/proc/self/environ``, for example, is
-  the environment of whichever process opens it;
+  the environment of whichever process opens it. So is a link whose target names such a path,
+  although the module resolves it elsewhere: ``/proc/self/cwd/x`` is ``x`` in the working
+  directory of whichever process opens it. And a link is read only when its target, made
+  absolute, is the very path that the module resolves it to; a target reached through a further
+  link, which could itself go through ``/proc``, or through a ``..`` after a name, is unreadable,
+  because the collection does not inspect the hops one by one;
 - when neither ``/etc/pam.d`` nor ``/usr/lib/pam.d`` is a directory, libpam reads
   ``/etc/pam.conf`` instead of any service file (FREES-212). Ubuntu's libpam 1.5.3 has no vendor
   directory; libpam 1.5.1 on Rocky Linux 9 also needs ``/usr/share/pam.d`` to be missing, so the
@@ -56,6 +61,8 @@ UNFOLLOWED_LINK: Final[str] = "unfollowed_link"
 UNINSPECTED_DIRECTORY: Final[str] = "uninspected_directory"
 UNLISTED: Final[str] = "unlisted"
 VIRTUAL: Final[str] = "virtual_file"
+INDIRECT_LINK: Final[str] = "indirect_link"
+UNRESOLVED: Final[str] = "unresolved"
 PAM_CONF_FALLBACK: Final[str] = "pam_conf_fallback"
 PAM_CONF: Final[str] = "/etc/pam.conf"
 CONFIGURATION_DIRECTORIES: Final[tuple[str, ...]] = ("/etc/pam.d", "/usr/lib/pam.d")
@@ -76,6 +83,10 @@ KINDS: Final[Mapping[str, str]] = {
     VIRTUAL: (
         "resolves to a path below /proc, /sys or /dev, which can read differently in the process "
         "that calls libpam than in the collection's"
+    ),
+    INDIRECT_LINK: (
+        "is a symbolic link whose target is reached through a further symbolic link or a .. after"
+        " a name, whose hops the collection does not follow one by one"
     ),
     PAM_CONF_FALLBACK: (
         "is what libpam reads instead of the service files, because neither /etc/pam.d nor "
@@ -145,25 +156,71 @@ def _kind_of_target(path: str, target: Mapping[str, object]) -> str:
     return LINK
 
 
+def _first_hop(path: str, target: str) -> str | None:
+    """Return the path that the target of the link ``path`` names, absolute and without ``.``.
+
+    A relative target is taken from the directory of the link. A ``..`` before every name of the
+    target leaves that directory, as the kernel does when the directory is not a link; a ``..``
+    after a name is returned as None, because the kernel resolves it after the name, which can be a
+    link of its own.
+    """
+    parts = [] if target.startswith("/") else [part for part in path.split("/")[:-1] if part]
+    named = False
+    for part in target.split("/"):
+        if part in {"", "."}:
+            continue
+        if part != "..":
+            named = True
+            parts.append(part)
+        elif named:
+            return None
+        elif parts:
+            parts.pop()
+    return "/" + "/".join(parts)
+
+
 def _resolution(path: str, resolved: Mapping[str, object]) -> tuple[str | None, str | None]:
-    """Return the path that ``path`` resolves to and, when it is unknown, why.
+    """Return None twice when ``path`` resolves alike in every process, else a kind and its detail.
 
     ``resolved`` holds the ``ansible.builtin.stat`` with ``follow: false`` of the path; for a
-    symbolic link it carries ``lnk_source``, the path that ``os.path.realpath`` resolves it to.
+    symbolic link it carries ``lnk_target``, the target as the link holds it, and ``lnk_source``,
+    the path that ``os.path.realpath`` resolves it to in the module's process. The kind is
+    :data:`UNRESOLVED` when the path was not resolved, with the reason; :data:`VIRTUAL` when
+    ``lnk_source``, or the first hop that ``lnk_target`` names, lies below ``/proc``, ``/sys`` or
+    ``/dev``, with that path: a hop such as ``/proc/self/cwd`` resolves differently in each
+    process, so ``lnk_source`` alone does not show it (FREES-212); and :data:`INDIRECT_LINK` when
+    the first hop is not ``lnk_source`` itself, that is a further link (or a ``..`` after a name)
+    lies on the way, whose hops the collection does not inspect one by one.
     """
     if path not in resolved:
-        return None, "it was not resolved"
+        return UNRESOLVED, "it was not resolved"
     stat = _mapping(resolved[path], f"the resolution of {path}")
     if "exists" not in stat:
-        return None, _message(stat) or "it could not be resolved"
+        return UNRESOLVED, _message(stat) or "it could not be resolved"
     what = f"the resolution of {path}"
     if not _flag(stat, "exists", what) or not _flag(stat, "islnk", what):
-        return path, None
+        return None, None
+    return _hops(path, stat, what)
+
+
+def _hops(path: str, stat: Mapping[str, object], what: str) -> tuple[str | None, str | None]:
+    """Return None twice when the link ``path`` reaches ``lnk_source`` in one hop, else why not."""
     source = stat.get("lnk_source")
     if not isinstance(source, str) or not source.startswith("/"):
         message = f"{what} needs the absolute lnk_source of a symbolic link, got {source!r}"
         raise PamEntryError(message)
-    return source, None
+    target = stat.get("lnk_target")
+    if not isinstance(target, str) or not target:
+        message = f"{what} needs the lnk_target of a symbolic link, got {target!r}"
+        raise PamEntryError(message)
+    hop = _first_hop(path, target)
+    if is_virtual(source):
+        return VIRTUAL, source
+    if hop is not None and is_virtual(hop):
+        return VIRTUAL, target
+    if hop != source:
+        return INDIRECT_LINK, f"{target}, which resolves to {source}"
+    return None, None
 
 
 def _directories(
@@ -187,11 +244,9 @@ def _directories(
         if not _flag(directory, "exists", what) or not _flag(directory, "isdir", what):
             continue
         configured = configured or path in CONFIGURATION_DIRECTORIES
-        real, problem = _resolution(path, resolved)
-        if real is None:
-            unreadable[path] = (UNINSPECTED_DIRECTORY, problem)
-        elif is_virtual(real):
-            unreadable[path] = (VIRTUAL, real)
+        kind, detail = _resolution(path, resolved)
+        if kind is not None:
+            unreadable[path] = (UNINSPECTED_DIRECTORY if kind == UNRESOLVED else kind, detail)
     return unreadable, configured
 
 
@@ -207,11 +262,9 @@ def _link(
         return kind, _message(target)
     if kind != "file":
         return kind, None
-    real, problem = _resolution(path, resolved)
-    if real is None:
-        return UNFOLLOWED_LINK, problem
-    if is_virtual(real):
-        return VIRTUAL, real
+    problem, detail = _resolution(path, resolved)
+    if problem is not None:
+        return UNFOLLOWED_LINK if problem == UNRESOLVED else problem, detail
     return kind, None
 
 
@@ -264,11 +317,14 @@ def sort_entries(
     ``/usr/lib/pam.d`` is a directory, ``/etc/pam.conf`` is :data:`PAM_CONF_FALLBACK`.
     ``resolved`` maps every PAM directory that is a directory and every link that resolves to a
     regular file to its ``ansible.builtin.stat`` with ``follow: false``, whose ``lnk_source`` is
-    the path a link resolves to; one that resolves below ``/proc``, ``/sys`` or ``/dev`` is
-    :data:`VIRTUAL`, and one missing there, or whose stat failed, is unreadable as well. The
+    the path a link resolves to, and whose ``lnk_target`` is the target the link holds; one that
+    resolves, or whose target points, below ``/proc``, ``/sys`` or ``/dev`` is :data:`VIRTUAL`,
+    one whose target is not the path it resolves to is :data:`INDIRECT_LINK`, and one missing
+    there, or whose stat failed, is unreadable as well. The
     result holds ``read``, the sorted paths to read, and ``unreadable``, every entry to refuse
     on, with ``path``, ``kind`` (one of :data:`KINDS`) and, when there is one, ``detail``: the
-    error message of the failed stat or the path below ``/proc``, ``/sys`` or ``/dev``.
+    error message of the failed stat, the path below ``/proc``, ``/sys`` or ``/dev``, or the
+    target of an indirect link.
     """
     unreadable, configured = _directories(directories, resolved)
     refused = set(unreadable)

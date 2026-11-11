@@ -30,6 +30,14 @@
     preaders_included_source: ../security/freesecdev-readers-included
     preaders_environ: /etc/pam.d/freesecdev-readers-environ
     preaders_loose: password requisite pam_pwquality.so minlen=8 enforcing=0
+    preaders_rooted: /etc/pam.d/freesecdev-readers-rooted
+    preaders_rooted_source: /proc/self/root/etc/security/freesecdev-readers-included
+    preaders_chained: /etc/pam.d/freesecdev-readers-chained
+    preaders_hop: /etc/security/freesecdev-readers-hop
+    preaders_module: /etc/security/freesecdev-readers-module.so
+    preaders_module_directories:
+      - /usr/lib64/security
+      - /usr/lib/x86_64-linux-gnu/security
     preaders_cr: "\r"
     preaders_newline: "\n"
 
@@ -702,6 +710,178 @@
   ansible.builtin.file:
     path: "{{ preaders_environ }}"
     state: absent
+
+- name: Pwquality reader regressions | Write a file outside the PAM directories that the links below lead to
+  ansible.builtin.copy:
+    content: "{{ preaders_loose }}{{ preaders_newline }}"
+    dest: "{{ preaders_included }}"
+    mode: "0644"
+    owner: root
+    group: root
+
+- name: Pwquality reader regressions | Add a PAM service file whose link target goes through /proc/self/root
+  ansible.builtin.file:
+    src: "{{ preaders_rooted_source }}"
+    dest: "{{ preaders_rooted }}"
+    state: link
+    force: true
+    follow: false
+    owner: root
+    group: root
+
+- name: Pwquality reader regressions | Apply the rules with the link whose target names a path below /proc
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+
+- name: Pwquality reader regressions | Read the main file after the apply refused by the link target below /proc
+  ansible.builtin.slurp:
+    src: "{{ preaders_main }}"
+  register: preaders_rooted_refused
+
+- name: Pwquality reader regressions | Check that the chained link, whose hops are not followed, refused both rules
+  ansible.builtin.assert:
+    that:
+      - lifecycle_results | map(attribute='status') | unique | list == ['overridden']
+      - >-
+        lifecycle_results | map(attribute='reason')
+        | select('search', preaders_rooted ~ ' resolves to a path below /proc, /sys or /dev, which can read'
+                           ~ " differently in the process that calls libpam than in the collection's: "
+                           ~ preaders_rooted_source)
+        | list | length == 2
+      - lifecycle_results | selectattr('changed') | list == []
+      - preaders_rooted_refused.content == preaders_built.content
+    fail_msg: "{{ preaders_label }}, apply refused by the link target below /proc: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Pwquality reader regressions | Remove the PAM service file whose target goes through /proc/self/root
+  ansible.builtin.file:
+    path: "{{ preaders_rooted }}"
+    state: absent
+
+- name: Pwquality reader regressions | Add a link outside the PAM directories to the file of the loose line
+  ansible.builtin.file:
+    src: "{{ preaders_included }}"
+    dest: "{{ preaders_hop }}"
+    state: link
+    force: true
+    follow: false
+    owner: root
+    group: root
+
+- name: Pwquality reader regressions | Add a PAM service file that links to that link, two hops from the file
+  ansible.builtin.file:
+    src: "{{ preaders_hop }}"
+    dest: "{{ preaders_chained }}"
+    state: link
+    force: true
+    follow: false
+    owner: root
+    group: root
+
+- name: Pwquality reader regressions | Apply the rules with the PAM service file two hops from its file
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+
+- name: Pwquality reader regressions | Read the main file after the apply refused by the chained link
+  ansible.builtin.slurp:
+    src: "{{ preaders_main }}"
+  register: preaders_chained_refused
+
+- name: Pwquality reader regressions | Check that the chained link, whose hops the collection does not follow, refused
+  ansible.builtin.assert:
+    that:
+      - lifecycle_results | map(attribute='status') | unique | list == ['overridden']
+      - >-
+        lifecycle_results | map(attribute='reason')
+        | select('search', preaders_chained ~ ' is a symbolic link whose target is reached through a further'
+                           ~ ' symbolic link or a [.][.] after a name, whose hops the collection does not follow'
+                           ~ ' one by one: ' ~ preaders_hop ~ ', which resolves to ' ~ preaders_included)
+        | list | length == 2
+      - lifecycle_results | selectattr('changed') | list == []
+      - preaders_chained_refused.content == preaders_built.content
+    fail_msg: "{{ preaders_label }}, apply refused by the chained link: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Pwquality reader regressions | Remove the chained links and the file that they lead to
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "{{ preaders_chained }}"
+    - "{{ preaders_hop }}"
+    - "{{ preaders_included }}"
+
+- name: Pwquality reader regressions | Find pam_pwquality.so in the module directory of this platform
+  ansible.builtin.find:
+    paths: "{{ preaders_module_directories }}"
+    patterns:
+      - pam_pwquality.so
+    file_type: file
+  register: preaders_module_found
+
+- name: Pwquality reader regressions | Check that the module directory holds pam_pwquality.so
+  ansible.builtin.assert:
+    that:
+      - preaders_module_found.files | length == 1
+    fail_msg: "{{ preaders_label }}: no single pam_pwquality.so in {{ preaders_module_directories }}"
+    quiet: true
+
+- name: Pwquality reader regressions | Link pam_pwquality.so under a name that does not hold pam_pwquality
+  ansible.builtin.file:
+    src: "{{ preaders_module_found.files[0].path }}"
+    dest: "{{ preaders_module }}"
+    state: link
+    force: true
+    follow: false
+    owner: root
+    group: root
+
+- name: Pwquality reader regressions | Load the module under that name with arguments that loosen both rules
+  ansible.builtin.copy:
+    content: "password requisite {{ preaders_module }} minlen=8 enforcing=0{{ preaders_newline }}"
+    dest: "{{ preaders_pam }}"
+    mode: "0644"
+    owner: root
+    group: root
+
+- name: Pwquality reader regressions | Apply the rules with pam_pwquality loaded under another name
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+
+- name: Pwquality reader regressions | Read the main file after the apply refused by the renamed module
+  ansible.builtin.slurp:
+    src: "{{ preaders_main }}"
+  register: preaders_module_refused
+
+- name: Pwquality reader regressions | Check that the module that libpam loads, not its name, refused both rules
+  ansible.builtin.assert:
+    that:
+      - lifecycle_results | map(attribute='status') | unique | list == ['overridden']
+      - >-
+        lifecycle_results | selectattr('rule_id', 'equalto', preaders_minlen) | map(attribute='reason')
+        | select('search', 'pam_pwquality arguments override the file: ' ~ preaders_pam ~ ': minlen=8')
+        | list | length == 1
+      - >-
+        lifecycle_results | selectattr('rule_id', 'equalto', preaders_root) | map(attribute='reason')
+        | select('search', 'enforcing is 0 in ' ~ preaders_pam ~ ': enforcing=0') | list | length == 1
+      - lifecycle_results | selectattr('changed') | list == []
+      - preaders_module_refused.content == preaders_built.content
+    fail_msg: "{{ preaders_label }}, apply refused by the renamed module: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Pwquality reader regressions | Remove the PAM file and the renamed module link
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "{{ preaders_pam }}"
+    - "{{ preaders_module }}"
 
 - name: Pwquality reader regressions | Switch the rules off after the regressions
   ansible.builtin.set_fact:

@@ -18,3 +18,24 @@ bugfixes:
     ``stat`` without following of every PAM directory and link. The PAM files that the ``pwquality`` family reads are
     no longer logged (``no_log``), as for ``faillock`` and ``pwhistory``. ``make pam-reader-verdicts`` now also runs
     every form with the real libpam of both Molecule images (FREES-212, ADR 0021 and ADR 0027 amendments).
+  - >-
+    remediate - the ``pwquality`` family identified a ``pam_pwquality`` line by the text ``pam_pwquality`` in its
+    module path, so the module loaded under another name (a link or a copy, ``pam_pwq.so``) was not read while libpam
+    ran it with its arguments. Every module path of the PAM lines is now resolved as libpam resolves it (its module
+    directory, from the OS family and the architecture, before a relative path; the new ``pwquality_pam_modules``
+    filter) and inspected with ``stat`` and its SHA-256; a line loads ``pam_pwquality`` when that file is
+    ``pam_pwquality.so`` of the module directory or has its checksum. An unknown platform, a path with ``$ISA`` and a
+    module that could not be inspected make the rule ``overridden``. The ``pwquality_decide`` filter takes the modules
+    as its fifth argument, and the kind of the drop-in directory moves into the rule as ``directory`` (FREES-212).
+  - >-
+    remediate - all three PAM families resolved a link with ``lnk_source`` only, the path that the Ansible module's own
+    process resolves it to, so a link whose target goes through a per-process path such as ``/proc/self/cwd`` was read
+    from the module's working directory while libpam reads it from the caller's. A link or a PAM directory is now read
+    only when its ``lnk_target``, made absolute, is the path it resolves to; a target that names a path below
+    ``/proc``, ``/sys`` or ``/dev`` is ``virtual_file``, and a target reached through a further link is the new
+    unreadable kind ``indirect_link``; both refuse the rule (FREES-212).
+minor_changes:
+  - >-
+    remediate - the documentation of the ``pwquality`` family states that it decides the values that ``pam_pwquality``
+    would use, not whether libpam runs it: a ``sufficient`` module or a jump before the line, a line of another type
+    or a stack without the module leave the rule ``compliant`` or ``applied`` (FREES-212, ADR 0021).

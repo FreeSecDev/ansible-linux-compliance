@@ -99,6 +99,13 @@ TARGET_FILE: Final[str] = "/etc/security/freesecdev-pwq-target"
 PWQ: Final[str] = "password requisite pam_pwquality.so"
 LOOSE: Final[str] = "minlen=1 enforcing=0"
 PAM_DIRECTORIES: Final[tuple[str, ...]] = ("/etc/pam.d", "/usr/lib/pam.d", "/usr/share/pam.d")
+HOP_FILE: Final[str] = "/etc/security/freesecdev-pwq-hop"
+CWD_TARGET: Final[str] = "/proc/self/cwd" + TARGET_FILE
+RENAMED_MODULE: Final[str] = "pam_freesecdev-pwq.so"
+MODULE_DIRECTORIES: Final[tuple[str, ...]] = (
+    "/usr/lib64/security",
+    "/usr/lib/x86_64-linux-gnu/security",
+)
 
 
 @dataclass(frozen=True)
@@ -185,6 +192,27 @@ LIBPAM_CASES: Final[tuple[LibpamCase, ...]] = (
         (("/etc/pam.conf", f"{LIBPAM_SERVICE} {PWQ} {LOOSE}\n"), ("/etc/pam.d", "")),
         away=PAM_DIRECTORIES,
     ),
+    LibpamCase(
+        "libpam-cwd-link",
+        ((TARGET_FILE, f"{PWQ} {LOOSE}\n"),),
+        ((SERVICE_FILE, CWD_TARGET),),
+    ),
+    LibpamCase(
+        "libpam-chained-link",
+        ((TARGET_FILE, f"{PWQ} {LOOSE}\n"),),
+        ((SERVICE_FILE, HOP_FILE), (HOP_FILE, CWD_TARGET)),
+    ),
+    LibpamCase(
+        "libpam-renamed-module",
+        ((SERVICE_FILE, f"password requisite {RENAMED_MODULE} {LOOSE}\n"),),
+        tuple(
+            (f"{directory}/{RENAMED_MODULE}", "pam_pwquality.so")
+            for directory in MODULE_DIRECTORIES
+        ),
+    ),
+    _service("dot-module", f"password requisite ./pam_pwquality.so {LOOSE}\n"),
+    _service("sufficient-skip", f"password sufficient pam_permit.so\n{PWQ} {LOOSE}\n"),
+    _service("sufficient-skip-required", f"password sufficient pam_permit.so\n{PWQ} minlen=14\n"),
     LibpamCase(
         "libpam-pam-conf-ignored",
         (

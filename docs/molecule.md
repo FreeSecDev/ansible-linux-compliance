@@ -847,7 +847,13 @@ libpam joins and opens, refuses both rules with the include named; the same file
 bytes followed by the loose line, which Ubuntu's fixed-buffer reader splits off and runs, refuses both rules on both
 platforms with the long line named; and `/etc/pam.d/freesecdev-readers-environ`, a link to `/proc/self/environ`, refuses
 both rules with the resolved `/proc/<pid>/environ` named; the reasons of the link to itself and of the looping
-directory carry the message of the failed `stat` (`Too many levels of symbolic links`). The test declares `/usr/share/pam.d` as rewritten, so the whole-instance comparison leaves out
+directory carry the message of the failed `stat` (`Too many levels of symbolic links`). After the review of FREES-212,
+`/etc/pam.d/freesecdev-readers-rooted`, a link to `/proc/self/root/etc/security/freesecdev-readers-included`, which the
+module resolves outside `/proc`, refuses both rules with the target named; `/etc/pam.d/freesecdev-readers-chained`, a
+link to the link `/etc/security/freesecdev-readers-hop`, refuses both rules as a link reached through a further link;
+and `/etc/pam.d/freesecdev-readers` loading `/etc/security/freesecdev-readers-module.so`, a link to the platform's
+`pam_pwquality.so`, with `minlen=8 enforcing=0` refuses both rules with the arguments named, because the module is
+identified by its file, not by its name. The test declares `/usr/share/pam.d` as rewritten, so the whole-instance comparison leaves out
 the times and the inode of that directory and the times of `/usr/share`. It ends with the whole-instance comparison.
 
 The auditd topics ([ADR 0030](adr/0030-native-auditd-settings-and-audit-rules.md), FREES-110) select their rules

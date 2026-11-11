@@ -62,6 +62,7 @@ FIFO_STAT = {"exists": True, "isreg": False, "isdir": False}
 NOTHING: dict[str, object] = {}
 NO_ENTRIES: list[object] = []
 NOT_A_LINK: dict[str, object] = {"exists": True, "islnk": False}
+MODULES: dict[str, object] = {"directory": "/usr/lib64/security/", "stats": {}}
 DIRECTORIES: dict[str, object] = {"/etc/pam.d": DIRECTORY_STAT}
 RESOLVED: dict[str, object] = {"/etc/pam.d": NOT_A_LINK}
 WRONG_SHAPES: list[tuple[tuple[object, object, object, object, object], str]] = [
@@ -131,11 +132,22 @@ def resolution(path: Path) -> dict[str, object]:
     mode = os.lstat(path).st_mode
     if not stat.S_ISLNK(mode):
         return NOT_A_LINK
-    return {"exists": True, "islnk": True, "lnk_source": os.path.realpath(path)}
+    return {
+        "exists": True,
+        "islnk": True,
+        "lnk_source": os.path.realpath(path),
+        "lnk_target": str(path.readlink()),
+    }
 
 
-def link_to(target: str) -> dict[str, object]:
-    return {"exists": True, "islnk": True, "lnk_source": target}
+def link_to(target: str, source: str | None = None) -> dict[str, object]:
+    """Return the resolution of a link to ``target`` that the module resolves to ``source``."""
+    return {
+        "exists": True,
+        "islnk": True,
+        "lnk_source": target if source is None else source,
+        "lnk_target": target,
+    }
 
 
 def test_a_directory_laid_out_as_authselect_does_is_sorted_as_libpam_opens_it(
@@ -321,6 +333,26 @@ LINK_SHAPES: list[tuple[tuple[object, object, object, object, object], str]] = [
         "needs the absolute lnk_source of a symbolic link, got None",
     ),
     (
+        (
+            NO_ENTRIES,
+            NOTHING,
+            NOTHING,
+            DIRECTORIES,
+            {"/etc/pam.d": {"exists": True, "islnk": True, "lnk_source": "/etc/x"}},
+        ),
+        "needs the lnk_target of a symbolic link, got None",
+    ),
+    (
+        (
+            NO_ENTRIES,
+            NOTHING,
+            NOTHING,
+            DIRECTORIES,
+            {"/etc/pam.d": link_to("") | {"lnk_source": "/etc/x"}},
+        ),
+        "needs the lnk_target of a symbolic link, got ''",
+    ),
+    (
         (LINK, {"/etc/pam.d/x": FILE_STAT}, NOTHING, DIRECTORIES, RESOLVED | {"/etc/pam.d/x": 1}),
         "the resolution of /etc/pam.d/x must be a mapping",
     ),
@@ -362,7 +394,7 @@ def test_a_pam_directory_that_stat_could_not_inspect_refuses_every_family() -> N
         {"path": "/usr/lib/pam.d/login", "content": "password requisite pam_pwquality.so\n"},
         *entries,
     ]
-    pwq = pwquality_decide.pwquality_decide(MINLEN, [], "", pam)
+    pwq = pwquality_decide.pwquality_decide(MINLEN, [], "", pam, MODULES)
     assert (pwq["status"], pwq["text"]) == ("overridden", None)
     assert str(pwq["reason"]).startswith("/etc/pam.d is a PAM directory that stat could not")
     stack = {"/usr/lib/pam.d/login": "auth required pam_unix.so\n"}
@@ -404,7 +436,7 @@ def test_an_unreadable_pam_entry_refuses_a_pwquality_rule_before_anything_else()
         {"path": "/etc/pam.d/login", "content": "password requisite pam_pwquality.so\n"},
         BROKEN,
     ]
-    decision = pwquality_decide.pwquality_decide(MINLEN, [], "minlen = 14\n", pam)
+    decision = pwquality_decide.pwquality_decide(MINLEN, [], "minlen = 14\n", pam, MODULES)
     assert decision == {
         "line": "minlen = 14",
         "found": None,
@@ -415,12 +447,12 @@ def test_an_unreadable_pam_entry_refuses_a_pwquality_rule_before_anything_else()
         "libpam may open but the collection does not read, so a pam_pwquality argument there "
         "could override the file",
     }
-    assert pwquality_decide.pwquality_decide(MINLEN, [], "minlen = 14\n", pam[:1])["status"] == (
-        "compliant"
-    )
+    assert pwquality_decide.pwquality_decide(MINLEN, [], "minlen = 14\n", pam[:1], MODULES)[
+        "status"
+    ] == ("compliant")
     with pytest.raises(pwquality_decide.DecisionInputError, match="needs a kind of"):
         pwquality_decide.pwquality_decide(
-            MINLEN, [], "", [{"path": "/etc/pam.d/x", "kind": "fifo"}]
+            MINLEN, [], "", [{"path": "/etc/pam.d/x", "kind": "fifo"}], MODULES
         )
 
 
@@ -446,11 +478,11 @@ def test_an_unreadable_pam_entry_refuses_a_pwquality_rule_that_would_be_applied(
     pam: list[dict[str, object]] = [
         {"path": "/etc/pam.d/login", "content": "password requisite pam_pwquality.so\n"},
     ]
-    applied = pwquality_decide.pwquality_decide(MINLEN, [], main, pam)
+    applied = pwquality_decide.pwquality_decide(MINLEN, [], main, pam, MODULES)
     assert applied["status"] == "applied"
     assert applied["text"] is not None
     for unreadable in ({**BROKEN, "kind": kind} for kind in pam_files.KINDS):
-        decision = pwquality_decide.pwquality_decide(MINLEN, [], main, [*pam, unreadable])
+        decision = pwquality_decide.pwquality_decide(MINLEN, [], main, [*pam, unreadable], MODULES)
         assert decision["status"] == "overridden"
         assert decision["text"] is None
         assert str(decision["reason"]).startswith(
@@ -622,7 +654,7 @@ def test_the_pam_conf_fallback_and_a_virtual_file_refuse_every_family_with_the_d
         {"path": "/etc/pam.d/login", "content": "password requisite pam_pwquality.so\n"},
         unreadable,
     ]
-    pwq = pwquality_decide.pwquality_decide(MINLEN, [], "minlen = 14\n", pam)
+    pwq = pwquality_decide.pwquality_decide(MINLEN, [], "minlen = 14\n", pam, MODULES)
     assert (pwq["status"], pwq["text"]) == ("overridden", None)
     assert str(pwq["reason"]).startswith(described + ", which libpam may open")
     stack = {"/etc/pam.d/login": "auth required pam_unix.so\n"}
@@ -630,3 +662,118 @@ def test_the_pam_conf_fallback_and_a_virtual_file_refuse_every_family_with_the_d
         decision = pam_conf.pam_conf_decision("", rule, stack, [unreadable])
         assert (decision["status"], decision["new_text"]) == ("unreadable_stack", None)
         assert f"({described})" in str(decision["reason"])
+
+
+@pytest.mark.parametrize(
+    ("target", "source", "kind", "detail"),
+    [
+        ("/proc/self/cwd/pwq", "/home/ansible/pwq", "virtual_file", "/proc/self/cwd/pwq"),
+        ("../../proc/self/cwd/pwq", "/root/pwq", "virtual_file", "../../proc/self/cwd/pwq"),
+        ("//proc/self/root/etc/x", "/etc/x", "virtual_file", "//proc/self/root/etc/x"),
+        ("/dev/fd/3", "/etc/security/opened", "virtual_file", "/dev/fd/3"),
+        (
+            "/sys/../proc/self/cwd/x",
+            "/root/x",
+            "indirect_link",
+            "/sys/../proc/self/cwd/x, which resolves to /root/x",
+        ),
+        ("/proc/self/environ", "/proc/4242/environ", "virtual_file", "/proc/4242/environ"),
+        (
+            "/etc/security/hop",
+            "/etc/security/site",
+            "indirect_link",
+            "/etc/security/hop, which resolves to /etc/security/site",
+        ),
+        (
+            "/etc/security/sub/../site",
+            "/etc/security/site",
+            "indirect_link",
+            "/etc/security/sub/../site, which resolves to /etc/security/site",
+        ),
+        (
+            "site",
+            "/etc/security/site",
+            "indirect_link",
+            "site, which resolves to /etc/security/site",
+        ),
+        ("../security/site", "/etc/security/site", None, None),
+        ("/../etc/security/./site", "/etc/security/site", None, None),
+        ("../../../etc/security/site", "/etc/security/site", None, None),
+    ],
+)
+def test_a_link_is_read_only_when_its_target_is_the_path_that_it_resolves_to(
+    target: str, source: str, kind: str | None, detail: str | None
+) -> None:
+    links = [entry("/etc/pam.d/site", islnk=True)]
+    targets = {"/etc/pam.d/site": FILE_STAT}
+    resolved = RESOLVED | {"/etc/pam.d/site": link_to(target, source)}
+    result = pam_service_files.pam_service_files(links, targets, {}, DIRECTORIES, resolved)
+    if kind is None:
+        assert result == {"read": ["/etc/pam.d/site"], "unreadable": []}
+        return
+    assert result == {
+        "read": [],
+        "unreadable": [{"path": "/etc/pam.d/site", "kind": kind, "detail": detail}],
+    }
+    pam: list[object] = [
+        {"path": "/etc/pam.d/login", "content": "password requisite pam_pwquality.so\n"},
+        *result["unreadable"],
+    ]
+    pwq = pwquality_decide.pwquality_decide(MINLEN, [], "minlen = 14\n", pam, MODULES)
+    assert (pwq["status"], pwq["text"]) == ("overridden", None)
+    assert str(pwq["reason"]).startswith(
+        f"/etc/pam.d/site {pam_files.KINDS[kind]}: {detail}, which libpam may open"
+    )
+    decision = pam_conf.pam_conf_decision("", DENY, {}, result["unreadable"])
+    assert (decision["status"], decision["new_text"]) == ("unreadable_stack", None)
+
+
+def test_a_link_through_the_working_directory_of_the_reader_is_never_read(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pam = tmp_path / "pam.d"
+    pam.mkdir()
+    (tmp_path / "pwq").write_text("password requisite pam_pwquality.so minlen=14\n")
+    (tmp_path / "hop").symlink_to("/proc/self/cwd/pwq")
+    (pam / "cwd").symlink_to("/proc/self/cwd/pwq")
+    (pam / "chained").symlink_to(tmp_path / "hop")
+    (pam / "plain").symlink_to(tmp_path / "pwq")
+    monkeypatch.chdir(tmp_path)
+    links = sorted(pam.iterdir())
+    entries = [lstat_entry(path) for path in links]
+    targets = {str(path): followed_stat(path) for path in links}
+    assert all(stat["isreg"] is True for stat in targets.values())
+    resolved = (
+        RESOLVED | {str(pam): resolution(pam)} | {str(path): resolution(path) for path in links}
+    )
+    assert resolution(pam / "cwd")["lnk_source"] == os.path.realpath(tmp_path / "pwq")
+    directories = {**DIRECTORIES, str(pam): followed_stat(pam)}
+    result = pam_files.sort_entries(entries, targets, [], directories, resolved)
+    real = os.path.realpath(tmp_path / "pwq")
+    assert result == {
+        "read": [str(pam / "plain")],
+        "unreadable": [
+            {
+                "path": str(pam / "chained"),
+                "kind": "indirect_link",
+                "detail": f"{tmp_path / 'hop'}, which resolves to {real}",
+            },
+            {"path": str(pam / "cwd"), "kind": "virtual_file", "detail": "/proc/self/cwd/pwq"},
+        ],
+    }
+
+
+def test_a_pam_directory_reached_through_a_further_link_is_unreadable() -> None:
+    entries = [entry("/usr/lib/pam.d/login", isreg=True), entry("/etc/pam.d/sshd", isreg=True)]
+    directories = DIRECTORIES | {"/usr/lib/pam.d": DIRECTORY_STAT}
+    resolved = RESOLVED | {"/usr/lib/pam.d": link_to("/opt/pam.d", "/srv/pam.d")}
+    assert pam_service_files.pam_service_files(entries, {}, {}, directories, resolved) == {
+        "read": ["/etc/pam.d/sshd"],
+        "unreadable": [
+            {
+                "path": "/usr/lib/pam.d",
+                "kind": "indirect_link",
+                "detail": "/opt/pam.d, which resolves to /srv/pam.d",
+            }
+        ],
+    }

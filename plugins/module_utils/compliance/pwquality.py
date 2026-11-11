@@ -96,7 +96,15 @@ UNRECORDABLE: Final[str] = (
     r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f\u202a-\u202e\u2066-\u2069\ud800-\udfff]"
 )
 SURROGATE: Final[str] = r"[\ud800-\udfff]"
-PAM_MODULE_TEXT: Final[str] = "pam_pwquality"
+PAM_MODULE: Final[str] = "pam_pwquality.so"
+MODULE_DIRECTORIES: Final[Mapping[str, Mapping[str, str]]] = {
+    "RedHat": {"x86_64": "/usr/lib64/security/", "aarch64": "/usr/lib64/security/"},
+    "Debian": {
+        "x86_64": "/usr/lib/x86_64-linux-gnu/security/",
+        "aarch64": "/usr/lib/aarch64-linux-gnu/security/",
+    },
+}
+ISA_MARK: Final[str] = "$ISA"
 NEWLINE: Final[str] = "\n"
 DROPIN_SUFFIX: Final[str] = ".conf"
 FILE: Final[str] = "file"
@@ -317,13 +325,137 @@ def option_override(argument: bytes, setting: str, required: int) -> bool:
     return found is None or found[1] != required
 
 
+def module_directory(os_family: str, architecture: str) -> str | None:
+    """Return the directory that libpam loads a module of a relative path from, or None.
+
+    ``_pam_add_handler`` of ``libpam/pam_handlers.c`` puts ``DEFAULT_MODULE_PATH`` in front of a
+    module path that does not start with ``/``: ``/usr/lib64/security/`` in the pam package of
+    Rocky Linux 9, ``/usr/lib/x86_64-linux-gnu/security/`` in that of Ubuntu 24.04 (read from
+    ``libpam.so.0`` of both Molecule images). Where the directory is not known, the family
+    cannot tell which module a line loads, so it refuses.
+    """
+    return MODULE_DIRECTORIES.get(os_family, {}).get(architecture)
+
+
+def module_path(module: str, directory: str) -> str | None:
+    """Return the path that libpam loads for the module path of a PAM line, or None.
+
+    libpam takes a path that starts with ``/`` as it is and puts ``directory`` in front of any
+    other; it replaces ``$ISA`` in a path that it cannot load, which the collection does not
+    model, so such a path is None.
+    """
+    if ISA_MARK in module:
+        return None
+    return module if module.startswith("/") else directory + module
+
+
+@dataclass(frozen=True)
+class Modules:
+    """Which file the module path of every PAM line loads, as the role inspected it on the host.
+
+    Attributes:
+        directory: The directory that libpam loads a relative module path from
+            (:func:`module_directory`), or None when it is not known.
+        stats: The ``ansible.builtin.stat`` with ``follow: true`` and the SHA-256 ``checksum``
+            of every path that :func:`module_paths` returns, by path, or a mapping with only the
+            ``msg`` of a stat that failed.
+    """
+
+    directory: str | None
+    stats: Mapping[str, Mapping[str, object]]
+
+    def _checksum(self, path: str) -> tuple[str | None, str | None]:
+        """Return the checksum of the regular file at ``path``, or why the module is unknown.
+
+        A path that does not exist, or is not a regular file, has no checksum and no problem:
+        libpam cannot load it.
+        """
+        if path not in self.stats:
+            return None, f"{path} was not inspected"
+        stat = self.stats[path]
+        if "exists" not in stat:
+            message = stat.get("msg")
+            detail = f": {message}" if isinstance(message, str) and message else ""
+            return None, f"stat could not inspect {path}{detail}"
+        if stat.get("exists") is not True or stat.get("isreg") is not True:
+            return None, None
+        checksum = stat.get("checksum")
+        if not isinstance(checksum, str) or not checksum:
+            return None, f"{path} could not be read to compare it with {PAM_MODULE}"
+        return checksum, None
+
+    def identify(self, module: str) -> bool | str:
+        """Return whether a module path loads ``pam_pwquality``, or why it cannot be told.
+
+        A path that libpam resolves to ``pam_pwquality.so`` in the module directory loads it,
+        also when that file is missing (the arguments are read then, which can only refuse). Any
+        other path loads it when it is a regular file with the checksum of that file: a link, a
+        hard link or a copy of the module under another name, as libpam loads it (FREES-212). A
+        path that does not exist or is not a regular file loads nothing. Without the module
+        directory, with ``$ISA`` in the path, or when a file that must be compared could not be
+        inspected, the text is the reason why the family cannot tell.
+        """
+        if self.directory is None:
+            return (
+                f"the collection does not know the directory that libpam loads {module} from on"
+                " this platform"
+            )
+        path = module_path(module, self.directory)
+        if path is None:
+            return f"{module} holds {ISA_MARK}, which libpam replaces and the collection does not"
+        return path == self.directory + PAM_MODULE or self._same_as_module(path, self.directory)
+
+    def _same_as_module(self, path: str, directory: str) -> bool | str:
+        """Return whether ``path`` is a regular file with the checksum of ``pam_pwquality.so``."""
+        checksum, problem = self._checksum(path)
+        if problem is not None:
+            return problem
+        if checksum is None:
+            return False
+        expected, problem = self._checksum(directory + PAM_MODULE)
+        return problem if problem is not None else checksum == expected
+
+
+@dataclass(frozen=True)
+class PamStack:
+    """The PAM files with their text, and which file the module path of each line loads.
+
+    Attributes:
+        files: ``(path, text)`` of every PAM file that the role read.
+        modules: The module directory and the stat of every module path (:class:`Modules`).
+    """
+
+    files: Sequence[tuple[str, str]]
+    modules: Modules
+
+
+def module_paths(files: Sequence[tuple[str, str]], directory: str | None) -> list[str]:
+    """Return every path that a PAM line of ``files`` makes libpam load, and ``pam_pwquality.so``.
+
+    Every line that names a module, of any type and in both assembly variants, is taken; a
+    path with ``$ISA`` is left out (:meth:`Modules.identify` refuses it). The role inspects each
+    path, so that :meth:`Modules.identify` can compare it with ``pam_pwquality.so`` of the
+    module directory. Without a module directory there is nothing to inspect.
+    """
+    if directory is None:
+        return []
+    paths = {directory + PAM_MODULE}
+    for _path, text in files:
+        for variant in pam_reader.ASSEMBLY_VARIANTS:
+            for line in pam_reader.module_lines(text, variant):
+                found = None if line.module is None else module_path(line.module, directory)
+                if found is not None:
+                    paths.add(found)
+    return sorted(paths)
+
+
 @dataclass(frozen=True)
 class PamReading:
     """What libpam passes to ``pam_pwquality``, as both of its line readers read the PAM files.
 
     Attributes:
-        arguments: ``(file, argument)`` for every argument of every line that loads a module
-            whose path names ``pam_pwquality``, of any type.
+        arguments: ``(file, argument)`` for every argument of every line that loads
+            ``pam_pwquality`` (:meth:`Modules.identify`), of any type.
         includes: ``<file> includes <target>`` for every ``include``, ``substack`` and
             ``@include`` (in any case, with or without a leading ``-``) of a target with a ``/``.
         problems: Every file that the collection cannot read as libpam does, and why.
@@ -334,13 +466,27 @@ class PamReading:
     problems: tuple[str, ...]
 
 
-def _pwquality_or_include(line: pam_reader.ModuleLine) -> bool:
-    """Return whether a module line loads ``pam_pwquality`` or includes a file."""
-    return line.include is not None or (line.module is not None and PAM_MODULE_TEXT in line.module)
+def _kept(
+    path: str, text: str, variant: str, modules: Modules, problems: list[str]
+) -> tuple[pam_reader.ModuleLine, ...]:
+    """Return the lines of one variant that include a file or load ``pam_pwquality``.
+
+    A line whose module cannot be identified adds its reason to ``problems``.
+    """
+    kept: list[pam_reader.ModuleLine] = []
+    for line in pam_reader.module_lines(text, variant):
+        found = True if line.module is None else modules.identify(line.module)
+        if isinstance(found, str):
+            problem = f"{path} loads the module {line.module}, but {found}"
+            if problem not in problems:
+                problems.append(problem)
+        elif found:
+            kept.append(line)
+    return tuple(kept)
 
 
-def read_pam(files: Sequence[tuple[str, str]]) -> PamReading:
-    """Return what libpam passes to ``pam_pwquality`` from ``files``, or why it cannot be told.
+def read_pam(stack: PamStack) -> PamReading:
+    """Return what libpam passes to ``pam_pwquality`` from the files, or why it cannot be told.
 
     Every file is read as both line readers of libpam read it (:mod:`pam_reader`, the reader of
     the ``faillock`` and ``pwhistory`` families): the fixed-buffer reader of the Ubuntu 1.5.3
@@ -350,32 +496,40 @@ def read_pam(files: Sequence[tuple[str, str]]) -> PamReading:
     dropped, and ``@include`` is taken in any case and with a leading ``-`` on both platforms,
     although only the Ubuntu libpam accepts it (Rocky Linux's refuses the line as an illegal type):
     reading it as an include can only add a refusal. Every line of every file is read, also of
-    a file that libpam does not open, which can only add a refusal too.
+    a file that libpam does not open, which can only add a refusal too. Which lines load
+    ``pam_pwquality`` is decided by the file that libpam loads for the module path
+    (:meth:`Modules.identify`), not by its name; a line whose module cannot be identified is a
+    problem.
 
     A file with a NUL byte or a line of 1023 bytes or more is a problem: the Ubuntu reader splits
     such a line into two and runs the second part, also after a comment. So is a file whose lines
     that load ``pam_pwquality`` or include a file differ between the two readers, for example a
     continued line with a blank or comment line inside it, because the collection cannot tell
     which reader the host's libpam has.
+
+    The reading says nothing about whether libpam runs ``pam_pwquality`` at all: a line of
+    another type than ``password``, a jump or a ``sufficient`` module before it, or a stack
+    without it are not looked at, so the family decides the values that ``pam_pwquality`` would
+    use, not whether it is used (FREES-212).
     """
     arguments: list[tuple[str, str]] = []
     includes: list[str] = []
     problems: list[str] = []
-    for path, text in files:
+    for path, text in stack.files:
         if pam_reader.unassembled(text):
             problems.append(
                 f"{path} has a NUL byte or a line of {pam_reader.PAM_LINE_LIMIT} bytes or more, "
                 "which libpam does not read as one line"
             )
             continue
+        identified: list[str] = []
         readings = {
-            tuple(
-                line
-                for line in pam_reader.module_lines(text, variant)
-                if _pwquality_or_include(line)
-            )
+            _kept(path, text, variant, stack.modules, identified)
             for variant in pam_reader.ASSEMBLY_VARIANTS
         }
+        if identified:
+            problems.extend(identified)
+            continue
         if len(readings) > 1:
             problems.append(
                 f"{path} has lines that load pam_pwquality or include a file, which the line "
@@ -390,19 +544,19 @@ def read_pam(files: Sequence[tuple[str, str]]) -> PamReading:
     return PamReading(tuple(arguments), tuple(includes), tuple(problems))
 
 
-def pam_overrides(files: Sequence[tuple[str, str]], setting: str, required: int) -> list[str]:
+def pam_overrides(stack: PamStack, setting: str, required: int) -> list[str]:
     """Return ``<file>: <argument>`` for each ``pam_pwquality`` argument overriding ``setting``.
 
     The arguments are those of :func:`read_pam`.
     """
     return [
         f"{path}: {argument}"
-        for path, argument in read_pam(files).arguments
+        for path, argument in read_pam(stack).arguments
         if option_override(text_bytes(argument), setting, required)
     ]
 
 
-def pam_enforcing_off(files: Sequence[tuple[str, str]]) -> list[str]:
+def pam_enforcing_off(stack: PamStack) -> list[str]:
     """Return ``<file>: <argument>`` for each ``pam_pwquality`` argument that sets enforcing to 0.
 
     The value is read as ``pwquality_set_option`` reads it, with ``strtol``, so ``enforcing=00``,
@@ -410,7 +564,7 @@ def pam_enforcing_off(files: Sequence[tuple[str, str]]) -> list[str]:
     """
     return [
         f"{path}: {argument}"
-        for path, argument in read_pam(files).arguments
+        for path, argument in read_pam(stack).arguments
         if option_value(text_bytes(argument)) == ("enforcing", 0)
     ]
 
@@ -499,9 +653,7 @@ def why_not_effective(reading: Reading, rule: Rule, path: str, line: int | None)
     )
 
 
-def loosening(
-    reading: Reading, pam: Sequence[tuple[str, str]], rule: Rule
-) -> tuple[str | None, str | None]:
+def loosening(reading: Reading, pam: PamStack, rule: Rule) -> tuple[str | None, str | None]:
     """Return why ``enforcing`` turns the rule into a warning, and a note on ``local_users_only``.
 
     With ``enforcing = 0`` libpwquality only warns and accepts every password, so no other rule
@@ -532,7 +684,7 @@ def decide(
     rule: Rule,
     dropins: Sequence[Mapping[str, object]],
     main: str | None,
-    pam: Sequence[tuple[str, str]],
+    pam: PamStack,
     directory: str = DIRECTORY,
 ) -> dict[str, object]:
     """Decide a rule from the files as libpwquality and ``pam_pwquality`` read them.
@@ -545,6 +697,8 @@ def decide(
     reading the files as they are or will be, takes the required value from what the rule writes,
     no ``pam_pwquality`` argument overrides it and ``enforcing`` is not 0. ``directory`` is the
     kind of the drop-in directory: ``directory``, ``missing``, ``link`` or ``other``.
+    ``pam`` holds the PAM files and which of their lines load ``pam_pwquality``
+    (:meth:`Modules.identify`).
     """
     result: dict[str, object] = {
         "line": rule.line,
@@ -578,10 +732,12 @@ def unreadable_refusal(rule: Rule, unreadable: Sequence[str]) -> dict[str, objec
     an entry that is none of a regular file, a directory and a link (``special``), an entry or a
     PAM directory that ``find`` could not inspect (``unlisted``), a PAM directory that ``stat``
     could not inspect (``uninspected_directory``) (all FREES-213), a link or a PAM directory that
-    resolves below ``/proc``, ``/sys`` or ``/dev`` (``virtual_file``), and ``/etc/pam.conf`` when
-    libpam reads it instead of the PAM directories (``pam_conf_fallback``) (both FREES-212). The
-    error message of a failed ``stat`` and the path below ``/proc``, ``/sys`` or ``/dev`` follow
-    the description. A ``pam_pwquality`` argument in any of them could override the file, so the
+    resolves, or whose target points, below ``/proc``, ``/sys`` or ``/dev`` (``virtual_file``),
+    a link whose target is reached through a further link (``indirect_link``), and
+    ``/etc/pam.conf`` when libpam reads it instead of the PAM directories
+    (``pam_conf_fallback``) (all three FREES-212). The error message of a failed ``stat``, the
+    path below ``/proc``, ``/sys`` or ``/dev`` and the target of an indirect link follow the
+    description. A ``pam_pwquality`` argument in any of them could override the file, so the
     rule is ``overridden``, as for an include that the collection does not read. Returns ``None``
     when there is none.
     """
@@ -599,7 +755,7 @@ def unreadable_refusal(rule: Rule, unreadable: Sequence[str]) -> dict[str, objec
 
 
 def _refusal(
-    rule: Rule, main: str | None, pam: Sequence[tuple[str, str]], directory: str
+    rule: Rule, main: str | None, pam: PamStack, directory: str
 ) -> dict[str, object] | None:
     """Return the refusal that does not depend on reading the files, or ``None``."""
     if directory not in (DIRECTORY, MISSING):

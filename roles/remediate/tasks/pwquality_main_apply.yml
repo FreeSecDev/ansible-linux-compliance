@@ -72,6 +72,7 @@
       main: "{{ __linux_compliance_remediate_pwquality_main }}"
       dropin: "{{ __linux_compliance_remediate_rule.parameters.path }}"
       content: ""
+      directory: "{{ __linux_compliance_remediate_pwq_directory_kind }}"
   ansible.builtin.set_fact:
     __linux_compliance_remediate_pwq_decision: >-
       {{ __linux_compliance_remediate_pwq_rule_input
@@ -80,7 +81,7 @@
              (__linux_compliance_remediate_pwq_current.content | b64decode)
              if __linux_compliance_remediate_pwq_current is not skipped else none,
              __linux_compliance_remediate_pwq_pam,
-             __linux_compliance_remediate_pwq_directory_kind) }}
+             __linux_compliance_remediate_pwq_modules) }}
   tags:
     - always
 
