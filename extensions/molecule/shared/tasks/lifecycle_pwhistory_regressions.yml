@@ -82,9 +82,10 @@
       statuses: [compliant, compliant, compliant]
       text: "{{ pwr_applied_text }}"
       recorded: [enforce_for_root, remember_password_auth, remember_system_auth]
-    - name: remember_system_auth off restores its line, which remember_password_auth writes and keeps again
+    - name: remember_system_auth off keeps the line that remember_password_auth still sets, and forgets only its entry
       toggles: [true, true, false]
-      statuses: [compliant, applied, restored]
+      check: true
+      statuses: [compliant, compliant, restored]
       text: "{{ pwr_applied_text }}"
       recorded: [enforce_for_root, remember_password_auth]
     - name: remember_system_auth on again finds the line of the other rule and records nothing
@@ -92,9 +93,10 @@
       statuses: [compliant, compliant, compliant]
       text: "{{ pwr_applied_text }}"
       recorded: [enforce_for_root, remember_password_auth]
-    - name: remember_password_auth off restores the line, which remember_system_auth then writes and records
+    - name: remember_password_auth off hands its record to remember_system_auth, which keeps the line
       toggles: [true, false, true]
-      statuses: [compliant, restored, applied]
+      check: true
+      statuses: [compliant, restored, compliant]
       text: "{{ pwr_applied_text }}"
       recorded: [enforce_for_root, remember_system_auth]
     - name: an entry of another method is refused at apply

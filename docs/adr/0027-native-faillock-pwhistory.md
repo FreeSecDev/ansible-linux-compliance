@@ -374,3 +374,76 @@ reads (the open point of the FREES-213 amendment).
 
 **The open point of the FREES-213 amendment is closed:** the `/etc/pam.conf` fallback refuses every rule of the
 three families.
+
+## Amendment of 2026-11-11: shared settings, a cleanup that cannot finish, the remember argument and known limits (FREES-205)
+
+**Context.** The independent review r3 of the pull request for FREES-186 left five non-blocking findings:
+
+- F1: two rules can share one setting: `accounts_passwords_pam_faillock_deny_root` and
+  `accounts_passwords_pam_faillock_even_deny_root_or_root_unlock_time` both write `even_deny_root`, and the two RHEL
+  `remember` rules share `remember`. Section 1 had the cleanup of the rule that is switched off restore the prior line,
+  and the apply of the rule that stays on write it again in the same run. Root lock-out (or the password history) was
+  off in between, and stayed off when the run failed between the two. Check mode reported the second rule `compliant`
+  (it read the file that the cleanup had not changed) while the real run reported it `applied`.
+- F2: `restore_mismatch` never clears by itself: after an unrelated edit by hand, the last cleanup of the file fails on
+  every run.
+- F3: the test oracle's model of `pam_pwhistory` did not reproduce how `parse_option` stores a `remember=` argument
+  that does not fit in an `int`.
+- F4 and F5: `admin_group`, `local_users_only` and `dir`, `pam_start_confdir()` and `/etc/pam.conf` were not named as
+  limits.
+
+**Decision.**
+
+- **A setting that another effective rule still sets keeps its line (F1).** Before its cleanup restores anything, a
+  rule looks for a rule of the same family that the plan applies in this run and that sets the same setting. When
+  there is one and the cleanup would otherwise go ahead (the entry was recorded by the `line` method, the file is a
+  regular file, and the record is complete and valid), the cleanup does not touch the file: it removes only its own
+  ledger entry and reports `restored`, with a message that names the rule that keeps the line. This replaces the
+  sentence of section 1 about a shared `remember` line whose cleanup restores the line and the other rule writes it
+  again. When the rule that keeps the line has no ledger entry of its own, because it was switched on in a later run,
+  found the line and was `compliant`, the cleanup first records its own prior state (the `setting_line`,
+  `written_line`, mode, owner, group, `sha256` and `baseline_sha256` of the first write) under that rule. That rule then
+  restores the line exactly when it is switched off in turn, and the apply of that rule in the same run reads the
+  record that it was given, so check mode and the real run report the same status. The refusals of the cleanup
+  (`method_changed`, `target_absent`, `not_regular_file`, `invalid_record`) are decided first, as before. A change by
+  hand (`modified_since_apply`) and the SHA-256 check of the last rule (`restore_mismatch`) do not apply to a cleanup
+  that keeps the line: the line stays, and the apply of the other rule decides it as it decides any line. When both
+  rules are switched off, nothing changes: the first cleanup restores the line, and the second finds the prior state
+  already there (FREES-173).
+- **Accepting the current file instead of a restore (F2).** `restore_mismatch` means that the last rule of the file
+  would not give back the file that the first write found, because something else in the file changed since then. The
+  collection does not decide that a change by hand may stay, so the cleanup keeps its entry and is retried on every
+  run. An administrator who wants the restore undoes the other change; the next run restores the line and the file
+  gets its recorded SHA-256 back. An administrator who wants to keep the file as it is removes the entry of the rule
+  with the `control_state` module (`action: remove`, the full rule identifier, as root); the collection then forgets
+  the line it wrote, which stays in the file until the administrator edits it. `docs/remediation.md` gives the task. No
+  opt-in variable that drops the entry is added: removing a revert record is a decision about one host and one file,
+  and the module already makes it explicit.
+- **The remember argument in the oracle (F3).** `parse_option` of `pam_pwhistory` reads `remember=` with `strtol` into
+  a `long` of 64 bits, which saturates at `LONG_MIN` and `LONG_MAX`, and stores it in the `int` of its options, which
+  keeps the low 32 bits; only then does it clamp to 0 and 400. `read_pwhistory` now models both steps, and the corpus
+  has four new stack cases: `remember=4294967297` (read as 1), `remember=4294967295` (-1, so 0),
+  `remember=-4294967272` (24) and `remember=99999999999999999999` (`LONG_MAX`, so -1 and then 0). The real readers of
+  both images read exactly these values. No decision changes: any `remember=` argument on a `pam_pwhistory` line
+  already makes the `remember` rules `overridden`.
+- **Known limits (F4, F5).** These are not modelled, and a rule can be `compliant` or `applied` while they apply:
+  - `admin_group=<group>` in `faillock.conf` or on a `pam_faillock` line makes `pam_faillock` treat the members of the
+    group as root: without `even_deny_root` they are never locked, and `root_unlock_time` applies to them;
+    `local_users_only` makes it ignore every account that is not in `/etc/passwd` (LDAP, SSSD, IdM); `dir=` moves the
+    tally files, and a directory that does not persist or that `pam_faillock` cannot write loses or never keeps the
+    failures. None of the content's checks reads these options, and none of them changes the value of a setting that
+    a rule writes; they narrow who is locked or for how long the count lasts. They are left to the administrator, as
+    the stack is (section 3).
+  - An application that starts PAM with `pam_start_confdir()` reads its service files from a directory that it names,
+    not from `/etc/pam.d`, `/usr/lib/pam.d` or the vendor directory; the families do not know such directories and do
+    not read them.
+  - `/etc/pam.conf`, which libpam reads only when neither `/etc/pam.d` nor `/usr/lib/pam.d` is a directory, is refused
+    since the FREES-212 amendment and is no longer an open point.
+
+**Evidence.** The pwhistory regression group `changes` (Rocky Linux) now expects, with `remember_system_auth`
+switched off while `remember_password_auth` stays on, the line kept, `remember_password_auth` `compliant` and only
+the entry of `remember_system_auth` removed; with `remember_password_auth` then switched off while
+`remember_system_auth`, which has no entry, is on again, the record handed to `remember_system_auth`, which is
+`compliant` and later restores the line byte for byte; both steps run in check mode first and must report the same
+statuses without a change to the file or the ledger. The four `remember=` cases are rows of the verdict table
+(`make pam-reader-verdicts`).

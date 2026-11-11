@@ -107,6 +107,7 @@ EXPECTED: dict[str, tuple[str, str | None]] = {
     "libpam-renamed-module": ("overridden", ARGUMENTS),
     "libpam-dot-module": ("overridden", ARGUMENTS),
     "libpam-module-copy-elsewhere": ("overridden", ARGUMENTS),
+    "libpam-link-to-module-copy-elsewhere": ("overridden", ARGUMENTS),
     "libpam-sufficient-skip": ("overridden", ARGUMENTS),
     "libpam-sufficient-skip-required": ("compliant", None),
 }
@@ -176,6 +177,26 @@ def module_stat(case: reader_corpus.LibpamCase, platform: str, path: str) -> dic
     return {"exists": True, "isreg": True, "checksum": f"sha256 of {name}"}
 
 
+def module_link_stat(case: reader_corpus.LibpamCase, platform: str, path: str) -> dict[str, object]:
+    """Return the stat, without following a link, of a module path on the image (FREES-205).
+
+    A link of the case has the path that ``os.path.realpath`` gives as ``lnk_source``; any other
+    path is not a link, or does not exist when the stat through links finds nothing either.
+    """
+    links = dict(case.links)
+    path = posixpath.normpath(path)
+    if path in links:
+        return {
+            "exists": True,
+            "islnk": True,
+            "lnk_source": module_realpath(case, path),
+            "lnk_target": links[path],
+        }
+    if module_stat(case, platform, path)["exists"] is not True:
+        return {"exists": False}
+    return dict(NOT_A_LINK)
+
+
 def modules_of(
     case: reader_corpus.LibpamCase, platform: str, view: list[object]
 ) -> dict[str, object]:
@@ -185,6 +206,7 @@ def modules_of(
     return {
         "directory": plan["directory"],
         "stats": {path: module_stat(case, platform, path) for path in paths},
+        "links": {path: module_link_stat(case, platform, path) for path in paths},
     }
 
 
@@ -281,7 +303,8 @@ def test_every_argument_that_libpam_passes_is_read_when_the_files_are_read(case_
         ]
         modules = modules_of(case, platform, view)
         stats = cast("dict[str, dict[str, object]]", modules["stats"])
-        identities = pwquality.Modules(cast("str", modules["directory"]), stats)
+        links = cast("dict[str, dict[str, object]]", modules["links"])
+        identities = pwquality.Modules(cast("str", modules["directory"]), stats, links)
         reading = pwquality.read_pam(pwquality.PamStack(files, identities))
         if reading.problems or reading.includes or len(files) < len(view):
             continue

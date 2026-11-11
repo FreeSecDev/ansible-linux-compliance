@@ -33,6 +33,7 @@
     __linux_compliance_remediate_pwq_modules:
       directory: /usr/lib64/security/
       stats: {}
+      links: {}
     __linux_compliance_remediate_pwq_main_text: ""
     __linux_compliance_remediate_pwq_main_stat:
       isreg: true

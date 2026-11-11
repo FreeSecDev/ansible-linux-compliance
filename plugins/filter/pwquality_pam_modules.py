@@ -20,11 +20,13 @@ version_added: "0.2.0"
 description:
   - Returns the directory that libpam loads a module of a relative path from on the platform,
     and every path that a line of the PAM files makes libpam load, with C(pam_pwquality.so) of
-    that directory, so that the role can inspect each path with C(ansible.builtin.stat) and its
-    SHA-256 checksum.
+    that directory, so that the role can inspect each path with C(ansible.builtin.stat), through
+    a link with its SHA-256 checksum and without following a link for the file that a link
+    resolves to (FREES-205).
   - The C(pwquality_decide) filter then counts the arguments of a line as C(pam_pwquality)
     arguments when the file name of the path that libpam loads for it holds C(pam_pwquality),
-    in any directory, or when that path is a regular file with the checksum of
+    in any directory, when that path is a symbolic link whose resolved file name holds
+    C(pam_pwquality) (FREES-205), or when that path is a regular file with the checksum of
     C(pam_pwquality.so) of the module directory, such as a link or a copy of the module under
     another name (FREES-212). When C(pam_pwquality.so) is missing from the module directory, any
     other module path refuses the rule.

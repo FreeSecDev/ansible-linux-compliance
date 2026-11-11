@@ -264,7 +264,23 @@
   tags:
     - always
 
-- name: Password quality | Inspect every module path through a symbolic link with its SHA-256, as libpam loads it
+- name: Password quality | Inspect every module path without following a link, with the SHA-256 of a regular file
+  ansible.builtin.stat:
+    path: "{{ __linux_compliance_remediate_pwq_module }}"
+    follow: false
+    get_checksum: true
+    checksum_algorithm: sha256
+    get_mime: false
+    get_attributes: false
+  loop: "{{ __linux_compliance_remediate_pwq_module_plan.paths }}"
+  loop_control:
+    loop_var: __linux_compliance_remediate_pwq_module
+  register: __linux_compliance_remediate_pwq_module_links
+  failed_when: false
+  tags:
+    - always
+
+- name: Password quality | Inspect every module path that is a symbolic link through it with its SHA-256
   ansible.builtin.stat:
     path: "{{ __linux_compliance_remediate_pwq_module }}"
     follow: true
@@ -272,7 +288,10 @@
     checksum_algorithm: sha256
     get_mime: false
     get_attributes: false
-  loop: "{{ __linux_compliance_remediate_pwq_module_plan.paths }}"
+  loop: >-
+    {{ __linux_compliance_remediate_pwq_module_links.results | default([]) | selectattr('stat', 'defined')
+       | selectattr('stat.islnk', 'defined') | selectattr('stat.islnk')
+       | map(attribute='__linux_compliance_remediate_pwq_module') | list }}
   loop_control:
     loop_var: __linux_compliance_remediate_pwq_module
   register: __linux_compliance_remediate_pwq_module_stats
@@ -282,8 +301,19 @@
 
 - name: Password quality | Keep the module directory and every module stat, which tell the lines that load pam_pwquality
   vars:
+    __linux_compliance_remediate_pwq_module_resolved: >-
+      {%- set found = {} -%}
+      {%- for result in __linux_compliance_remediate_pwq_module_links.results | default([]) -%}
+      {%- set _ = found.update({result.__linux_compliance_remediate_pwq_module:
+            result.stat if result.stat is defined else {'msg': result.msg | default('')}}) -%}
+      {%- endfor -%}
+      {{ found }}
     __linux_compliance_remediate_pwq_module_found: >-
       {%- set found = {} -%}
+      {%- for path, stat in __linux_compliance_remediate_pwq_module_resolved.items()
+            if not (stat.islnk | default(false)) -%}
+      {%- set _ = found.update({path: stat}) -%}
+      {%- endfor -%}
       {%- for result in __linux_compliance_remediate_pwq_module_stats.results | default([]) -%}
       {%- set _ = found.update({result.__linux_compliance_remediate_pwq_module:
             result.stat if result.stat is defined else {'msg': result.msg | default('')}}) -%}
@@ -292,7 +322,8 @@
   ansible.builtin.set_fact:
     __linux_compliance_remediate_pwq_modules: >-
       {{ {'directory': __linux_compliance_remediate_pwq_module_plan.directory,
-          'stats': __linux_compliance_remediate_pwq_module_found} }}
+          'stats': __linux_compliance_remediate_pwq_module_found,
+          'links': __linux_compliance_remediate_pwq_module_resolved} }}
   tags:
     - always
 

@@ -85,16 +85,19 @@ options:
       - Which file the module path of every PAM line loads, with C(directory), the module
         directory that the C(pwquality_pam_modules) filter returns (or C(None)), and C(stats),
         the C(ansible.builtin.stat) with C(follow=true) and the SHA-256 C(checksum) of every path
-        that it returns, by path, or a mapping with only the C(msg) of a stat that failed.
+        that it returns, by path, or a mapping with only the C(msg) of a stat that failed, and
+        C(links), the C(ansible.builtin.stat) with C(follow=false) of the same paths, whose
+        C(lnk_source) names the file that a symbolic link resolves to (FREES-205).
       - The arguments of a line count as C(pam_pwquality) arguments when the file name of the
         path that libpam loads for it holds C(pam_pwquality), in any directory (a build of the
-        module installed elsewhere, such as C(/usr/local/lib/security/pam_pwquality.so)), or
-        when that path is a regular file with the checksum of C(pam_pwquality.so) of the module
-        directory, such as a link or a copy under another name (FREES-212). A line whose module
-        cannot be told, because the module directory is not known, the path holds C($ISA), a
-        path that must be compared was not inspected or could not be read, or
-        C(pam_pwquality.so) is missing from the module directory (which may then not be the one
-        that libpam loads from), makes the rule C(overridden).
+        module installed elsewhere, such as C(/usr/local/lib/security/pam_pwquality.so)), when
+        that path is a symbolic link whose resolved file name holds C(pam_pwquality) (FREES-205),
+        or when that path is a regular file with the checksum of C(pam_pwquality.so) of the
+        module directory, such as a link or a copy under another name (FREES-212). A line whose
+        module cannot be told, because the module directory is not known, the path holds
+        C($ISA), a path that must be compared was not inspected, with or without following a
+        link, or could not be read, or C(pam_pwquality.so) is missing from the module directory
+        (which may then not be the one that libpam loads from), makes the rule C(overridden).
       - Whether libpam runs C(pam_pwquality) at all is not decided. A line of another type than
         C(password), a jump or a C(sufficient) module before it, or a stack without it are not
         looked at; the rule decides the values that C(pam_pwquality) would use.
@@ -168,15 +171,16 @@ def _pam(pam: list[object]) -> tuple[list[tuple[str, str]], list[str]]:
         raise DecisionInputError(str(error)) from error
 
 
-def _stats(value: object) -> dict[str, Mapping[str, object]]:
-    """Return the module stats by path, each a mapping."""
+def _stats(value: object, what: str) -> dict[str, Mapping[str, object]]:
+    """Return the module stats (C(stats)) or link stats (C(links)) by path, each a mapping."""
     if not isinstance(value, Mapping):
-        message = "the stats of the modules must be a mapping"
+        message = f"the {what} of the modules must be a mapping"
         raise DecisionInputError(message)
     stats: dict[str, Mapping[str, object]] = {}
     for path, stat in cast("Mapping[object, object]", value).items():
         if not isinstance(path, str) or not isinstance(stat, Mapping):
-            message = "every module stat must be a mapping under its path"
+            kind = "stat" if what == "stats" else "link stat"
+            message = f"every module {kind} must be a mapping under its path"
             raise DecisionInputError(message)
         stats[path] = cast("Mapping[str, object]", stat)
     return stats
@@ -192,7 +196,9 @@ def _modules(modules: object) -> pwquality.Modules:
     if directory is not None and not (isinstance(directory, str) and directory.endswith("/")):
         message = "the module directory must be None or a path that ends with a slash"
         raise DecisionInputError(message)
-    return pwquality.Modules(directory, _stats(fields.get("stats")))
+    return pwquality.Modules(
+        directory, _stats(fields.get("stats"), "stats"), _stats(fields.get("links"), "links")
+    )
 
 
 def _dropins(dropins: list[object]) -> list[Mapping[str, object]]:
