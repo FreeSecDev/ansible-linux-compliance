@@ -535,8 +535,10 @@ The audit role's `deferred.yml` and `enforce.yml` entry points defer and enforce
   `stale.yml`, and the evidence role. It checks the bundle content, provenance, permissions and owner, that no planted
   secret is in a bundle, that the XCCDF target facts and SCE output are carried, that a second collection of the same
   run is refused, and that a checksum mismatch, a recorded path outside the run directory, a symbolic link on the
-  host and a changed exceptions file fail closed and leave no bundle. It then runs the report on both bundles with
-  `--exceptions-file` and checks the waived counts and the exceptions section; checks that the same bundles without
+  host and a changed exceptions file fail closed and leave no bundle. The scan run of `web01` carries an operator
+  deviation on a passing rule (findings model schema 1.3), and its bundle must hold it in `raw/scan-run.json`. It then
+  runs the report on both bundles with `--exceptions-file` and checks the waived counts, the exceptions section and
+  that the report counts and lists the deviation; checks that the same bundles without
   `--exceptions-file`, or with another file, are refused with exit status 2; and that a bundle with one changed byte is
   an input error.
 - `tests/playbooks/evidence-gate.yml` (also in `make test-evidence`) runs the plays of `playbooks/evidence.yml` on

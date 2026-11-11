@@ -15,6 +15,15 @@
   vars:
     audit_exceptions_outcomes: "{{ evidence_fixture_outcomes }}"
     audit_exceptions_run_base: "{{ evidence_fixture_base }}"
+  when: evidence_fixture_deviations | default({}) | length == 0
+
+- name: Build the synthetic scan run of the fixture with operator deviations (findings model schema 1.3)
+  ansible.builtin.include_tasks: audit-deviation-synthetic.yml
+  vars:
+    audit_exceptions_outcomes: "{{ evidence_fixture_outcomes }}"
+    audit_exceptions_run_base: "{{ evidence_fixture_base }}"
+    audit_deviation_values: "{{ evidence_fixture_deviations }}"
+  when: evidence_fixture_deviations | default({}) | length > 0
 
 - name: Name the run directory of the fixture
   ansible.builtin.set_fact:

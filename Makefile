@@ -117,7 +117,9 @@ EVIDENCE_REPORT_CHECK := .sections.compliance.status == "available" and .section
 	and .sections.exceptions.summary.by_status.stale == 1 and .sections.exceptions.summary.by_status.in_effect == 2 \
 	and .sections.exceptions.exceptions_file.verified \
 	and (.sections.exceptions.exceptions_file.path | endswith("/exceptions/exceptions-valid.yml")) \
-	and (.overview.error | length) == 0
+	and (.overview.error | length) == 0 and .overview.deviation == 1 \
+	and ([.sections.compliance.deviations[] | [.outcome, .value_id, .profile_value, .effective_value]] \
+		== [["pass", "var_password_pam_minlen", "14", "8"]])
 EVIDENCE_GATE_CHECK := .sections.compliance.status == "available" \
 	and ([.sections.compliance.items[].format] | sort) == ["exceptions_evaluation", "scan_run"] \
 	and ([.sections.compliance.groups[].summary.run_status] | sort) == ["completed", "failed"] \

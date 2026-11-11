@@ -15,6 +15,9 @@ evidence_secrets:
 evidence_carried_sce: "FREESECDEV-CARRIED-SCE-STDOUT: ACCEPT tcp dpt:5432 from 10.0.0.0/8"
 evidence_carried_address: 192.0.2.10
 evidence_carried_mac: "02:00:5e:10:00:10"
+evidence_deviations: >-
+  {{ {audit_exceptions_rule_passing: {'value_id': 'var_password_pam_minlen', 'profile_value': '14',
+                                      'effective_value': '8'}} }}
 evidence_fixture_failed_run:
   status: failed
   error_message: oscap exited with status 1 before writing all results
