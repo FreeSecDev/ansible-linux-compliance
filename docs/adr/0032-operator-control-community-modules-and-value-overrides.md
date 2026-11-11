@@ -534,3 +534,55 @@ No catalogue entry names a comparator yet, so nothing is overridable and behavio
 `plugins/filter/pam_conf.py` keeps its own decision until the faillock and pwhistory family is wired; the unit tests
 pin the faillock and pwhistory comparators to that filter's decisions over a table of values, and the `login_defs`
 comparators to the family's Jinja.
+
+## Amendment of 2026-11-11: the comparison functions of the text families (FREES-203)
+
+The `ssh`, `sudo`, kernel parameter and `auditd_conf` families get their comparators in `values.py`, as decision I
+requires. Each takes only the form that its reader reads back as written, so the value that a family writes is the
+value that is compared, and the comparison follows decision E.
+
+- **sshd numbers** (`sshd_interval`, `sshd_count_max`, `sshd_grace_time`, `sshd_at_most`) are whole numbers from 0
+  to `INT_MAX`, the bound of sshd's `strtonum` and `convtime`. sshd also reads units (`5m`), a `+` and leading zeros,
+  and `sshd -T` then prints another text (`300`, `4`), so those forms are refused. By `sshd_config(5)`, 0 turns
+  `ClientAliveInterval`, `ClientAliveCountMax` and `LoginGraceTime` off, so it is looser than every other value
+  there. `MaxAuthTries` and `MaxSessions` have no such value and are plain orders: `MaxSessions 0` permits no
+  session, and sshd's `auth2.c` ends a connection once its failures reach `MaxAuthTries`, so 0 ends it at the first
+  failure, as 1 does.
+- **`MaxStartups`** (`sshd_maxstartups`) is `start:rate:full`, at least as strict when `start` and `full` are at most
+  and `rate` at least the profile's, as the content's check compares each component. The order is partial. A single
+  number is refused because `sshd -T` prints it with a rate that the value does not name (`10` as `10:30:10`), and
+  so are the values that sshd refuses (`start` above `full`, a rate outside 1 to 100).
+- **Algorithm lists** (`sshd_algorithms`, for `KexAlgorithms` and `MACs`) meet the profile when every algorithm is
+  one of the profile's list, in any order. The `+`, `-` and `^` modifiers, wildcards, spaces, empty members and
+  repeated members are refused, because sshd then uses another list than the one written. An algorithm that sshd
+  does not know still passes the comparator; the family's `sshd -T` validation refuses it before anything is written.
+- **sudo**: `sudo_timeout` orders `timestamp_timeout` from 0, the strictest, to 9999, the bound of the rule's
+  `value_pattern`; `sudo_path` compares the `logfile` exactly, with the rule's `value_pattern`.
+- **Kernel parameters** (`sysctl_exact`) are compared exactly, in the plain decimal form that every handler of the
+  kernel and every reader in base 10 read alike (`sysctl_config.KERNEL_INTEGER`): every kernel parameter rule with a
+  profile value has the datatype `int`. `010`, `0x1`, `+1` and `-0` are refused.
+- **auditd**: each action and choice setting has its own comparator, `auditd_choice_<setting>`, instead of one
+  `auditd_choice`, because each keyword has its own vocabulary in `auditconf.KEYWORDS` and auditd refuses the whole
+  file for a keyword outside it (`keep_logs` is a `max_log_file_action`, not a `disk_error_action`). An operator's
+  value is one keyword of that vocabulary, in lower case because auditd compares them without regard to case, and
+  meets the profile when it is one of the profile's choices. A profile's set may name `exec` for the four disk space
+  and disk error actions, which auditd takes only with a program that the collection never writes; it is taken in a
+  profile's set, never as an override or as a value in force. `auditd_minimum` (`max_log_file`, `space_left`) is at
+  least the profile's, from 0 to 999999999, the bound of the family; `auditd_percent` (`space_left` and
+  `admin_space_left` in percent) is the number without its `%`, which the family writes, from 0 to 99, because auditd
+  refuses 100 percent or more; `auditd_number` (`freq`) and `auditd_exact` (`action_mail_acct`, two to 64 of the
+  characters that the reader reads) are compared exactly, as the checks do.
+
+A comparator gains a fourth operation, `read_profile(text)`, which reads a profile's value. It is `validate` for every
+comparator but a choice set, whose profile value is a set of keywords while an override is one keyword. `make
+catalogue` now reads profile values with it. With `value_comparison` added for a test on every one of the 61 value
+rules of these families, the generator took every profile value of both pinned datastreams as it is; the catalogue
+then went back unchanged, so no rule names one of these comparators yet.
+
+The unit tests pin the comparators to their readers: the sshd forms to what `sshd -T` of OpenSSH 9.6p1 and 9.9p1
+printed for each value, the auditd values to `auditconf.read` (which auditd's own verdict table pins), the kernel
+values to `sysctl_config.kernel_integer`, and the bounds and patterns to the family validators. Three checks of the
+content compare more narrowly than these comparators: `ClientAliveCountMax` and the algorithm lists are checked with
+`equals`, and `MaxAuthTries` must be above 0. A stricter value there meets the profile by the comparator but fails the
+check, which the scan reports as a failure, never as a pass. The pull request that wires the `ssh` family decides with
+its golden test against the checks whether these rules take these comparators or an exact one.

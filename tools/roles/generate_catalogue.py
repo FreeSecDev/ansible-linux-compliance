@@ -700,8 +700,8 @@ def native_parameters(
     not export, because they accept a range; the value still comes only from each profile's
     ``refine-value`` and the value's options (ADR 0025). A rule that also names a
     ``value_comparison`` (ADR 0032) gets it in its parameters, and every profile value must be
-    a canonical value of that comparator, so the comparison of an override cannot misread the
-    profile's value.
+    a canonical value of that comparator as its ``read_profile`` reads it, so the comparison of
+    an override cannot misread the profile's value.
     """
     parameters = dict(cast("Mapping[str, object]", native["parameters"]))
     pinned = native.get(PROFILE_VALUE_ID_KEY)
@@ -739,7 +739,7 @@ def _check_profile_values(
     for entry in resolved:
         text = "".join(cast("Sequence[str]", entry["value"]))
         try:
-            canonical = found.validate(text)
+            canonical = found.read_profile(text)
         except values.ValueOverrideError as error:
             message = f"{rule_id}: the comparison {comparison} refuses a profile value: {error}"
             raise _fail(message) from error
