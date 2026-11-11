@@ -20,8 +20,9 @@ Such a run is reported through its ``scan-run.json``, which carries the marker.
 
 XCCDF and ARF files carry no operator deviation either (FREES-203, ADR 0032): the
 scanner reports a pass under a looser value in force as a plain pass. A file next to a
-``scan-run.json`` of a findings schema this report cannot read (schema 1.3) is refused
-the same way, so a flagged pass never counts as a pass through its raw results.
+``scan-run.json`` of findings schema 1.3, which can carry deviations, is refused the
+same way, so a flagged pass never counts as a pass through its raw results. Such a run
+is reported through its ``scan-run.json``, which carries the flag.
 
 A copy taken out of its bundle is also refused by its content (FREES-164). A TestResult
 that SCC wrote (``test-system`` ``cpe:/a:niwc:scc``) lists, as ``platform`` children,
@@ -59,7 +60,6 @@ from tools.reporting.common import (
 )
 from tools.reporting.compliance import (
     COMPLETED,
-    UNREADABLE_FINDINGS_VERSIONS,
     ComplianceData,
     summarize,
     tally_findings,
@@ -73,6 +73,7 @@ TEST_RESULT_TAG: Final[str] = "{http://checklists.nist.gov/xccdf/1.2}TestResult"
 FQDN_FACT: Final[str] = "urn:xccdf:fact:asset:identifier:fqdn"
 OFF_PLATFORM_SUFFIX: Final[str] = ".off-platform.xml"
 SCAN_RUN_NAME: Final[str] = "scan-run.json"
+DEVIATION_FINDINGS_VERSIONS: Final[frozenset[str]] = frozenset({model.DEVIATION_SCHEMA_VERSION})
 NIWC_TEST_SYSTEM_PREFIXES: Final[tuple[str, ...]] = ("cpe:/a:niwc:scc", "cpe:2.3:a:niwc:scc")
 NIWC_NAME: Final[re.Pattern[str]] = re.compile(r"(?<![a-z])(?:niwc|scc)(?![a-z])")
 OS_PLATFORM_PREFIXES: Final[tuple[str, ...]] = ("cpe:/o:", "cpe:2.3:o:")
@@ -283,8 +284,8 @@ def refuse_raw_results(path: Path, max_bytes: int) -> None:
     Raises:
         InvalidInputError: If the file name ends with ``.off-platform.xml``, or a
             ``scan-run.json`` in its directory or the one above carries the
-            off-platform marker, is of a findings schema version the report cannot
-            read, or cannot be read as a scan run.
+            off-platform marker, is of findings schema 1.3, or cannot be read as a
+            scan run.
     """
     if path.name.endswith(OFF_PLATFORM_SUFFIX):
         raise InvalidInputError(OFF_PLATFORM_REFUSAL)
@@ -294,7 +295,7 @@ def refuse_raw_results(path: Path, max_bytes: int) -> None:
             continue
         if run.off_platform is not None:
             raise InvalidInputError(OFF_PLATFORM_REFUSAL)
-        if run.schema_version in UNREADABLE_FINDINGS_VERSIONS:
+        if run.schema_version in DEVIATION_FINDINGS_VERSIONS:
             raise InvalidInputError(DEVIATION_REFUSAL)
 
 

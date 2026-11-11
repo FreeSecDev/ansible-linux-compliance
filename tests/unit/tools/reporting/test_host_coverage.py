@@ -76,7 +76,7 @@ def test_a_report_without_a_collection_summary_labels_its_coverage_unknown(
         scope=Scope.FLEET, evidence_bundle=(web, db), exceptions_file=kit.EXCEPTIONS_FILE
     )
     compliance = document["sections"]["compliance"]
-    assert document["schema_version"] == "2.3"
+    assert document["schema_version"] == "2.4"
     assert compliance["status"] == "available"
     assert compliance["host_coverage"] == {
         "collection": None,
@@ -380,7 +380,7 @@ def test_the_schema_couples_coverage_with_the_section_and_the_version(
     assert not VALIDATOR.is_valid(forged)
     older = copy.deepcopy(forged)
     older["schema_version"] = "2.0"
-    without_off_platform(older)
+    without_off_platform(older, kit)
     older["raw_artifacts"] = [
         artifact
         for artifact in older["raw_artifacts"]
@@ -394,8 +394,9 @@ def test_the_schema_couples_coverage_with_the_section_and_the_version(
     assert not VALIDATOR.is_valid(unknown)
 
 
-def without_off_platform(document: dict[str, Any]) -> None:
-    """Strip the schema 2.2 and 2.3 keys, which a 2.0 or 2.1 document never has."""
+def without_off_platform(document: dict[str, Any], kit: Any) -> None:
+    """Strip the schema 2.2 to 2.4 keys, which a 2.0 or 2.1 document never has."""
+    kit.without_deviations(document)
     del document["overview"]["off_platform"]
     compliance = document["sections"]["compliance"]
     del compliance["off_platform"]
@@ -416,7 +417,7 @@ def test_the_dashboard_reads_2_0_and_2_1_reports(kit: Any, tmp_path: Path) -> No
     older = build(scope=Scope.FLEET, evidence_bundle=(web,))
     older["schema_version"] = "2.0"
     del older["sections"]["compliance"]["host_coverage"]
-    without_off_platform(older)
+    without_off_platform(older, kit)
     assert VALIDATOR.is_valid(older)
     assert dashboard.render_dashboard(older).startswith("<!DOCTYPE html>")
 

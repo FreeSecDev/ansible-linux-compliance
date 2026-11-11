@@ -61,7 +61,7 @@ def test_rules_carry_the_placement_of_their_findings(
     kit: Any, write_run: Callable[..., Path]
 ) -> None:
     document = build(scope=Scope.SINGLE_HOST, scan_run=(write_run("run.json", placed_run(kit)),))
-    assert document["schema_version"] == "2.3"
+    assert document["schema_version"] == "2.4"
     rules = {rule["rule_id"]: rule for rule in document["sections"]["compliance"]["rules"]}
     controls = [rule["control"] for rule in rules.values()]
     assert SSH.to_dict() in controls

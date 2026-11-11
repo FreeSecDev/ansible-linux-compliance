@@ -651,6 +651,9 @@ document is read, the model turns a `DeviationError` into `ModelError`.
   `--exceptions-evaluation` and evidence bundles ([reporting data model](../reporting-data-model.md#operator-deviations)).
   Raw XCCDF and ARF results carry no flag at all, so results next to a 1.3 `scan-run.json` (in the same directory or
   the one above) are refused too, and stay refused once the report reads 1.3. No writer emits 1.3 yet.
+- **Update (report schema 2.4).** The report now reads 1.3 runs and never counts a flagged pass as a pass
+  ([ADR 0016 amendment of FREES-203](0016-report-schema-and-summary-semantics.md#amendment-2026-11-11-schema-24-operator-deviations-frees-203));
+  raw results next to a 1.3 run stay refused.
 
 Rejected alternatives:
 

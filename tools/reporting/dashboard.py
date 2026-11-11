@@ -8,6 +8,9 @@ count, percentage and assessment comes from the report as it is. The inline styl
 script are static assets whose SHA-256 hashes form the Content-Security-Policy, so the
 page runs no other code, loads nothing from the network and works from ``file://``.
 
+A report with operator deviations (schema 2.4, FREES-203) is refused until the page
+shows them: a flagged pass would otherwise appear as a plain pass in the rule list.
+
 Report text is untrusted. The JSON block escapes ``<``, ``>``, ``&``, U+2028 and
 U+2029, so no report value can close the element or start markup, and the script
 renders values with DOM text APIs only. Equal reports give byte-identical pages.
@@ -25,7 +28,7 @@ from tools.reporting.common import Json
 ASSET_DIRECTORY: Final[Path] = Path(__file__).parent / "assets"
 SCRIPT_ASSET: Final[str] = "dashboard.js"
 STYLE_ASSET: Final[str] = "dashboard.css"
-SUPPORTED_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset({"2.0", "2.1", "2.2", "2.3"})
+SUPPORTED_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset({"2.0", "2.1", "2.2", "2.3", "2.4"})
 MERGED_INPUTS_NOTE: Final[str] = "merged_inputs"
 MAX_EMBEDDED_BYTES: Final[int] = 128 * 1024 * 1024
 MACHINE_ID: Final[str] = "machine_id"
@@ -275,12 +278,19 @@ def render_dashboard(report: Mapping[str, Json]) -> str:
     """Return the dashboard HTML for a report document written by ``build_report``.
 
     Raises:
-        DashboardError: If the schema version is not supported or the embedded data
-            would exceed ``MAX_EMBEDDED_BYTES``.
+        DashboardError: If the schema version is not supported, the report lists
+            operator deviations or the embedded data would exceed ``MAX_EMBEDDED_BYTES``.
     """
     version = report.get("schema_version")
     if not isinstance(version, str) or version not in SUPPORTED_SCHEMA_VERSIONS:
         message = "the report schema version is not supported by the dashboard"
+        raise DashboardError(message)
+    compliance = _mapping(_mapping(report.get("sections")).get("compliance"))
+    if _sequence(compliance.get("deviations")):
+        message = (
+            "the report lists operator deviations, which the dashboard does not show yet; "
+            "read them in sections.compliance.deviations of the JSON report"
+        )
         raise DashboardError(message)
     data = embed_json({"report": dict(report), "views": dashboard_views(report)})
     if len(data) > MAX_EMBEDDED_BYTES:

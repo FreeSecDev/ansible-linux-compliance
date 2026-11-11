@@ -22,6 +22,11 @@ A scan run with an off-platform marker (schema 2.2, ADR 0016 amendment of FREES-
 is an input of the compliance section like any other, but it never enters ``rules``,
 ``groups``, ``aggregates`` or ``summary``. It is listed in
 ``sections.compliance.off_platform``, and ``overview.off_platform`` counts such inputs.
+
+A finding flagged ``operator_deviation`` (findings model schema 1.3, report schema 2.4,
+ADR 0016 amendment of FREES-203) never counts as a pass (:mod:`tools.reporting.compliance`).
+Every such finding of every input is listed in ``sections.compliance.deviations``, whatever
+the section status, and ``overview.deviation`` counts them.
 """
 
 import re
@@ -46,6 +51,7 @@ from tools.reporting.compliance import (
     ComplianceData,
     Entry,
     aggregate_figures,
+    deviation_entries,
     figure,
     figured,
     group_figures,
@@ -75,7 +81,7 @@ from tools.reporting.parsers.scanrun import parse_scan_run
 from tools.reporting.parsers.xccdf import parse_arf, parse_xccdf
 from tools.reporting.waivers import exception_entries
 
-SCHEMA_VERSION: Final[str] = "2.3"
+SCHEMA_VERSION: Final[str] = "2.4"
 SECTION_NAMES: Final[tuple[str, ...]] = (
     "codebuild",
     "compliance",
@@ -339,9 +345,14 @@ def _compliance_section(
     every: list[Entry] = [(path, data) for path, data, _ in _unique(results)]
     check_scope(scope, every)
     check_repeated_scans(every, allowed=allow_repeated)
+    deviations = deviation_entries(every)
+    if len(deviations) > MAX_RULES:
+        message = "the compliance data exceeds the report size limits"
+        raise ReportError(message)
     section.update(
         {
             "aggregates": [],
+            "deviations": to_json(deviations),
             "groups": [],
             "host_coverage": coverage,
             "notes": [],
@@ -498,6 +509,7 @@ def _overview(sections: dict[str, dict[str, Json]]) -> dict[str, Json]:
     }
     overview["exceptions"] = sections["exceptions"]["summary"]
     overview["off_platform"] = len(cast("list[Json]", sections["compliance"]["off_platform"]))
+    overview["deviation"] = len(cast("list[Json]", sections["compliance"]["deviations"]))
     return overview
 
 
