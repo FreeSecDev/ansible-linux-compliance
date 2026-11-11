@@ -26,6 +26,10 @@ Record each item as satisfied, not applicable (with reason) or violated.
 - [ ] No secrets, tokens, host evidence or restricted benchmark content.
 - [ ] Audit mode changes nothing on a managed host; remediation is opt-in.
 - [ ] No suppression without documented justification.
+- [ ] A change to `roles/remediate`, `meta/runtime.yml` or the module rule of ADR 0032 §1
+      (`tools/lint/repo_rules/remediate_*.py` and its tests) is checked for module-rule bypasses that the rule does
+      not catch: Jinja plugins of other collections, files the role plants, routing, play settings and edits of the
+      rule itself (ADR 0032, boundary of 2026-11-10).
 
 ## Verification
 

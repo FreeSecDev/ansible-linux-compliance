@@ -39,6 +39,8 @@ NAMES = (
     "ansible_playbook_python",
     "pkg_mgr",
     "service_mgr",
+    "ansible_network_os",
+    "network_os",
     "discovered_interpreter_python",
     "ansible_discovered_interpreter_python",
     "_ansible_ansiballz_debugpy_config",
@@ -211,11 +213,17 @@ def test_an_ansible_core_become_or_shell_plugin_may_be_selected(
         ),
         '---\n- ansible.builtin.debug:\n    msg: "{{ x | default(ansible_python_interpreter) }}"\n',
         "---\n- ansible.builtin.set_fact:\n    linux_compliance_ssh_args: x\n    ansible_host: h\n",
-        "---\n- ansible.builtin.set_fact:\n    ? [ansible_ssh_args]\n    : x\n",
     ],
 )
 def test_reading_or_naming_a_variable_is_not_setting_it(tmp_path: Path, text: str) -> None:
     assert found(tmp_path, "roles/r/tasks/main.yml", text) == []
+
+
+def test_a_complex_set_fact_key_is_left_to_the_runtime_name_rule(tmp_path: Path) -> None:
+    text = "---\n- ansible.builtin.set_fact:\n    ? [ansible_ssh_args]\n    : x\n"
+    messages = found(tmp_path, "roles/r/tasks/main.yml", text)
+    assert not any("setting" in message for message in messages), messages
+    assert any("set_fact must be a mapping with literal keys" in message for message in messages)
 
 
 def test_the_reviewed_settings_are_keyed_by_file_and_exact_value(tmp_path: Path) -> None:

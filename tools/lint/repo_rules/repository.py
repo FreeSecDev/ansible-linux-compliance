@@ -45,7 +45,11 @@ from tools.lint.repo_rules.load_locations import (
 )
 from tools.lint.repo_rules.names import FILE_IO_IMPORTERS, SHEBANG_PREFIX
 from tools.lint.repo_rules.own_remediation import own_remediation_findings
+from tools.lint.repo_rules.remediate_files import role_file_findings
+from tools.lint.repo_rules.remediate_modules import check_remediate_modules
+from tools.lint.repo_rules.remediate_routing import check_runtime_routing
 from tools.lint.repo_rules.rendered_files import NUL, rendered_file_findings
+from tools.lint.repo_rules.runtime_names import runtime_name_findings
 from tools.lint.repo_rules.yaml_text import check_document_start, check_yaml_comments
 
 if TYPE_CHECKING:
@@ -84,6 +88,8 @@ def check_file(
     A compiled module (an extension module or bytecode) is refused wherever it is,
     without being read: the import system loads it before, or instead of, a ``.py``
     source of the same name, so it would run code that no rule has seen (FREES-153).
+    A file below ``roles/remediate/tasks``, ``handlers`` or ``meta`` that the module rule of
+    ADR 0032 §1 could not read is refused whatever its suffix (FREES-203).
     The location rules then apply to every file, and a symbolic link is never read
     through. ``configured`` holds the load directories that an ``ansible.cfg`` names;
     without it they are looked up for ``path`` alone (FREES-156). ``index`` maps
@@ -118,7 +124,7 @@ def check_file(
     if suffix in PYTHON_SUFFIXES:
         found = _python_violations(path, root, data, relative, configured)
     elif suffix in YAML_SUFFIXES:
-        found = _yaml_violations(path, data, relative)
+        found = _yaml_violations(path, data, relative, root)
     else:
         found = _text_violations(path, data, relative)
     rendered = [
@@ -128,7 +134,8 @@ def check_file(
     ]
     own = own_remediation_findings(path, relative, data)
     family = family_prefix_findings(path, relative, root, prefixes)
-    return [*violations, *found, *rendered, *own, *family]
+    role = role_file_findings(path, relative, data)
+    return [*violations, *found, *rendered, *own, *family, *role]
 
 
 def _is_executed(relative: Path | None) -> bool:
@@ -221,8 +228,13 @@ def _documents(text: str) -> list[yaml.Node]:
         loader.dispose()
 
 
-def _yaml_violations(path: Path, data: bytes, relative: Path | None) -> list[Violation]:
-    """Apply the document-start, comment, banned-module and load-path rules to YAML."""
+def _yaml_violations(path: Path, data: bytes, relative: Path | None, root: Path) -> list[Violation]:
+    """Apply the document-start, comment, banned-module, remediation-module and load-path rules.
+
+    The modules of ``roles/remediate`` are checked against the allow list of ADR 0032 §1, whose
+    pins are read below ``root``, and ``meta/runtime.yml`` may route them only in the forms that
+    rule reads.
+    """
     try:
         text = data.decode("utf-8")
     except UnicodeDecodeError as error:
@@ -237,6 +249,9 @@ def _yaml_violations(path: Path, data: bytes, relative: Path | None) -> list[Vio
         *module_parameter_findings(path, documents, relative),
         *target_findings(path, relative, documents),
         *yaml_variable_findings(path, relative, documents),
+        *runtime_name_findings(path, relative, documents),
+        *check_remediate_modules(path, relative, documents, root=root),
+        *check_runtime_routing(path, relative, documents),
     ]
     if not executed:
         violations.extend(yaml_jinja_findings(path, documents))

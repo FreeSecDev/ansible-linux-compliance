@@ -1488,12 +1488,15 @@
          and (__linux_compliance_remediate_ssh_final.valid | default(false))
          and ((__linux_compliance_remediate_ssh_known_services['ssh.service']
                | default(__linux_compliance_remediate_ssh_known_services['sshd.service'] | default({})))
-              .state | default('') == 'running') }}
+              .state | default('') == 'running')
+         and ((__linux_compliance_remediate_ssh_known_services['ssh.service']
+               | default(__linux_compliance_remediate_ssh_known_services['sshd.service'] | default({})))
+              .source | default('') == 'systemd') }}
   tags:
     - always
 
-- name: SSH server | Reload sshd, which keeps every open session, so new sessions use the validated configuration
-  ansible.builtin.service:
+- name: SSH server | Reload sshd with systemd, which keeps every open session, so new sessions use the new configuration
+  ansible.builtin.systemd_service:
     name: "{{ __linux_compliance_remediate_ssh_service }}"
     state: reloaded
   when: __linux_compliance_remediate_ssh_running

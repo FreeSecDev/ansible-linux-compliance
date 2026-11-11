@@ -7,6 +7,7 @@ lifecycle in Molecule. Audience: family authors and reviewers. Jira: FREES-53 (n
 [ADR 0021](adr/0021-native-banners-pwquality-and-profile-values.md) (profile values, banners, password quality),
 [ADR 0023](adr/0023-native-ssh-server-configuration.md) (SSH server),
 [ADR 0025](adr/0025-own-ansible-remediation-only.md) (our own Ansible only),
+[ADR 0032](adr/0032-operator-control-community-modules-and-value-overrides.md) (allow-listed community modules),
 [ADR 0027](adr/0027-native-faillock-pwhistory.md) (account lock-out and password reuse),
 [ADR 0029](adr/0029-native-kernel-parameters.md) (kernel parameters) and
 [ADR 0030](adr/0030-native-auditd-settings-and-audit-rules.md) (auditd settings and audit rules).
@@ -28,6 +29,93 @@ an audit, never a source of remediation code. Take values only from the profile'
 refuses Python that reads `fix` elements, committed upstream remediation content and invocations of the scanner's
 remediation ([ADR 0025](adr/0025-own-ansible-remediation-only.md)).
 
+### Which modules a family may use
+
+A task of `roles/remediate` names its module by the fully qualified name, and that module is one of these
+([ADR 0032](adr/0032-operator-control-community-modules-and-value-overrides.md) §1):
+
+- an `ansible.builtin` module of `BUILTIN_MODULES`, never `shell`, `command`, `raw` or `script` (AGENTS.md rule 1).
+  The list holds the module files of the pinned ansible-core that its `plugin_routing` neither redirects nor removes,
+  and a unit test keeps it equal to the installed ansible-core. ansible-core sends thousands of `ansible.builtin`
+  names to other collections: `ansible.builtin.make` runs `community.general.make`, `ansible.builtin.at` runs
+  `ansible.posix.at` and `ansible.builtin.sysctl` runs `ansible.posix.sysctl`, so these names are refused like the
+  modules they reach;
+- except `ansible.builtin.gather_facts`, `ansible.builtin.package` and `ansible.builtin.service`
+  (`DISPATCHING_MODULES`): their action plugins choose the module they run while the play runs, from an argument
+  (`network_os`), a variable (`ansible_network_os`, `ansible_facts_modules`, `ansible_package_use`) or a fact
+  (`pkg_mgr`, `service_mgr`) that a task can set, so they could run any installed module. Reload or restart a unit
+  with `ansible.builtin.systemd_service`. `ansible.builtin.dnf` also picks its backend at run time, but only among
+  the dnf modules of ansible-core, and stays allowed; a unit test fails when ansible-core gains another action plugin
+  that runs a module whose name is not a literal;
+- a module or action plugin of this collection, `freesecdev.linux_compliance.*`, whose file is in `plugins/modules` or
+  `plugins/action` and for which `meta/runtime.yml` has no routing entry other than `deprecation`. `make lint-repo`
+  also refuses, in `meta/runtime.yml`, any routing of `modules` or `action` other than `redirect`, `tombstone` and
+  `deprecation` (such as `action_plugin`), any routing of `module_utils` other than `deprecation`, and any
+  `import_redirection`;
+- a module of a community collection that is on `ALLOWED_COMMUNITY_MODULES` in
+  `tools/lint/repo_rules/remediate_modules.py`. **The list is empty today.**
+
+`make lint-repo` refuses every other module in every YAML task file below `roles/remediate`, including a short name
+(`copy:`), an `ansible.legacy` name and a templated name, in a task key as well as in `action` and `local_action`,
+and an `action` or `local_action` whose module is not a plain string (in a JSON file ansible-core reads
+`{"__ansible_unsafe": "zz.evil.pwn"}` there as the module name). A
+module of a community collection, such as `community.general.make` or `ansible.posix.at`, is refused because it is not
+listed. To list one, the same pull request:
+
+- records the security review of ADR 0032 §1: check mode and a truthful `changed`, how the module reads and writes the
+  files it manages (whole-file writes, CR and NUL handling, symbolic links), and every external process it runs. A
+  process call must meet AGENTS.md rule 2 and [ADR 0004](adr/0004-audited-process-execution.md), with a timeout among
+  other things; `ansible.posix.sysctl` runs `sysctl` with no timeout and is refused, which is why the kernel parameters
+  use their own drop-ins ([ADR 0029](adr/0029-native-kernel-parameters.md));
+- pins the collection at one exact version (`<major>.<minor>.<patch>`) in `galaxy.yml` `dependencies`,
+  `extensions/molecule/requirements.yml` and `extensions/molecule/collections.pins` (`make molecule-collections-lock`);
+  the rule refuses an allow-listed module whose collection is missing from one of them or pinned at different
+  versions.
+
+The family keeps the reader as the oracle, whichever module writes the file. Molecule scenarios, test playbooks and
+the other roles are not in scope of the allow list; the banned modules apply to them as everywhere.
+
+Ansible loads a role's `tasks`, `handlers` and `meta` entry point `main` also as `main.json` or `main` without a
+suffix, and `tasks_from` or `handlers_from` loads any file below `tasks/` or `handlers/` by its exact name. It reads
+each file as JSON first and decrypts a vaulted file. So every file below `roles/remediate/tasks/`, `handlers/` and
+`meta/` must end in `.yml` or `.yaml`, must be YAML that PyYAML reads, and must hold only task lists (`tasks/`,
+`handlers/`) or a mapping (`meta/`), with no key that starts with `__ansible_` (ansible-core's JSON loader decodes
+such a mapping into another value); `make lint-repo` refuses anything else there, so every task and handler file of
+the role is one the rule reads.
+
+A task or block of `roles/remediate` may not use the keywords `delegate_to`, `delegate_facts`, `local_action` or
+`connection`. Only these keyword forms are refused; the other ways to reach the controller or another host are listed
+in "What the module rule does not cover" below. `ansible_network_os` and
+`network_os` are refused wherever the repository sets variables or facts, like `ansible_facts_modules`,
+`ansible_package_use`, `pkg_mgr` and `service_mgr`, because they choose the module that a play's fact gathering runs
+after the role.
+
+The allow list governs modules, so the role does not run tasks it does not own: `include_role`, `import_role` and a
+dependency in `roles/remediate/meta/main.yml` are refused, and `include_tasks` and `import_tasks` are task keys whose
+target is `{{ role_path }}/tasks/` followed by a literal path. Ansible looks for any other relative target in the
+playbook's directory as well, and the rule never reads that file.
+
+Names that Ansible learns only while the play runs get past every rule that reads literal keys, so `make lint-repo`
+refuses them in every task list of the repository: a templated `set_fact` key (accepted only below
+`extensions/molecule/`, whose lifecycle harness switches toggles by name), `args`, a `module_defaults` entry or the
+mapping form of `action` that is not a mapping with literal keys, a free-form argument string with a template (other
+than an include target), and a `loop_var`, `index_var`, `register` or `include_vars`/`vars_prompt` `name` that is
+templated or names a variable that changes what Ansible executes, such as `ansible_python_interpreter`.
+
+#### What the module rule does not cover
+
+The rule guards against mistakes and unreviewed additions. It is not a sandbox against a contributor who deliberately
+builds a bypass in several steps ([ADR 0032](adr/0032-operator-control-community-modules-and-value-overrides.md),
+boundary of 2026-11-10). It does not read Jinja filter, test and lookup plugins of other collections, files that tasks
+of the role plant (`files/`, `templates/`, a module written into one of Ansible's module paths), routing of other
+plugin types, settings of the play, inventory or configuration outside the role, or a change to the rule and its tests.
+Nor does it refuse the ways other than the four keywords in which a task reaches the controller or another host:
+connection and host variables (`ansible_connection`, `ansible_host`) set as `vars`, `delegate_to` and the other
+keywords inside `apply` of an include, and `ansible.builtin.fetch`, whose destination is on the controller.
+The independent review of every pull request covers those
+([ADR 0033](adr/0033-review-policy-independent-verdict-without-required-approval.md)). A reviewer of a change to
+`roles/remediate`, `meta/runtime.yml` or the rule looks for such bypasses.
+
 ## 1. Read what the content expects
 
 Never infer a rule from its name. Fetch the pinned content (`make content`) and read, for every rule of the topic in
@@ -42,8 +130,9 @@ both pinned datastreams of `content/manifest.yml`:
 
 Write the setting where the content's check reads it on each platform, so the audit agrees with the remediation;
 when the platforms differ, choose the method per benchmark and pin it with a golden test against the OVAL (as
-`pwquality` does with `main_file_benchmarks`). Decide per rule whether it can be implemented natively and safely: with `ansible.builtin` modules only (`copy`,
-`template`, `lineinfile`, `file`, `stat`, `slurp`, `find`; never `shell`, `command`, `raw` or `script`), without
+`pwquality` does with `main_file_benchmarks`). Decide per rule whether it can be implemented natively and safely: with the modules of
+[Which modules a family may use](#which-modules-a-family-may-use) (for example `ansible.builtin.copy`, `template`,
+`lineinfile`, `file`, `stat`, `slurp` and `find`; never `shell`, `command`, `raw` or `script`), without
 changing what another topic owns (the PAM stack belongs to `pam`, packages to the package topics), and with an exact
 revert. A rule that fails any of these stays `audit_only`; write the reason into the ADR of the topic and the
 [remediation guide](remediation.md#native-families).
@@ -150,8 +239,9 @@ reviews catch most often:
   accept a configuration before it is written, validate it with a module of this collection that runs the service's
   own test through the audited process helper, as `sshd_validate` does for `ssh` (ADR 0023), and validate the
   effective configuration rather than the new file alone.
-- Restart or reload a service only where it runs (`service_facts`), once per run, after a final validation, and prefer
-  a reload that keeps open sessions; check mode never reloads.
+- Restart or reload a service only where systemd runs it (`service_facts` reports it `running` with `source:
+  systemd`), with `ansible.builtin.systemd_service`, once per run, after a final validation, and prefer a reload that
+  keeps open sessions; check mode never reloads. `ansible.builtin.service` is refused in `roles/remediate`.
 
 ## 5. Declare the lifecycle
 
