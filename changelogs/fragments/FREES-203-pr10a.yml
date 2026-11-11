@@ -1,0 +1,17 @@
+---
+minor_changes:
+  - >-
+    remediate - new variable ``linux_compliance_remediate_value_overrides`` (default ``{}``), which maps the short
+    identifier of an XCCDF value to the value that replaces the profile's value as the target of every native rule
+    with that value (ADR 0032, FREES-203). The role checks it before any family runs, also when remediation is
+    disabled, and stops without a change on an unknown key, a banner value (the banner text stays
+    ``linux_compliance_remediate_banner_text``), a value whose rules name no comparison yet and a value that the
+    comparison does not take. A key that the run does not use is listed in the new result key
+    ``unused_overrides`` with its reason and in the notices. No family is wired for overrides yet, so every key is
+    refused and nothing that the role writes changes.
+  - >-
+    filter - new ``value_overrides`` filter, which validates the value overrides and resolves the profile value,
+    the value source and the target of every rule that the remediation plan applies.
+  - >-
+    docs - ``docs/remediation-variables.md`` lists, per family, the XCCDF values of its rules with the rules of each
+    value, its comparison or that it is not overridable yet, and the value of every profile per datastream.

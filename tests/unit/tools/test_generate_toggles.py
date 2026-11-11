@@ -9,6 +9,11 @@ from typing import cast
 import pytest
 import yaml
 
+from ansible_collections.freesecdev.linux_compliance.plugins.filter import value_overrides
+from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance import (
+    toggles,
+)
+from tools.roles import generate_catalogue
 from tools.roles import generate_toggles as gen
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
@@ -375,3 +380,111 @@ def test_main_runs_as_a_module(
         runpy.run_module("tools.roles.generate_toggles", run_name="__main__")
     assert raised.value.code == 0
     assert "toggles match" in capsys.readouterr().out
+
+
+def value_rule(
+    short_id: str, family: str, value_id: str, comparison: str | None, value: str
+) -> dict[str, object]:
+    parameters: dict[str, object] = {
+        "value_id": value_id,
+        "profile_values": [
+            {
+                "datastream": "ubuntu2404",
+                "content_sha256": "a" * 64,
+                "profiles": ["cis_level1_server", "stig"],
+                "value": [value],
+            },
+            {
+                "datastream": "rhel9",
+                "content_sha256": "b" * 64,
+                "profiles": ["cis"],
+                "value": [value[:1], value[1:]],
+            },
+        ],
+    }
+    if comparison is not None:
+        parameters["value_comparison"] = comparison
+    return {
+        "rule_id": f"xccdf_org.ssgproject.content_rule_{short_id}",
+        "family": family,
+        "parameters": parameters,
+    }
+
+
+def values_catalogue(*rules: dict[str, object]) -> toggles.Catalogue:
+    return toggles.Catalogue(
+        rules=list(rules),
+        families={"pwhistory": True, "banners": False, "auditd_conf": True, "cron": False},
+        toggles={},
+        umbrellas={},
+        tags={},
+    )
+
+
+def test_a_family_lists_the_values_of_its_rules_with_their_comparison() -> None:
+    catalogue = values_catalogue(
+        value_rule("remember_a", "pwhistory", "var_remember", "pwhistory_remember", "24"),
+        value_rule("remember_b", "pwhistory", "var_remember", "pwhistory_remember", "24"),
+        value_rule("retry", "pwhistory", "var_retry", None, "3"),
+        {
+            "rule_id": "xccdf_org.ssgproject.content_rule_other",
+            "family": "pwhistory",
+            "parameters": {},
+        },
+    )
+    assert gen.value_rows(catalogue, "pwhistory") == [
+        "",
+        (
+            "Values of the `pwhistory` rules, the keys of "
+            "`linux_compliance_remediate_value_overrides`:"
+        ),
+        "",
+        "| Key | Rules | Comparison | Profile values |",
+        "|---|---|---|---|",
+        (
+            "| `var_remember` | `remember_a`, `remember_b` | `pwhistory_remember` | `ubuntu2404` "
+            "cis_level1_server, stig: `24`; `rhel9` cis: `24` |"
+        ),
+        (
+            "| `var_retry` | `retry` | not overridable yet | `ubuntu2404` cis_level1_server, "
+            "stig: `3`; `rhel9` cis: `3` |"
+        ),
+    ]
+
+
+def test_a_value_with_a_table_separator_is_escaped() -> None:
+    catalogue = values_catalogue(
+        value_rule("disk_full", "auditd_conf", "var_disk_full", None, "halt|single")
+    )
+    assert gen.value_rows(catalogue, "auditd_conf")[-1].endswith(
+        "`ubuntu2404` cis_level1_server, stig: `halt\\|single`; `rhel9` cis: `halt\\|single` |"
+    )
+
+
+def test_banner_values_and_families_without_values_get_no_table() -> None:
+    catalogue = values_catalogue(
+        value_rule("banner_etc_issue", "banners", "login_banner_text", None, "^x$"),
+        {"rule_id": "xccdf_org.ssgproject.content_rule_cron", "family": "cron", "parameters": {}},
+    )
+    assert gen.value_rows(catalogue, "banners") == []
+    assert gen.value_rows(catalogue, "cron") == []
+
+
+def test_the_reference_lists_every_overridable_value_key_of_the_catalogue() -> None:
+    catalogue = gen.load_catalogue(REPOSITORY_ROOT / gen.CATALOGUE)
+    reference = (REPOSITORY_ROOT / gen.REFERENCE).read_text(encoding="utf-8")
+    assert "## Value overrides" in reference
+    for rule in catalogue.rules:
+        parameters = cast("dict[str, object]", rule["parameters"])
+        if "value_id" in parameters and rule["family"] != "banners":
+            assert f"| `{parameters['value_id']}` |" in reference
+    assert "| `login_banner_text` |" not in reference
+    assert (
+        "var_password_pam_remember` | `accounts_password_pam_pwhistory_remember_password_auth`, "
+        in (reference)
+    )
+
+
+def test_the_families_without_comparisons_agree_with_the_catalogue_generator() -> None:
+    assert value_overrides.UNCOMPARED_FAMILIES == generate_catalogue.UNCOMPARED_FAMILIES
+    assert value_overrides.COMPARISON_KEY == generate_catalogue.VALUE_COMPARISON_KEY

@@ -1,0 +1,30 @@
+---
+- name: "Value override case | Run the remediate role and expect it to refuse the overrides | {{ case.name }}"
+  block:
+    - name: "Value override case | Run the remediate role | {{ case.name }}"
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.remediate
+      vars:
+        linux_compliance_remediate_enabled: "{{ case.enabled | default(false) }}"
+        linux_compliance_remediate_value_overrides: "{{ case.overrides }}"
+        linux_compliance_discovered: "{{ value_override_discovered }}"
+
+    - name: "Value override case | Fail because the overrides were not refused | {{ case.name }}"
+      ansible.builtin.fail:
+        msg: "VALUE-OVERRIDE-NOT-REFUSED: {{ case.name }}"
+  rescue:
+    - name: "Value override case | Check that the role stopped before any family ran | {{ case.name }}"
+      ansible.builtin.assert:
+        that:
+          - ansible_failed_result.msg is search(case.expect)
+          - >-
+            (case.task | default('values')) == 'arguments'
+            or ansible_failed_task.name == value_override_stop_task
+          - >-
+            (case.task | default('values')) == 'values'
+            or ansible_failed_task.name is search('arg spec')
+          - "'VALUE-OVERRIDE-NOT-REFUSED' not in ansible_failed_result.msg"
+        fail_msg: >-
+          Value override case {{ case.name }} failed: task {{ ansible_failed_task.name | default('') }},
+          message {{ ansible_failed_result.msg | default('') }}
+        quiet: true

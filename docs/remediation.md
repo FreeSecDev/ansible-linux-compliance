@@ -67,6 +67,7 @@ The opt-in must be a JSON boolean on the command line: `-e '{"linux_compliance_r
 | `linux_compliance_remediate_profile` | `str` | `cis_level1_server` | Profile short identifier; must equal the profile the `discover` role verified. |
 | `linux_compliance_remediate_banner_text` | `str` | the default of the XCCDF value `cis_banner_text`: `Authorized users only. All activity may be monitored and reported.` | Text of `/etc/issue`, `/etc/issue.net` and `/etc/motd` for the banner text rules; validated against the profile before anything changes ([banners](#banners)). |
 | `linux_compliance_remediate_sysctl_runtime` | `bool` | `true` | Whether the kernel parameter families also set the running value of a rule whose running value the check rejects, and record the value before for cleanup; `false` writes only the persistent drop-in, which the kernel loads at the next boot, and neither reads nor changes the running kernel. Cleanup sets back a recorded running value either way ([kernel parameters](#kernel-parameters)). |
+| `linux_compliance_remediate_value_overrides` | `dict` | `{}` | Maps the short identifier of an XCCDF `Value` to the value that replaces the profile's value as the target of every native rule with that value ([value overrides](#value-overrides)). Validated before anything is read or changed, also when remediation is disabled. No value is overridable yet: every key is refused until its family is wired for overrides. |
 | `linux_compliance_<family>_enabled` | `bool` | `true` | Topic toggle of a registered family, for example `linux_compliance_auditd_enabled: false` turns off every auditd rule. |
 | `linux_compliance_<umbrella>_enabled` | `bool` | `true` | Umbrella toggle of the families an umbrella groups, for example `linux_compliance_services_enabled: false` turns off `sssd`, `time_sync`, `mail` and every other service family; a family toggle only narrows it. `pam` is both a family and the umbrella of `pwquality`, `pwhistory` and `faillock`, so `allow_disruptive: [pam]` allows all four; there is no entry for the `pam` family alone. |
 | `linux_compliance_rule_<rule_short_id>_enabled` | `bool` | not set: follows `linux_compliance_<family>_enabled` | Toggle of one catalogued rule, for example `linux_compliance_rule_file_permissions_crontab_enabled`. Not declared as a role default (ADR 0011, amendment of FREES-53). |
@@ -118,6 +119,56 @@ happens only for a family that has no rule in the profile at all, such as `audit
 A rule toggle copied into the inventory as `"{{ linux_compliance_<family>_enabled }}"` is resolved by Ansible to the
 boolean of the family toggle before the filter checks it: a family toggle passed as the string `"false"` makes both the
 family toggle and every rule toggle that follows it in this way fail the role as non-boolean.
+
+### Value overrides
+
+`linux_compliance_remediate_value_overrides` lets the operator choose the value that a native rule writes instead of
+the value of the selected profile ([ADR 0032](adr/0032-operator-control-community-modules-and-value-overrides.md) §2).
+The key is the short identifier of the XCCDF `Value`, the catalogue's `value_id` (the `profile_value` of
+`content/catalogue.yml`, or a `profile_value_id` without `xccdf_org.ssgproject.content_value_`), and one key applies to
+every rule with that value, such as `var_password_pam_remember`, which both pwhistory `remember` rules use:
+
+```yaml
+linux_compliance_remediate_value_overrides:
+  var_password_pam_minlen: 16
+  var_accounts_user_umask: "027"
+```
+
+The filter `freesecdev.linux_compliance.value_overrides` checks the variable right after the plan, before any family
+runs, and the role stops with `The value overrides are invalid and no change was made to the host` on:
+
+- a key that is not the value of a native rule of the catalogue, including a full `xccdf_org.ssgproject.content_value_`
+  identifier, which the message turns into its short form;
+- a value of the `banners` family: those values are patterns that the banner text must match, and the text itself is
+  chosen with `linux_compliance_remediate_banner_text` ([banners](#banners));
+- a value whose rules name no `value_comparison` yet, because their family is not wired for overrides, or whose rules
+  name different comparisons;
+- a value that the comparison of `plugins/module_utils/compliance/values.py` does not take: only a YAML integer that is
+  not a boolean, or a string, in the form that the family's reader reads as written. A list, a mapping, a boolean and
+  `null` are refused, and so is a umask given as a YAML integer, because YAML 1.1 reads `027` as the octal number 23;
+  quote it.
+
+Every refusal is reported at once, and the keys are checked whether or not `linux_compliance_remediate_enabled` is
+`true`, so a typo fails the first run. A variable that is not a mapping fails the argument validation or the input
+check of the role.
+
+A valid key that this run does not use is not refused, so one inventory can serve several profiles. It is listed in
+`unused_overrides` of `linux_compliance_remediated` as `{value_id, reason}`, and in the notices. The reason is the
+plan's reason for the first rule of the value by rule identifier (`not_in_profile`, `disabled_by_toggle`,
+`disruptive_not_allowed` or `remediation_disabled`), or `no_profile_value_for_content` when a rule of the value is
+applied but the catalogue holds no value of the profile for the discovered content. An override never stands in for a
+missing profile value: the value in force is judged against the profile's, so such a rule still fails its family
+before anything changes, as without the override.
+
+For every rule that the plan applies and that has a value, the role resolves its `value_source` (`override` when an
+override of its value is used, also when it equals the profile's value, else `profile`), its `profile_value` and its
+`target` in the internal fact `__linux_compliance_remediate_values`, with the same lookup that the family files make
+in Jinja. Today no rule names a comparison, so every key is refused and no family reads the fact yet. A family that is
+wired for overrides takes its targets from it, and judges the value in force after the run against the profile's
+value: a looser value is reported as `deviation`, never as `applied` or `compliant`
+([native remediation guide](native-remediation-guide.md#wiring-a-family-for-value-overrides)). The keys of every family,
+their comparison and the value of every profile are listed in the
+[remediation variable reference](remediation-variables.md#value-overrides).
 
 ### Effective state of a rule
 
@@ -360,8 +411,8 @@ test pins it per profile (`sudo_require_reauthentication`: 15 for CIS, 0 for the
 content's `fix` elements are never read ([ADR 0025](adr/0025-own-ansible-remediation-only.md)). A rule may also name
 the comparison of its value with `value_comparison` (an entry of `plugins/module_utils/compliance/values.py`), which
 `make catalogue` copies into its parameters; it is what will make the value overridable by the operator
-([ADR 0032](adr/0032-operator-control-community-modules-and-value-overrides.md)). No rule names one yet, so no value
-can be overridden today.
+([ADR 0032](adr/0032-operator-control-community-modules-and-value-overrides.md)). No rule names one yet, so
+`linux_compliance_remediate_value_overrides` refuses every key today ([value overrides](#value-overrides)).
 
 ### Banners
 
@@ -852,7 +903,8 @@ The role publishes `linux_compliance_remediated`:
 | `results` | Exactly one result per rule planned for `apply` or `cleanup`, from the family files, and per rule planned as `not_implemented`, from the dispatcher (status `not_implemented`, reason `audit_only`, `changed: false`), each with `rule_id`, `family`, `action`, `status`, `reason`, `changed` and `message`. A `not_implemented` result never means that anything was remediated |
 | `disabled_rules` | Rules switched off by a toggle (`rule_id`, `disabled_by`), restricted to the profile when remediation is enabled. The audit role computes the same list itself from the same toggles, so it does not depend on this fact |
 | `orphaned` | Ledger entries for rules that the catalogue no longer contains; nothing is done to them |
-| `notices` | Operator messages |
+| `unused_overrides` | The keys of `linux_compliance_remediate_value_overrides` that no applied rule uses, sorted, each with `value_id` and `reason` ([value overrides](#value-overrides)) |
+| `notices` | Operator messages, including one per unused value override |
 
 ### Ledger versions and the deviation register
 
@@ -924,12 +976,12 @@ already controls the host. A remediated rule is not proof that the control passe
 |---|---|---|
 | `tests/unit/plugins/filter/` | Effective-state resolution and validation (`remediation_plan`), result accounting (`remediation_unaccounted`) and `restricted_mode`, 100% line and branch coverage | `make test-coverage`, `ansible-test units` |
 | `tests/unit/roles/test_remediate_catalogue.py` | The catalogue is valid, the allow-list choices equal the disruptive families, every family with rules has a task file, the recorded collection version equals `galaxy.yml` | `make test-coverage` |
-| `tests/unit/roles/test_remediate_tasks.py` | Every task in `roles/remediate/tasks/*.yml`, including tasks in blocks, is tagged exactly `[always]`; the only exceptions are the three guard tasks of `main.yml`. Every include applies exactly `always` and loads a file below `{{ role_path }}/tasks/`. The completeness check asserts the `remediation_unaccounted` result of the plan and runs before the dispatch is marked complete | `make test-coverage` |
+| `tests/unit/roles/test_remediate_tasks.py` | Every task in `roles/remediate/tasks/*.yml`, including tasks in blocks, is tagged exactly `[always]`; the only exceptions are the three guard tasks of `main.yml`. Every include applies exactly `always` and loads a file below `{{ role_path }}/tasks/`. The completeness check asserts the `remediation_unaccounted` result of the plan and runs before the dispatch is marked complete. The value overrides are checked to be a mapping, resolved by `value_overrides` right after the plan's error check, type-checked, and stop the role on any error before the dispatch; the results publish `unused_overrides` and its notices | `make test-coverage` |
 | `tests/unit/tools/test_check_role_specs.py` | The guard tag is accepted only, and alone, on a top-level `assert`, `fail` or the `__linux_compliance_<role>_dispatched: false` `set_fact` of the role's `tasks/main.yml`. It is refused on other modules, a `set_fact` with other keys, includes, imports, blocks, conditions, loops, nested tasks, `apply`, other task files and another role's name | `make test-coverage` |
 | `tests/playbooks/remediate-check-mode.yml` | Against localhost, in check mode and without `become`. Nothing happens without the opt-in: the ledger read and the profile check are skipped. The reference rule is planned and the host is unchanged. Invalid toggles, allow-list entries, a profile mismatch and an empty profile fail. The `file_permissions` helpers, called with synthetic planned rules against `tests/playbooks/fixtures/remediate/` (a regular file and a symbolic link): the prior mode is recorded only without a ledger entry, a symbolic link or an absent target is never changed, invalid recorded modes (`abc`, `06440`, a trailing newline, no mode) and absent or non-regular targets keep the entry as `cleanup_incomplete`, and the family file and helpers refuse to run without the opt-in or for a rule the dispatcher did not plan. Every play refuses to run without `--check`. The target runs it twice, the second time with `--skip-tags file_permissions` | `make test-remediate-check-role`, CI job `test-playbooks-remediate` |
 | `tests/playbooks/remediate-disruptive.yml` | The real remediate role in check mode against a copy of the collection in which `audit_rules_immutable` is a native `auditd` rule (`tools/roles/promote_native_rule.py`). With the default toggles and allow-list the rule is `skip` with `disruptive_not_allowed`, one notice names it and no family is dispatched; with `auditd` on the allow-list it is planned for `apply` and the role fails closed at the completeness check because the copy has no `auditd` task file. Refuses to run without `--check` (FREES-153) | `make test-remediate-disruptive`, run by `make test-remediate-check-role`, CI job `test-playbooks-remediate` |
 | `tests/unit/plugins/module_utils/compliance/test_toggles.py`, `tests/unit/plugins/filter/test_audit_disabled_rules.py` | Toggle resolution: a rule toggle overriding its family in both directions, a family switched off, the controlling variable, non-boolean values (including an unresolved template string), unknown and reserved toggle names, and that `remediation_plan` and `audit_disabled_rules` agree on the disabled rules for the same toggles, also with the generated defaults templated in | `make test-coverage` |
-| `tests/unit/tools/test_generate_toggles.py` | The generated defaults, argument specifications and reference equal the files in the repository; drift is reported with a diff and nothing is written in `--check` mode; stale toggles are removed; a new rule gets its toggle; an invalid catalogue fails; the YAML renderer round-trips and refuses what it cannot render within 120 characters. 100% line and branch coverage | `make test-coverage`, `make lint-toggles` |
+| `tests/unit/tools/test_generate_toggles.py` | The generated defaults, argument specifications and reference equal the files in the repository; drift is reported with a diff and nothing is written in `--check` mode; stale toggles are removed; a new rule gets its toggle; every value of a family but `banners` gets a row with its rules, its comparison or `not overridable yet`, and the value of every profile per datastream, with `\|` escaped; the families without comparisons agree with the catalogue generator; an invalid catalogue fails; the YAML renderer round-trips and refuses what it cannot render within 120 characters. 100% line and branch coverage | `make test-coverage`, `make lint-toggles` |
 | `tests/playbooks/remediate-check-mode.yml`, toggle plays | In check mode, with the generated defaults: a single rule switched off and a whole topic switched off are not applied, name the rule toggle or the topic toggle as `disabled_by`, and the audit role's `toggles.yml` resolves the same disabled rules; a rule switched back on inside a disabled topic is applied and disabled in neither role; the audit fails before any scan on `linux_compliance_audit_enabled`, a string toggle and a catalogued rule in `linux_compliance_audit_disabled_rules`, and keeps explicit entries for uncatalogued rules | `make test-remediate-check-role`, CI job `test-playbooks-remediate` |
 | `tests/unit/roles/test_audit_tasks.py` | The audit scan task passes exactly the toggle result (`__linux_compliance_audit_toggles.disabled_rules`), and `toggles.yml` runs after the discover check and before the scan and fails closed | `make test-coverage` |
 | `tests/playbooks/audit-toggles-oscap.yml` | The `discover` and `audit` roles, with `become` and a real `oscap`, on the pinned Ubuntu 24.04 `cis_level2_server` content with `linux_compliance_auditd_enabled: false` and `linux_compliance_rule_file_permissions_crontab_enabled: false`: every auditd rule of the catalogue that the profile selects comes back `disabled` and names the topic toggle, the crontab rule names its rule toggle, and the number of `disabled` findings equals the catalogue count plus one | `make test-oscap-integration`, CI job `oscap-integration` |
@@ -944,6 +996,8 @@ already controls the host. A remediated rule is not proof that the control passe
 | `tests/unit/roles/test_subsystem_tags.py` | On the real catalogue: each reviewed example (sssd log files, chrony keys, cron.deny, at.deny and the native crontab rule, `sssd_enable_smartcards`, the GNOME lock on smart card removal, pam_unix `remember`) follows its subsystem toggle in both filters, the audit watches on MAC policy stay with `auditd`, the precedence of `disabled_by`, tags never switch a rule on, and the native crontab rule is cleaned up with `cron` off, also from a ledger entry under a former family name | `make test-coverage` |
 | `tests/unit/tools/test_generate_catalogue_tags.py` | The tag derivation against synthetic datastreams: rule patterns and groups, exclusions, the drift check for untagged families, unused entries and stale exclusions, the rendering into the catalogue and the reference, and every invalid source | `make test-coverage` |
 | `tests/playbooks/remediate-skip-always.yml` | With `--check --skip-tags always`, the role fails through its guard instead of silently doing nothing | `make test-remediate-check-role`, CI job `test-playbooks-remediate` |
+| `tests/unit/plugins/filter/test_value_overrides.py` | The filter `value_overrides` on synthetic catalogues and plans: the target is the override's canonical text (`16` for the YAML integer and for the string), also when it equals or is looser than the profile's value, with `value_source: override`; one key applies to every rule of a shared value, and is used when one of them is applied; every refusal (unknown key, full value identifier, a key that is not a string, banner value, a rule without `value_comparison`, rules with different comparisons, an unknown comparison, booleans, `null`, lists, mappings, floats, leading zeros, signs, out-of-range values, a umask as a YAML integer or without its leading zero) reported at once and bounded; keys validated with remediation disabled; every reason of `unused_overrides` and its notice, the first rule's reason for a shared value, and `no_profile_value_for_content` when the content or the profile has no value; the profile value resolved per content and profile with its parts joined; every malformed option, catalogue and plan failing closed. On the real catalogue: every value key is refused as not overridable yet or as a banner value, none as unknown, and with every rule applied the resolved profile values are those of the catalogue. 100% line and branch coverage | `make test-coverage` |
+| `tests/playbooks/remediate-value-overrides-check.yml` | The real remediate role in check mode: the cases of every file below `tests/playbooks/vars/value-overrides/` (an unknown key, a full value identifier, a banner value, several refusals at once, each with and without the opt-in, and overrides that are a list, which the argument validation refuses) and, read from the catalogue at run time, the first and the last value whose rules name no comparison yet; each stops the role at the override check (or the argument validation), before any family runs. Without overrides nothing is listed as unused. Refuses to run without `--check` | `make test-remediate-check-role`, CI job `test-playbooks-remediate` |
 | `tests/playbooks/remediate-native-check.yml` | Against localhost in check mode: with the Ubuntu 24.04 CIS profile and `pwquality` allow-listed, every banner and password quality rule gets exactly one result, `changed` exactly when it is `applied`, and the banner and pwquality files are unchanged; a banner text with a getty escape, an operating system name, an empty text, the default text under the STIG profile and a content without catalogued values fail at the text check, and the short DoD notice passes it; a pwquality rule without a profile value fails before any change; every banner and pwquality file and helper refuses to run without the opt-in | `make test-remediate-check-native`, CI job `test-playbooks-native` |
 | `tests/unit/tools/test_content_golden_ssh.py` | With the pinned content: the check of every native ssh rule on both platforms reads `sshd_config` and the rule's own drop-in with `check="all"`, each fixed value satisfies the check's state and each profile value is exported by the check, no pinned profile selects two native ssh rules for one keyword, the crypto rules carry the RHEL 9 refusal, every drop-in sorts before the distributions' drop-ins, and `sshd_rekey_limit` refuses every drop-in | `make test-content-golden`, CI job `test-suites` |
 | `tests/unit/tools/test_content_golden_auditd.py` | With the pinned content: every rules.d check of every profile that selects a native audit rule is matched by a line of the rule's drop-in, with the profile's value; every auditd.conf line passes the check's pattern and state; no pinned profile selects two native rules for one setting; every alternation offers a value that the role writes; the role's line form refuses control lines | `make test-content-golden`, CI job `test-suites` |

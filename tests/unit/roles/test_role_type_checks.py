@@ -39,6 +39,7 @@ KEY_FACTS: dict[str, dict[str, str]] = {
             "__linux_compliance_remediate_toggle_names is sequence"
         ),
         "__linux_compliance_remediate_plan": "__linux_compliance_remediate_plan is mapping",
+        "__linux_compliance_remediate_values": "__linux_compliance_remediate_values is mapping",
         "__linux_compliance_remediate_results": "__linux_compliance_remediate_results is sequence",
     },
     "verify": {

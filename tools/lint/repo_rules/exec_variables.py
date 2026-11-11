@@ -143,6 +143,7 @@ PLAYBOOK_PYTHON_FILES: Final[tuple[str, ...]] = (
     "tests/playbooks/remediate-native-check.yml",
     "tests/playbooks/remediate-pam-conf-check.yml",
     "tests/playbooks/remediate-skip-always.yml",
+    "tests/playbooks/remediate-value-overrides-check.yml",
 )
 MOLECULE_DOCKER: Final[str] = "community.docker.docker"
 LIBVIRT_SIMULATED_SSH_ARGUMENTS: Final[str] = (

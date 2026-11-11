@@ -1,0 +1,102 @@
+---
+- name: Value overrides in check mode | Every refused override stops the role before anything changes
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    value_override_stop_task: Remediate | Stop on a value override that is unknown, not overridable yet or invalid
+    value_override_discovered:
+      profile_id: xccdf_org.ssgproject.content_profile_cis_level1_server
+      benchmark_id: xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04
+      content_sha256: c4da7bea2e285326d692ade7c06c9f87750c0d6bd0e850a74c78220b893cb393
+      rule_ids:
+        - xccdf_org.ssgproject.content_rule_file_permissions_crontab
+  tasks:
+    - name: Refuse to run outside check mode
+      ansible.builtin.assert:
+        that:
+          - ansible_check_mode
+        fail_msg: This test playbook only runs with --check; it must never change the host.
+        quiet: true
+
+    - name: Load the generated catalogue
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../../roles/remediate/vars/rules.yml"
+        name: value_override_catalogue
+
+    - name: Collect the cases of every file below vars/value-overrides
+      ansible.builtin.set_fact:
+        value_override_cases: >-
+          {{ value_override_cases | default([])
+             + (lookup('ansible.builtin.file', item) | ansible.builtin.from_yaml).value_override_cases }}
+      loop: "{{ query('ansible.builtin.fileglob', playbook_dir ~ '/vars/value-overrides/*.yml') | sort }}"
+
+    - name: Find the values whose rules name no comparison yet, other than the banner values
+      ansible.builtin.set_fact:
+        value_override_unwired: >-
+          {{ value_override_catalogue.__linux_compliance_remediate_rules
+             | selectattr('parameters.value_id', 'defined')
+             | rejectattr('parameters.value_comparison', 'defined')
+             | rejectattr('family', 'equalto', 'banners')
+             | map(attribute='parameters.value_id') | list }}
+
+    - name: Add the case of a value that is not overridable yet, when the catalogue still has one
+      ansible.builtin.set_fact:
+        value_override_cases: >-
+          {{ value_override_cases
+             + [{'name': 'a value whose rules name no comparison: ' ~ value_override_unwired[0],
+                 'overrides': {value_override_unwired[0]: '1'},
+                 'expect': value_override_unwired[0] ~ ' cannot be overridden yet'},
+                {'name': 'a value whose rules name no comparison, with the opt-in',
+                 'enabled': true,
+                 'overrides': {value_override_unwired[-1]: '1'},
+                 'expect': value_override_unwired[-1] ~ ' cannot be overridden yet'}] }}
+      when: value_override_unwired | length > 0
+
+    - name: Check that the cases are well formed
+      ansible.builtin.assert:
+        that:
+          - value_override_cases | length >= 7
+          - value_override_cases | map(attribute='name') | unique | length == value_override_cases | length
+          - value_override_cases | rejectattr('expect', 'defined') | list == []
+          - value_override_cases | rejectattr('overrides', 'defined') | list == []
+          - >-
+            value_override_cases | selectattr('task', 'defined') | map(attribute='task')
+            | reject('in', ['arguments', 'values']) | list == []
+        quiet: true
+
+    - name: Run every case
+      ansible.builtin.include_tasks:
+        file: tasks/value_override_case.yml
+      loop: "{{ value_override_cases }}"
+      loop_control:
+        loop_var: case
+        label: "{{ case.name }}"
+
+- name: Value overrides in check mode | Without overrides nothing is reported as unused
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+  tasks:
+    - name: Refuse to run outside check mode
+      ansible.builtin.assert:
+        that:
+          - ansible_check_mode
+        fail_msg: This test playbook only runs with --check; it must never change the host.
+        quiet: true
+
+    - name: Run the remediate role with its defaults
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.remediate
+
+    - name: Check the published unused overrides and notices
+      ansible.builtin.assert:
+        that:
+          - linux_compliance_remediated.unused_overrides == []
+          - linux_compliance_remediated.notices | select('search', 'value override') | list == []
+          - __linux_compliance_remediate_values.rules == {}
+          - __linux_compliance_remediate_values.errors == []
+        quiet: true

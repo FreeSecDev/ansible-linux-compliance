@@ -117,6 +117,28 @@ variables (`-e`), never as role parameters (`roles: [{role: ..., <toggle>: false
 undeclared role parameter before anything runs. Topic toggles are declared and work as
 role parameters too.
 
+## Value overrides
+
+A native rule writes the value that the selected profile gives its XCCDF `Value`.
+`linux_compliance_remediate_value_overrides` maps the short identifier of such a value
+to the value that replaces the profile's value as the target of every rule with that
+value ([ADR 0032](adr/0032-operator-control-community-modules-and-value-overrides.md)),
+for example `{var_password_pam_minlen: 16}`. A value is a YAML integer or a string; a
+umask is a quoted string such as `'027'`. Each family section below lists the values of
+its rules, the comparison that makes a value overridable and the value of every profile
+per datastream. A value is overridable only once its rules name a comparison: until
+its family is wired for overrides the table says `not overridable yet`, and an override
+of it fails the role. The banner values are patterns to match and are not listed; the
+banner text is chosen with `linux_compliance_remediate_banner_text`.
+
+The role refuses an unknown key, a banner value, a value that is not overridable yet
+and a value that the comparison does not take before it reads or changes anything, also
+when remediation is disabled. A key that the profile, the toggles or the disruptive
+allow-list leave unused, or that has no profile value for the discovered content, is not
+refused: it is listed in `unused_overrides` of `linux_compliance_remediated` with the
+reason, and in the notices. How a value in force is judged against the profile is in
+[the remediation guide](remediation.md#value-overrides).
+
 ## Topic toggles
 
 An umbrella row lists the families that it groups; the disruptive flag of an umbrella is
@@ -632,6 +654,24 @@ families through their subsystem tags:
 | `linux_compliance_rule_auditd_overflow_action_enabled` | `auditd_overflow_action` | `recorded_value` |
 | `linux_compliance_rule_auditd_write_logs_enabled` | `auditd_write_logs` | `recorded_value` |
 
+Values of the `auditd_conf` rules, the keys of `linux_compliance_remediate_value_overrides`:
+
+| Key | Rules | Comparison | Profile values |
+|---|---|---|---|
+| `var_auditd_disk_error_action` | `auditd_data_disk_error_action` | not overridable yet | `ubuntu2404` cis_level2_server, cis_level2_workstation: `syslog\|single\|halt`; `rhel9` cis, cis_workstation_l2: `syslog\|single\|halt` |
+| `var_auditd_disk_full_action` | `auditd_data_disk_full_action` | not overridable yet | `ubuntu2404` cis_level2_server, cis_level2_workstation: `halt\|single`; `rhel9` cis, cis_workstation_l2: `halt\|single` |
+| `var_auditd_action_mail_acct` | `auditd_data_retention_action_mail_acct` | not overridable yet | `ubuntu2404` cis_level2_server, cis_level2_workstation, stig: `root`; `rhel9` cis, cis_workstation_l2, stig, stig_gui: `root` |
+| `var_auditd_admin_space_left_action` | `auditd_data_retention_admin_space_left_action` | not overridable yet | `ubuntu2404` cis_level2_server, cis_level2_workstation: `halt`; `rhel9` cis, cis_workstation_l2: `single\|halt`; `rhel9` pci-dss, stig, stig_gui: `single` |
+| `var_auditd_admin_space_left_percentage` | `auditd_data_retention_admin_space_left_percentage` | not overridable yet | `rhel9` stig, stig_gui: `5` |
+| `var_auditd_flush` | `auditd_data_retention_flush` | not overridable yet | `rhel9` cui, e8, ism_o, ospp: `incremental_async`; `rhel9` hipaa: `data` |
+| `var_auditd_max_log_file` | `auditd_data_retention_max_log_file` | not overridable yet | `ubuntu2404` cis_level2_server, cis_level2_workstation: `6`; `rhel9` cis, cis_workstation_l2: `6` |
+| `var_auditd_max_log_file_action` | `auditd_data_retention_max_log_file_action` | not overridable yet | `ubuntu2404` cis_level2_server, cis_level2_workstation: `keep_logs`; `rhel9` ccn_advanced, ccn_basic, ccn_intermediate: `rotate`; `rhel9` cis, cis_workstation_l2: `keep_logs` |
+| `var_auditd_space_left` | `auditd_data_retention_space_left` | not overridable yet | `rhel9` pci-dss: `100` |
+| `var_auditd_space_left_action` | `auditd_data_retention_space_left_action` | not overridable yet | `ubuntu2404` cis_level2_server, cis_level2_workstation, stig: `email`; `rhel9` cis, cis_workstation_l2: `email\|exec\|single\|halt`; `rhel9` pci-dss, stig, stig_gui: `email` |
+| `var_auditd_space_left_percentage` | `auditd_data_retention_space_left_percentage` | not overridable yet | `ubuntu2404` stig: `25`; `rhel9` stig, stig_gui: `25` |
+| `var_auditd_freq` | `auditd_freq` | not overridable yet | `rhel9` cui, e8, ism_o, ospp: `50`; `rhel9` stig, stig_gui: `100` |
+| `var_auditd_name_format` | `auditd_name_format` | not overridable yet | `rhel9` cui, e8, ism_o, ospp: `hostname`; `rhel9` pci-dss: `fqd`; `rhel9` stig, stig_gui: `hostname\|fqd\|numeric` |
+
 ### `auditd`
 
 | Variable | Rule | Strategy |
@@ -1123,6 +1163,30 @@ families through their subsystem tags:
 | `linux_compliance_rule_sysctl_net_ipv4_tcp_rfc1337_enabled` | `sysctl_net_ipv4_tcp_rfc1337` | `recorded_value` |
 | `linux_compliance_rule_sysctl_net_ipv4_tcp_syncookies_enabled` | `sysctl_net_ipv4_tcp_syncookies` | `recorded_value` |
 
+Values of the `ipv4_parameters` rules, the keys of `linux_compliance_remediate_value_overrides`:
+
+| Key | Rules | Comparison | Profile values |
+|---|---|---|---|
+| `sysctl_net_ipv4_conf_all_accept_redirects_value` | `sysctl_net_ipv4_conf_all_accept_redirects` | not overridable yet | `ubuntu2404` cis_level1_server, cis_level1_workstation, cis_level2_server, cis_level2_workstation: `0`; `rhel9` anssi_bp28_enhanced, anssi_bp28_high, anssi_bp28_intermediary, ccn_advanced, ccn_basic, ccn_intermediate, cis, cis_server_l1, cis_workstation_l1, cis_workstation_l2, stig, stig_gui: `0` |
+| `sysctl_net_ipv4_conf_all_accept_source_route_value` | `sysctl_net_ipv4_conf_all_accept_source_route` | not overridable yet | `ubuntu2404` cis_level1_server, cis_level1_workstation, cis_level2_server, cis_level2_workstation: `0`; `rhel9` anssi_bp28_enhanced, anssi_bp28_high, anssi_bp28_intermediary, ccn_advanced, ccn_basic, ccn_intermediate, cis, cis_server_l1, cis_workstation_l1, cis_workstation_l2, stig, stig_gui: `0` |
+| `sysctl_net_ipv4_conf_all_arp_filter_value` | `sysctl_net_ipv4_conf_all_arp_filter` | not overridable yet | `rhel9` anssi_bp28_enhanced, anssi_bp28_high, anssi_bp28_intermediary: `0` |
+| `sysctl_net_ipv4_conf_all_arp_ignore_value` | `sysctl_net_ipv4_conf_all_arp_ignore` | not overridable yet | `rhel9` anssi_bp28_enhanced, anssi_bp28_high, anssi_bp28_intermediary: `2` |
+| `sysctl_net_ipv4_conf_all_forwarding_value` | `sysctl_net_ipv4_conf_all_forwarding` | not overridable yet | `rhel9` stig, stig_gui: `0` |
+| `sysctl_net_ipv4_conf_all_log_martians_value` | `sysctl_net_ipv4_conf_all_log_martians` | not overridable yet | `ubuntu2404` cis_level1_server, cis_level1_workstation, cis_level2_server, cis_level2_workstation: `1`; `rhel9` ccn_advanced, ccn_basic, ccn_intermediate, cis, cis_server_l1, cis_workstation_l1, cis_workstation_l2, stig, stig_gui: `1` |
+| `sysctl_net_ipv4_conf_all_rp_filter_value` | `sysctl_net_ipv4_conf_all_rp_filter` | not overridable yet | `ubuntu2404` cis_level1_server, cis_level1_workstation, cis_level2_server, cis_level2_workstation: `1`; `rhel9` anssi_bp28_enhanced, anssi_bp28_high, anssi_bp28_intermediary, ccn_advanced, ccn_basic, ccn_intermediate, cis, cis_server_l1, cis_workstation_l1, cis_workstation_l2, pci-dss, stig, stig_gui: `1` |
+| `sysctl_net_ipv4_conf_all_secure_redirects_value` | `sysctl_net_ipv4_conf_all_secure_redirects` | not overridable yet | `ubuntu2404` cis_level1_server, cis_level1_workstation, cis_level2_server, cis_level2_workstation: `0`; `rhel9` anssi_bp28_enhanced, anssi_bp28_high, anssi_bp28_intermediary, ccn_advanced, ccn_basic, ccn_intermediate, cis, cis_server_l1, cis_workstation_l1, cis_workstation_l2, pci-dss: `0` |
+| `sysctl_net_ipv4_conf_all_shared_media_value` | `sysctl_net_ipv4_conf_all_shared_media` | not overridable yet | `rhel9` anssi_bp28_enhanced, anssi_bp28_high, anssi_bp28_intermediary: `0` |
+| `sysctl_net_ipv4_conf_default_accept_redirects_value` | `sysctl_net_ipv4_conf_default_accept_redirects` | not overridable yet | `ubuntu2404` cis_level1_server, cis_level1_workstation, cis_level2_server, cis_level2_workstation: `0`; `rhel9` anssi_bp28_enhanced, anssi_bp28_high, anssi_bp28_intermediary, ccn_advanced, ccn_basic, ccn_intermediate, cis, cis_server_l1, cis_workstation_l1, cis_workstation_l2, pci-dss, stig, stig_gui: `0` |
+| `sysctl_net_ipv4_conf_default_accept_source_route_value` | `sysctl_net_ipv4_conf_default_accept_source_route` | not overridable yet | `ubuntu2404` cis_level1_server, cis_level1_workstation, cis_level2_server, cis_level2_workstation: `0`; `rhel9` anssi_bp28_enhanced, anssi_bp28_high, anssi_bp28_intermediary, ccn_advanced, ccn_basic, ccn_intermediate, cis, cis_server_l1, cis_workstation_l1, cis_workstation_l2, stig, stig_gui: `0` |
+| `sysctl_net_ipv4_conf_default_log_martians_value` | `sysctl_net_ipv4_conf_default_log_martians` | not overridable yet | `ubuntu2404` cis_level1_server, cis_level1_workstation, cis_level2_server, cis_level2_workstation: `1`; `rhel9` ccn_advanced, ccn_basic, ccn_intermediate, cis, cis_server_l1, cis_workstation_l1, cis_workstation_l2, stig, stig_gui: `1` |
+| `sysctl_net_ipv4_conf_default_rp_filter_value` | `sysctl_net_ipv4_conf_default_rp_filter` | not overridable yet | `ubuntu2404` cis_level1_server, cis_level1_workstation, cis_level2_server, cis_level2_workstation: `1`; `rhel9` anssi_bp28_enhanced, anssi_bp28_high, anssi_bp28_intermediary, ccn_advanced, ccn_basic, ccn_intermediate, cis, cis_server_l1, cis_workstation_l1, cis_workstation_l2, stig, stig_gui: `1` |
+| `sysctl_net_ipv4_conf_default_secure_redirects_value` | `sysctl_net_ipv4_conf_default_secure_redirects` | not overridable yet | `ubuntu2404` cis_level1_server, cis_level1_workstation, cis_level2_server, cis_level2_workstation: `0`; `rhel9` anssi_bp28_enhanced, anssi_bp28_high, anssi_bp28_intermediary, ccn_advanced, ccn_basic, ccn_intermediate, cis, cis_server_l1, cis_workstation_l1, cis_workstation_l2: `0` |
+| `sysctl_net_ipv4_conf_default_shared_media_value` | `sysctl_net_ipv4_conf_default_shared_media` | not overridable yet | `rhel9` anssi_bp28_enhanced, anssi_bp28_high, anssi_bp28_intermediary: `0` |
+| `sysctl_net_ipv4_icmp_echo_ignore_broadcasts_value` | `sysctl_net_ipv4_icmp_echo_ignore_broadcasts` | not overridable yet | `ubuntu2404` cis_level1_server, cis_level1_workstation, cis_level2_server, cis_level2_workstation: `1`; `rhel9` ccn_advanced, ccn_basic, ccn_intermediate, cis, cis_server_l1, cis_workstation_l1, cis_workstation_l2, pci-dss, stig, stig_gui: `1` |
+| `sysctl_net_ipv4_icmp_ignore_bogus_error_responses_value` | `sysctl_net_ipv4_icmp_ignore_bogus_error_responses` | not overridable yet | `ubuntu2404` cis_level1_server, cis_level1_workstation, cis_level2_server, cis_level2_workstation: `1`; `rhel9` anssi_bp28_enhanced, anssi_bp28_high, anssi_bp28_intermediary, ccn_advanced, ccn_basic, ccn_intermediate, cis, cis_server_l1, cis_workstation_l1, cis_workstation_l2, pci-dss, stig, stig_gui: `1` |
+| `sysctl_net_ipv4_tcp_rfc1337_value` | `sysctl_net_ipv4_tcp_rfc1337` | not overridable yet | `rhel9` anssi_bp28_enhanced, anssi_bp28_high, anssi_bp28_intermediary: `1` |
+| `sysctl_net_ipv4_tcp_syncookies_value` | `sysctl_net_ipv4_tcp_syncookies` | not overridable yet | `ubuntu2404` cis_level1_server, cis_level1_workstation, cis_level2_server, cis_level2_workstation, stig: `1`; `rhel9` anssi_bp28_enhanced, anssi_bp28_high, anssi_bp28_intermediary, ccn_advanced, ccn_basic, ccn_intermediate, cis, cis_server_l1, cis_workstation_l1, cis_workstation_l2, pci-dss, stig, stig_gui: `1` |
+
 ### `ipv6_parameters`
 
 | Variable | Rule | Strategy |
@@ -1146,6 +1210,30 @@ families through their subsystem tags:
 | `linux_compliance_rule_sysctl_net_ipv6_conf_default_autoconf_enabled` | `sysctl_net_ipv6_conf_default_autoconf` | `recorded_value` |
 | `linux_compliance_rule_sysctl_net_ipv6_conf_default_max_addresses_enabled` | `sysctl_net_ipv6_conf_default_max_addresses` | `recorded_value` |
 | `linux_compliance_rule_sysctl_net_ipv6_conf_default_router_solicitations_enabled` | `sysctl_net_ipv6_conf_default_router_solicitations` | `recorded_value` |
+
+Values of the `ipv6_parameters` rules, the keys of `linux_compliance_remediate_value_overrides`:
+
+| Key | Rules | Comparison | Profile values |
+|---|---|---|---|
+| `sysctl_net_ipv6_conf_all_accept_ra_value` | `sysctl_net_ipv6_conf_all_accept_ra` | not overridable yet | `ubuntu2404` cis_level1_server, cis_level1_workstation, cis_level2_server, cis_level2_workstation: `0`; `rhel9` ccn_advanced, ccn_basic, ccn_intermediate, cis, cis_server_l1, cis_workstation_l1, cis_workstation_l2, stig, stig_gui: `0` |
+| `sysctl_net_ipv6_conf_all_accept_ra_defrtr_value` | `sysctl_net_ipv6_conf_all_accept_ra_defrtr` | not overridable yet | `rhel9` anssi_bp28_enhanced, anssi_bp28_high, anssi_bp28_intermediary: `0` |
+| `sysctl_net_ipv6_conf_all_accept_ra_pinfo_value` | `sysctl_net_ipv6_conf_all_accept_ra_pinfo` | not overridable yet | `rhel9` anssi_bp28_enhanced, anssi_bp28_high, anssi_bp28_intermediary: `0` |
+| `sysctl_net_ipv6_conf_all_accept_ra_rtr_pref_value` | `sysctl_net_ipv6_conf_all_accept_ra_rtr_pref` | not overridable yet | `rhel9` anssi_bp28_enhanced, anssi_bp28_high, anssi_bp28_intermediary: `0` |
+| `sysctl_net_ipv6_conf_all_accept_redirects_value` | `sysctl_net_ipv6_conf_all_accept_redirects` | not overridable yet | `ubuntu2404` cis_level1_server, cis_level1_workstation, cis_level2_server, cis_level2_workstation: `0`; `rhel9` anssi_bp28_enhanced, anssi_bp28_high, anssi_bp28_intermediary, ccn_advanced, ccn_basic, ccn_intermediate, cis, cis_server_l1, cis_workstation_l1, cis_workstation_l2, stig, stig_gui: `0` |
+| `sysctl_net_ipv6_conf_all_accept_source_route_value` | `sysctl_net_ipv6_conf_all_accept_source_route` | not overridable yet | `ubuntu2404` cis_level1_server, cis_level1_workstation, cis_level2_server, cis_level2_workstation: `0`; `rhel9` anssi_bp28_enhanced, anssi_bp28_high, anssi_bp28_intermediary, ccn_advanced, ccn_basic, ccn_intermediate, cis, cis_server_l1, cis_workstation_l1, cis_workstation_l2, stig, stig_gui: `0` |
+| `sysctl_net_ipv6_conf_all_autoconf_value` | `sysctl_net_ipv6_conf_all_autoconf` | not overridable yet | `rhel9` anssi_bp28_enhanced, anssi_bp28_high, anssi_bp28_intermediary: `0` |
+| `sysctl_net_ipv6_conf_all_forwarding_value` | `sysctl_net_ipv6_conf_all_forwarding` | not overridable yet | `ubuntu2404` cis_level1_server, cis_level1_workstation, cis_level2_server, cis_level2_workstation: `0`; `rhel9` cis, cis_server_l1, cis_workstation_l1, cis_workstation_l2, stig, stig_gui: `0` |
+| `sysctl_net_ipv6_conf_all_max_addresses_value` | `sysctl_net_ipv6_conf_all_max_addresses` | not overridable yet | `rhel9` anssi_bp28_enhanced, anssi_bp28_high, anssi_bp28_intermediary: `1` |
+| `sysctl_net_ipv6_conf_all_router_solicitations_value` | `sysctl_net_ipv6_conf_all_router_solicitations` | not overridable yet | `rhel9` anssi_bp28_enhanced, anssi_bp28_high, anssi_bp28_intermediary: `0` |
+| `sysctl_net_ipv6_conf_default_accept_ra_value` | `sysctl_net_ipv6_conf_default_accept_ra` | not overridable yet | `ubuntu2404` cis_level1_server, cis_level1_workstation, cis_level2_server, cis_level2_workstation: `0`; `rhel9` ccn_advanced, ccn_basic, ccn_intermediate, cis, cis_server_l1, cis_workstation_l1, cis_workstation_l2, stig, stig_gui: `0` |
+| `sysctl_net_ipv6_conf_default_accept_ra_defrtr_value` | `sysctl_net_ipv6_conf_default_accept_ra_defrtr` | not overridable yet | `rhel9` anssi_bp28_enhanced, anssi_bp28_high, anssi_bp28_intermediary: `0` |
+| `sysctl_net_ipv6_conf_default_accept_ra_pinfo_value` | `sysctl_net_ipv6_conf_default_accept_ra_pinfo` | not overridable yet | `rhel9` anssi_bp28_enhanced, anssi_bp28_high, anssi_bp28_intermediary: `0` |
+| `sysctl_net_ipv6_conf_default_accept_ra_rtr_pref_value` | `sysctl_net_ipv6_conf_default_accept_ra_rtr_pref` | not overridable yet | `rhel9` anssi_bp28_enhanced, anssi_bp28_high, anssi_bp28_intermediary: `0` |
+| `sysctl_net_ipv6_conf_default_accept_redirects_value` | `sysctl_net_ipv6_conf_default_accept_redirects` | not overridable yet | `ubuntu2404` cis_level1_server, cis_level1_workstation, cis_level2_server, cis_level2_workstation: `0`; `rhel9` anssi_bp28_enhanced, anssi_bp28_high, anssi_bp28_intermediary, ccn_advanced, ccn_basic, ccn_intermediate, cis, cis_server_l1, cis_workstation_l1, cis_workstation_l2, stig, stig_gui: `0` |
+| `sysctl_net_ipv6_conf_default_accept_source_route_value` | `sysctl_net_ipv6_conf_default_accept_source_route` | not overridable yet | `ubuntu2404` cis_level1_server, cis_level1_workstation, cis_level2_server, cis_level2_workstation: `0`; `rhel9` anssi_bp28_enhanced, anssi_bp28_high, anssi_bp28_intermediary, ccn_advanced, ccn_basic, ccn_intermediate, cis, cis_server_l1, cis_workstation_l1, cis_workstation_l2, pci-dss, stig, stig_gui: `0` |
+| `sysctl_net_ipv6_conf_default_autoconf_value` | `sysctl_net_ipv6_conf_default_autoconf` | not overridable yet | `rhel9` anssi_bp28_enhanced, anssi_bp28_high, anssi_bp28_intermediary: `0` |
+| `sysctl_net_ipv6_conf_default_max_addresses_value` | `sysctl_net_ipv6_conf_default_max_addresses` | not overridable yet | `rhel9` anssi_bp28_enhanced, anssi_bp28_high, anssi_bp28_intermediary: `1` |
+| `sysctl_net_ipv6_conf_default_router_solicitations_value` | `sysctl_net_ipv6_conf_default_router_solicitations` | not overridable yet | `rhel9` anssi_bp28_enhanced, anssi_bp28_high, anssi_bp28_intermediary: `0` |
 
 ### `ipsec`
 
@@ -1366,6 +1454,19 @@ families through their subsystem tags:
 | `linux_compliance_rule_harden_sshd_macs_openssh_conf_crypto_policy_enabled` | `harden_sshd_macs_openssh_conf_crypto_policy` | `crypto_policy` |
 | `linux_compliance_rule_harden_sshd_macs_opensshserver_conf_crypto_policy_enabled` | `harden_sshd_macs_opensshserver_conf_crypto_policy` | `crypto_policy` |
 
+Values of the `ssh` rules, the keys of `linux_compliance_remediate_value_overrides`:
+
+| Key | Rules | Comparison | Profile values |
+|---|---|---|---|
+| `sshd_idle_timeout_value` | `sshd_set_idle_timeout` | not overridable yet | `ubuntu2404` cis_level1_server, cis_level1_workstation, cis_level2_server, cis_level2_workstation: `300`; `ubuntu2404` stig: `600`; `rhel9` ccn_advanced, ccn_basic, ccn_intermediate, pci-dss: `900`; `rhel9` cis, cis_server_l1, cis_workstation_l1, cis_workstation_l2: `300`; `rhel9` stig, stig_gui: `600` |
+| `var_sshd_set_keepalive` | `sshd_set_keepalive` | not overridable yet | `ubuntu2404` cis_level1_server, cis_level1_workstation, cis_level2_server, cis_level2_workstation: `3`; `ubuntu2404` stig: `1`; `rhel9` ccn_advanced, ccn_basic, ccn_intermediate, cis, cis_server_l1, cis_workstation_l1, cis_workstation_l2, pci-dss, stig, stig_gui: `1` |
+| `var_sshd_set_login_grace_time` | `sshd_set_login_grace_time` | not overridable yet | `ubuntu2404` cis_level1_server, cis_level1_workstation, cis_level2_server, cis_level2_workstation: `60`; `rhel9` cis, cis_server_l1, cis_workstation_l1, cis_workstation_l2, pci-dss: `60` |
+| `sshd_max_auth_tries_value` | `sshd_set_max_auth_tries` | not overridable yet | `ubuntu2404` cis_level1_server, cis_level1_workstation, cis_level2_server, cis_level2_workstation: `4`; `rhel9` cis, cis_server_l1, cis_workstation_l1, cis_workstation_l2, pci-dss: `4`; `rhel9` ism_o: `5` |
+| `var_sshd_max_sessions` | `sshd_set_max_sessions` | not overridable yet | `ubuntu2404` cis_level1_server, cis_level1_workstation, cis_level2_server, cis_level2_workstation: `10`; `rhel9` cis, cis_server_l1, cis_workstation_l1, cis_workstation_l2, pci-dss: `10` |
+| `var_sshd_set_maxstartups` | `sshd_set_maxstartups` | not overridable yet | `ubuntu2404` cis_level1_server, cis_level1_workstation, cis_level2_server, cis_level2_workstation: `10:30:60`; `rhel9` cis, cis_server_l1, cis_workstation_l1, cis_workstation_l2: `10:30:60`; `rhel9` pci-dss: `10:30:100` |
+| `sshd_strong_kex` | `sshd_use_strong_kex` | not overridable yet | `ubuntu2404` cis_level1_server, cis_level1_workstation, cis_level2_server, cis_level2_workstation: `sntrup761x25519-sha512@openssh.com,curve25519-sha256,curve25519-sha256@libssh.org,ecdh-sha2-nistp256,ecdh-sha2-nistp384,ecdh-sha2-nistp521,diffie-hellman-group-exchange-sha256,diffie-hellman-group16-sha512,diffie-hellman-group18-sha512,diffie-hellman-group14-sha256` |
+| `sshd_strong_macs` | `sshd_use_strong_macs` | not overridable yet | `ubuntu2404` cis_level1_server, cis_level1_workstation, cis_level2_server, cis_level2_workstation: `hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com,hmac-sha2-512,hmac-sha2-256` |
+
 ### `pam`
 
 | Variable | Rule | Strategy |
@@ -1417,6 +1518,24 @@ families through their subsystem tags:
 | `linux_compliance_rule_accounts_password_pam_ucredit_enabled` | `accounts_password_pam_ucredit` | `recorded_value` |
 | `linux_compliance_rule_package_pam_pwquality_installed_enabled` | `package_pam_pwquality_installed` | `audit_only` |
 
+Values of the `pwquality` rules, the keys of `linux_compliance_remediate_value_overrides`:
+
+| Key | Rules | Comparison | Profile values |
+|---|---|---|---|
+| `var_password_pam_dcredit` | `accounts_password_pam_dcredit` | not overridable yet | `ubuntu2404` cis_level1_server, cis_level1_workstation, cis_level2_server, cis_level2_workstation, stig: `-1`; `rhel9` anssi_bp28_enhanced, anssi_bp28_high, anssi_bp28_intermediary, anssi_bp28_minimal, ccn_advanced, ccn_basic, ccn_intermediate, cui, ospp, pci-dss, stig, stig_gui: `-1` |
+| `var_password_pam_dictcheck` | `accounts_password_pam_dictcheck` | not overridable yet | `ubuntu2404` cis_level1_server, cis_level1_workstation, cis_level2_server, cis_level2_workstation, stig: `1`; `rhel9` cis, cis_server_l1, cis_workstation_l1, cis_workstation_l2, stig, stig_gui: `1` |
+| `var_password_pam_difok` | `accounts_password_pam_difok` | not overridable yet | `ubuntu2404` cis_level1_server, cis_level1_workstation, cis_level2_server, cis_level2_workstation: `2`; `ubuntu2404` stig: `8`; `rhel9` cis, cis_server_l1, cis_workstation_l1, cis_workstation_l2: `2`; `rhel9` stig, stig_gui: `8` |
+| `var_password_pam_enforcing` | `accounts_password_pam_enforcing` | not overridable yet | `ubuntu2404` cis_level1_server, cis_level1_workstation, cis_level2_server, cis_level2_workstation, stig: `1` |
+| `var_password_pam_lcredit` | `accounts_password_pam_lcredit` | not overridable yet | `ubuntu2404` cis_level1_server, cis_level1_workstation, cis_level2_server, cis_level2_workstation, stig: `-1`; `rhel9` anssi_bp28_enhanced, anssi_bp28_high, anssi_bp28_intermediary, anssi_bp28_minimal, ccn_advanced, ccn_basic, ccn_intermediate, cui, ospp, pci-dss, stig, stig_gui: `-1` |
+| `var_password_pam_maxclassrepeat` | `accounts_password_pam_maxclassrepeat` | not overridable yet | `rhel9` stig, stig_gui: `4` |
+| `var_password_pam_maxrepeat` | `accounts_password_pam_maxrepeat` | not overridable yet | `ubuntu2404` cis_level1_server, cis_level1_workstation, cis_level2_server, cis_level2_workstation: `3`; `rhel9` cis, cis_server_l1, cis_workstation_l1, cis_workstation_l2, stig, stig_gui: `3` |
+| `var_password_pam_maxsequence` | `accounts_password_pam_maxsequence` | not overridable yet | `ubuntu2404` cis_level1_server, cis_level1_workstation, cis_level2_server, cis_level2_workstation: `3`; `rhel9` cis, cis_server_l1, cis_workstation_l1, cis_workstation_l2: `3` |
+| `var_password_pam_minclass` | `accounts_password_pam_minclass` | not overridable yet | `ubuntu2404` cis_level1_server, cis_level1_workstation, cis_level2_server, cis_level2_workstation: `4`; `rhel9` anssi_bp28_enhanced, anssi_bp28_high, anssi_bp28_intermediary, anssi_bp28_minimal, cis, cis_server_l1, cis_workstation_l1, cis_workstation_l2, stig, stig_gui: `4` |
+| `var_password_pam_minlen` | `accounts_password_pam_minlen` | not overridable yet | `ubuntu2404` cis_level1_server, cis_level1_workstation, cis_level2_server, cis_level2_workstation: `14`; `ubuntu2404` stig: `15`; `rhel9` anssi_bp28_enhanced, anssi_bp28_high, anssi_bp28_intermediary, anssi_bp28_minimal, stig, stig_gui: `15`; `rhel9` ccn_advanced, ccn_basic, ccn_intermediate, cui, ospp, pci-dss: `12`; `rhel9` cis, cis_server_l1, cis_workstation_l1, cis_workstation_l2, ism_o: `14` |
+| `var_password_pam_ocredit` | `accounts_password_pam_ocredit` | not overridable yet | `ubuntu2404` cis_level1_server, cis_level1_workstation, cis_level2_server, cis_level2_workstation, stig: `-1`; `rhel9` anssi_bp28_enhanced, anssi_bp28_high, anssi_bp28_intermediary, anssi_bp28_minimal, ccn_advanced, ccn_basic, ccn_intermediate, cui, ospp, stig, stig_gui: `-1` |
+| `var_password_pam_retry` | `accounts_password_pam_pwquality_retry` | not overridable yet | `rhel9` stig, stig_gui: `3` |
+| `var_password_pam_ucredit` | `accounts_password_pam_ucredit` | not overridable yet | `ubuntu2404` cis_level1_server, cis_level1_workstation, cis_level2_server, cis_level2_workstation, stig: `-1`; `rhel9` anssi_bp28_enhanced, anssi_bp28_high, anssi_bp28_intermediary, anssi_bp28_minimal, ccn_advanced, ccn_basic, ccn_intermediate, cui, ospp, stig, stig_gui: `-1` |
+
 ### `pwhistory`
 
 | Variable | Rule | Strategy |
@@ -1437,6 +1556,12 @@ families through their subsystem tags:
 | `linux_compliance_rule_accounts_password_pam_unix_no_remember_enabled` | `accounts_password_pam_unix_no_remember` | `user_accounts` |
 | `linux_compliance_rule_accounts_password_pam_unix_remember_enabled` | `accounts_password_pam_unix_remember` | `pam` |
 
+Values of the `pwhistory` rules, the keys of `linux_compliance_remediate_value_overrides`:
+
+| Key | Rules | Comparison | Profile values |
+|---|---|---|---|
+| `var_password_pam_remember` | `accounts_password_pam_pwhistory_remember_password_auth`, `accounts_password_pam_pwhistory_remember_system_auth` | not overridable yet | `rhel9` ccn_advanced, ccn_basic, ccn_intermediate: `20`; `rhel9` cis, cis_server_l1, cis_workstation_l1, cis_workstation_l2: `24`; `rhel9` pci-dss: `4` |
+
 ### `faillock`
 
 | Variable | Rule | Strategy |
@@ -1455,6 +1580,15 @@ families through their subsystem tags:
 | `linux_compliance_rule_accounts_passwords_pam_faillock_root_unlock_time_enabled` | `accounts_passwords_pam_faillock_root_unlock_time` | `recorded_value` |
 | `linux_compliance_rule_accounts_passwords_pam_faillock_silent_enabled` | `accounts_passwords_pam_faillock_silent` | `recorded_value` |
 | `linux_compliance_rule_accounts_passwords_pam_faillock_unlock_time_enabled` | `accounts_passwords_pam_faillock_unlock_time` | `recorded_value` |
+
+Values of the `faillock` rules, the keys of `linux_compliance_remediate_value_overrides`:
+
+| Key | Rules | Comparison | Profile values |
+|---|---|---|---|
+| `var_accounts_passwords_pam_faillock_deny` | `accounts_passwords_pam_faillock_deny` | not overridable yet | `ubuntu2404` cis_level1_server, cis_level1_workstation, cis_level2_server, cis_level2_workstation: `4`; `ubuntu2404` stig: `3`; `rhel9` anssi_bp28_enhanced, anssi_bp28_high, anssi_bp28_intermediary, anssi_bp28_minimal, cui, ism_o, ospp, stig, stig_gui: `3`; `rhel9` ccn_advanced: `8`; `rhel9` cis, cis_server_l1, cis_workstation_l1, cis_workstation_l2: `5`; `rhel9` pci-dss: `10` |
+| `var_accounts_passwords_pam_faillock_fail_interval` | `accounts_passwords_pam_faillock_interval` | not overridable yet | `ubuntu2404` stig: `900`; `rhel9` anssi_bp28_enhanced, anssi_bp28_high, anssi_bp28_intermediary, anssi_bp28_minimal, cui, ism_o, ospp, stig, stig_gui: `900` |
+| `var_accounts_passwords_pam_faillock_root_unlock_time` | `accounts_passwords_pam_faillock_root_unlock_time` | not overridable yet | `ubuntu2404` cis_level2_server, cis_level2_workstation: `60` |
+| `var_accounts_passwords_pam_faillock_unlock_time` | `accounts_passwords_pam_faillock_unlock_time` | not overridable yet | `ubuntu2404` cis_level1_server, cis_level1_workstation, cis_level2_server, cis_level2_workstation: `900`; `ubuntu2404` stig: `0`; `rhel9` anssi_bp28_enhanced, anssi_bp28_high, anssi_bp28_intermediary, anssi_bp28_minimal, cis, cis_server_l1, cis_workstation_l1, cis_workstation_l2: `900`; `rhel9` ccn_advanced, cui, ism_o, ospp, stig, stig_gui: `0`; `rhel9` pci-dss: `1800` |
 
 ### `password_aging`
 
@@ -1494,6 +1628,17 @@ families through their subsystem tags:
 | Variable | Rule | Family |
 |---|---|---|
 | `linux_compliance_rule_set_password_hashing_algorithm_logindefs_enabled` | `set_password_hashing_algorithm_logindefs` | `pam` |
+
+Values of the `login_defs` rules, the keys of `linux_compliance_remediate_value_overrides`:
+
+| Key | Rules | Comparison | Profile values |
+|---|---|---|---|
+| `var_accounts_fail_delay` | `accounts_logon_fail_delay` | not overridable yet | `rhel9` stig, stig_gui: `4` |
+| `var_accounts_maximum_age_login_defs` | `accounts_maximum_age_login_defs` | not overridable yet | `ubuntu2404` cis_level1_server, cis_level1_workstation, cis_level2_server, cis_level2_workstation: `365`; `ubuntu2404` stig: `60`; `rhel9` ccn_advanced, ccn_basic, ccn_intermediate: `45`; `rhel9` cis, cis_server_l1, cis_workstation_l1, cis_workstation_l2: `365`; `rhel9` ism_o, stig, stig_gui: `60`; `rhel9` pci-dss: `90` |
+| `var_accounts_minimum_age_login_defs` | `accounts_minimum_age_login_defs` | not overridable yet | `ubuntu2404` cis_level2_server, cis_level2_workstation, stig: `1`; `rhel9` ccn_advanced, ccn_basic, ccn_intermediate: `2`; `rhel9` cis, cis_workstation_l2, ism_o, stig, stig_gui: `1` |
+| `var_accounts_password_minlen_login_defs` | `accounts_password_minlen_login_defs` | not overridable yet | `rhel9` anssi_bp28_enhanced, anssi_bp28_high, anssi_bp28_intermediary, anssi_bp28_minimal: `15`; `rhel9` ccn_advanced, ccn_basic, ccn_intermediate: `12` |
+| `var_accounts_password_warn_age_login_defs` | `accounts_password_warn_age_login_defs` | not overridable yet | `ubuntu2404` cis_level1_server, cis_level1_workstation, cis_level2_server, cis_level2_workstation: `7`; `rhel9` ccn_advanced, ccn_basic, ccn_intermediate: `10`; `rhel9` cis, cis_server_l1, cis_workstation_l1, cis_workstation_l2, ism_o, pci-dss: `7` |
+| `var_accounts_user_umask` | `accounts_umask_etc_login_defs` | not overridable yet | `ubuntu2404` cis_level1_server, cis_level1_workstation, cis_level2_server, cis_level2_workstation: `027`; `ubuntu2404` stig: `077`; `rhel9` anssi_bp28_enhanced, anssi_bp28_high, stig, stig_gui: `077`; `rhel9` ccn_advanced, cis, cis_server_l1, cis_workstation_l1, cis_workstation_l2: `027` |
 
 ### `root_access`
 
@@ -1659,6 +1804,13 @@ families through their subsystem tags:
 | `linux_compliance_rule_disallow_bypass_password_sudo_enabled` | `disallow_bypass_password_sudo` | `pam` |
 | `linux_compliance_rule_ensure_sudo_group_restricted_enabled` | `ensure_sudo_group_restricted` | `user_accounts` |
 | `linux_compliance_rule_selinux_context_elevation_for_sudo_enabled` | `selinux_context_elevation_for_sudo` | `selinux` |
+
+Values of the `sudo` rules, the keys of `linux_compliance_remediate_value_overrides`:
+
+| Key | Rules | Comparison | Profile values |
+|---|---|---|---|
+| `var_sudo_logfile` | `sudo_custom_logfile` | not overridable yet | `ubuntu2404` cis_level1_server, cis_level1_workstation, cis_level2_server, cis_level2_workstation: `/var/log/sudo.log`; `rhel9` cis, cis_server_l1, cis_workstation_l1, cis_workstation_l2, pci-dss: `/var/log/sudo.log` |
+| `var_sudo_timestamp_timeout` | `sudo_require_reauthentication` | not overridable yet | `ubuntu2404` cis_level1_server, cis_level1_workstation, cis_level2_server, cis_level2_workstation: `15`; `rhel9` ccn_advanced, ccn_basic, ccn_intermediate, pci-dss: `5`; `rhel9` cis, cis_server_l1, cis_workstation_l1, cis_workstation_l2: `15`; `rhel9` stig, stig_gui: `0` |
 
 ### `selinux`
 
