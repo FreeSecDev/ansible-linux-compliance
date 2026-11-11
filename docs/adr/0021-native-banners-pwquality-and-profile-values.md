@@ -649,9 +649,12 @@ as another module, its arguments were not read, and the rule could be `compliant
 
 **Decision.**
 
-- The role inspects every module path a second time with `ansible.builtin.stat` and `follow: false` and passes these
-  stats to `pwquality_decide` as `links` in its fifth argument, next to `stats` (the stat through the link with the
-  SHA-256). For a symbolic link, `lnk_source` names the file that the link resolves to, through every further link.
+- The role inspects every module path with `ansible.builtin.stat`, `follow: false` and the SHA-256 of a regular file,
+  and only a path that is a symbolic link a second time through the link; it passes the first stats to
+  `pwquality_decide` as `links` in its fifth argument, and as `stats` the stat through the link of a link and the
+  first stat of any other path, which is the same file. For a symbolic link, `lnk_source` names the file that the
+  link resolves to, through every further link. A stock stack has no links among its module paths, so the family
+  runs no more `stat` calls than before.
 - A line loads `pam_pwquality` also when the path is a symbolic link whose resolved file name holds
   `pam_pwquality`. The order is: the file name of the path, then the resolved file name, then the checksum. Each of
   these can only add a `pam_pwquality` line, never remove one, so the family reads at least as many arguments as
