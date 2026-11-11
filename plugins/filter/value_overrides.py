@@ -30,8 +30,9 @@ description:
     overrides), when the rules of the value name different comparisons, and when the value is not
     one that the comparison takes (C(validate) of C(plugins/module_utils/compliance/values.py)),
     which takes only a YAML integer that is not a boolean, or a string, in the form that the
-    family's reader reads as written. A list, a mapping, a boolean and null are refused. Keys are validated whether or not
-    remediation is enabled, so a typo fails the role before anything is read or changed.
+    family's reader reads as written. A list, a mapping, a boolean and null are refused. Keys are
+    validated whether or not remediation is enabled, so a typo fails the role before anything is
+    read or changed.
   - A valid key that no rule of the plan applies is not refused, because one inventory may serve
     several profiles. It is listed in C(unused_overrides) with the reason of the plan for the first
     of its rules by identifier (C(not_in_profile), C(disabled_by_toggle),
