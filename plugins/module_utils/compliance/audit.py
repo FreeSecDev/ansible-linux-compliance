@@ -9,9 +9,8 @@ the result is a :class:`model.ScanRun` (ADR 0013).
 An audit has two steps. :func:`plan` validates every input, reads the deviation
 register (:mod:`audit_result`), verifies the datastream against its pinned SHA-256,
 resolves the profile and the disabled rules and inspects the output directory without
-creating anything. :func:`execute` then creates the
-run directory, writes the tailoring file for disabled rules, runs the backend and
-stores the evidence.
+creating anything. :func:`execute` then creates the run directory, writes the
+tailoring file for disabled rules, runs the backend and stores the evidence.
 
 Check mode runs the same read-only scan, because operators expect real findings
 from ``--check``, but keeps nothing: :meth:`Auditor.preview` scans into a private
@@ -101,7 +100,7 @@ MAX_EVIDENCE_ENTRIES: Final[int] = 64
 MAX_MESSAGE_LENGTH: Final[int] = 4096
 MAX_ECHO_LENGTH: Final[int] = 64
 HASH_CHUNK_BYTES: Final[int] = 1024 * 1024
-RUN_STATUS_NOT_RUN: Final[str] = audit_result.RUN_STATUS_NOT_RUN
+RUN_STATUS_NOT_RUN: Final[str] = "not_run"
 RULE_TOGGLE_PREFIX: Final[str] = "linux_compliance_rule_"
 RULE_TOGGLE_SUFFIX: Final[str] = "_enabled"
 

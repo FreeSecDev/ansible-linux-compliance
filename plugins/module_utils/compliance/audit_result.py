@@ -39,7 +39,6 @@ from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compli
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-RUN_STATUS_NOT_RUN: Final[str] = "not_run"
 ERROR_DEVIATIONS: Final[str] = "deviation_source_invalid"
 ERROR_DEVIATION_BACKEND: Final[str] = "deviation_backend_unsupported"
 DEVIATION_UNMAPPED_BACKENDS: Final[frozenset[str]] = frozenset({"scc"})
