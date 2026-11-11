@@ -14,7 +14,6 @@ from tools.reporting.common import (
 )
 from tools.reporting.compliance import (
     ComplianceData,
-    check_findings_version,
     scan_run_summary,
     summarize,
     tally_findings,
@@ -28,7 +27,6 @@ def scan_run_data(data: bytes) -> ComplianceData:
     except model.ModelError as error:
         message = f"scan run rejected: {clean_text(str(error), 200)}"
         raise InvalidInputError(message) from None
-    check_findings_version(run)
     status = run.status.value
     unfinished = 0 if status == "completed" else 1
     return ComplianceData(

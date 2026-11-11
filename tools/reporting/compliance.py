@@ -27,9 +27,14 @@ Counting rules:
   percentage and the assessment ``off_platform_benchmark``, and it never enters a
   rule list, a group, a pooled figure or a section summary; the report lists it
   separately (:func:`off_platform_inputs`).
-* A scan run of findings model schema 1.3 can carry operator deviations (ADR 0032),
-  which this report schema neither counts nor holds, so it is an input error, never
-  a pass (:func:`check_findings_version`).
+* A finding flagged ``operator_deviation`` (findings model schema 1.3, ADR 0032) ran
+  under a value looser than the profile, which an operator set. It never counts as a
+  pass: a flagged ``pass`` leaves ``counts`` but stays in ``evaluated``, so the
+  percentage drops and ``all_evaluated_passed`` cannot be reached, and a flagged
+  ``fail`` or ``waived`` stays in its count. ``deviation`` counts every flagged rule and
+  ``deviation_by_outcome`` splits it by outcome, so the sum of ``counts`` plus
+  ``deviation_by_outcome["pass"]`` is the number of rules. A rule merged from several
+  scans is flagged when any of them is (report schema 2.4, ADR 0016).
 """
 
 from dataclasses import dataclass, replace
@@ -40,7 +45,7 @@ from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compli
     model,
     placement,
 )
-from tools.reporting.common import InvalidInputError, to_json
+from tools.reporting.common import to_json
 
 COMPLETED: Final[str] = model.ScanStatus.COMPLETED.value
 NOT_COMPLETED: Final[str] = "not_completed"
@@ -82,11 +87,15 @@ _HUNDRED: Final[Decimal] = Decimal(100)
 
 
 class Tally(NamedTuple):
-    """One evaluated rule reduced to what the summary counts."""
+    """One evaluated rule reduced to what the summary counts.
+
+    ``deviation`` is whether the rule carries an operator deviation.
+    """
 
     outcome: model.Outcome
     severity: model.Severity
     expired_waiver: bool
+    deviation: bool = False
 
 
 @dataclass(frozen=True)
@@ -109,6 +118,9 @@ class Summary:
         open_by_severity: ``fail``, ``error`` and ``notchecked`` rules per severity.
         runs_total: Number of scan runs summarised.
         runs_not_completed: Number of those runs whose scanner did not complete.
+        deviation: Rules flagged ``operator_deviation``, whatever their outcome.
+        deviation_by_outcome: Those rules per outcome, every outcome present. Flagged
+            ``pass`` rules are counted here and in ``evaluated``, never in ``counts``.
     """
 
     run_status: str
@@ -121,6 +133,8 @@ class Summary:
     open_by_severity: dict[str, int]
     runs_total: int
     runs_not_completed: int
+    deviation: int
+    deviation_by_outcome: dict[str, int]
 
 
 def percent(passed: int, evaluated: int) -> float | None:
@@ -150,12 +164,16 @@ def summarize(
 ) -> Summary:
     """Apply the counting rules to ``tallies``."""
     counts = {outcome.value: 0 for outcome in model.Outcome}
+    deviated = {outcome.value: 0 for outcome in model.Outcome}
     open_by_severity = {severity.value: 0 for severity in model.Severity}
     for tally in tallies:
-        counts[tally.outcome.value] += 1
+        if tally.deviation:
+            deviated[tally.outcome.value] += 1
+        if not (tally.deviation and tally.outcome is model.Outcome.PASS):
+            counts[tally.outcome.value] += 1
         if tally.outcome in OPEN_OUTCOMES:
             open_by_severity[tally.severity.value] += 1
-    evaluated = sum(
+    evaluated = deviated[model.Outcome.PASS.value] + sum(
         count
         for name, count in counts.items()
         if model.Outcome(name) not in EXCLUDED_FROM_DENOMINATOR
@@ -173,6 +191,8 @@ def summarize(
         open_by_severity=open_by_severity,
         runs_total=runs_total,
         runs_not_completed=runs_not_completed,
+        deviation=sum(deviated.values()),
+        deviation_by_outcome=deviated,
     )
 
 
@@ -197,33 +217,17 @@ def is_expired_waiver(finding: model.Finding, lapsed: frozenset[str]) -> bool:
     return finding.exception.state is model.ExceptionState.EXPIRED or finding.rule_id in lapsed
 
 
-UNREADABLE_FINDINGS_VERSIONS: Final[frozenset[str]] = frozenset({model.DEVIATION_SCHEMA_VERSION})
-
-
-def check_findings_version(run: model.ScanRun) -> None:
-    """Refuse a scan run whose findings schema version this report cannot represent.
-
-    Findings model schema 1.3 carries operator deviations (ADR 0032, FREES-203). A
-    flagged pass must never count as a pass, and report schema 2.3 has no count and no
-    field for the flag, so such a run is an input error until the report reads it.
-
-    Raises:
-        InvalidInputError: If the run serializes as an unreadable version.
-    """
-    if run.schema_version in UNREADABLE_FINDINGS_VERSIONS:
-        message = (
-            f"scan run rejected: findings schema {run.schema_version} (operator deviations) "
-            "is not supported by this report schema"
-        )
-        raise InvalidInputError(message)
-
-
 def tally_findings(
     findings: tuple[model.Finding, ...], lapsed: frozenset[str] = frozenset()
 ) -> list[Tally]:
     """Reduce findings to tallies. An expired exception never changes the outcome."""
     return [
-        Tally(finding.outcome, finding.severity, is_expired_waiver(finding, lapsed))
+        Tally(
+            finding.outcome,
+            finding.severity,
+            is_expired_waiver(finding, lapsed),
+            deviation=finding.deviation is not None,
+        )
         for finding in findings
     ]
 
@@ -310,13 +314,17 @@ class HostKey:
 
 @dataclass(frozen=True)
 class RuleSource:
-    """Which scan contributed an evaluation of a rule, and what it decided."""
+    """Which scan contributed an evaluation of a rule, and what it decided.
+
+    ``deviation`` is the operator deviation of that scan's finding (report schema 2.4).
+    """
 
     artifact: str
     benchmark_id: str
     profile_id: str
     outcome: model.Outcome
     expired_waiver: bool
+    deviation: model.Deviation | None = None
 
 
 @dataclass(frozen=True)
@@ -327,6 +335,8 @@ class RuleRollup:
     failure in another. Every originating scan is listed with its own outcome.
     ``control`` is the control placement of the rule (report schema 2.3), from the
     first source, by artifact path, whose finding carries one, or ``None``.
+    ``deviation`` (report schema 2.4) is chosen the same way among the sources whose
+    finding is flagged ``operator_deviation``: a rule is flagged when any source is.
     """
 
     rule_id: str
@@ -339,6 +349,7 @@ class RuleRollup:
     expired_waiver: bool
     sources: tuple[RuleSource, ...]
     control: placement.ControlPlacement | None = None
+    deviation: model.Deviation | None = None
 
 
 class _Evaluation(NamedTuple):
@@ -397,10 +408,11 @@ def _collapse(key: RuleKey, evaluations: list[_Evaluation]) -> RuleRollup:
         {evaluation.source for evaluation in evaluations},
         key=lambda source: (source.artifact, source.benchmark_id, source.profile_id),
     )
-    placed = sorted(
-        (evaluation for evaluation in evaluations if evaluation.finding.control is not None),
-        key=lambda evaluation: evaluation.source.artifact,
-    )
+    by_artifact = sorted(evaluations, key=lambda evaluation: evaluation.source.artifact)
+    placed = [evaluation for evaluation in by_artifact if evaluation.finding.control is not None]
+    deviated = [
+        evaluation for evaluation in by_artifact if evaluation.finding.deviation is not None
+    ]
     return RuleRollup(
         rule_id=key.rule_id,
         host=key.host,
@@ -416,6 +428,7 @@ def _collapse(key: RuleKey, evaluations: list[_Evaluation]) -> RuleRollup:
         ),
         sources=tuple(sources),
         control=placed[0].finding.control if placed else None,
+        deviation=deviated[0].finding.deviation if deviated else None,
     )
 
 
@@ -437,6 +450,7 @@ def rollup(entries: list[Entry]) -> list[RuleRollup]:
                 data.profile_id,
                 finding.outcome,
                 is_expired_waiver(finding, lapsed),
+                finding.deviation,
             )
             key = RuleKey(
                 host, data.benchmark_id, data.content_version, data.profile_id, finding.rule_id
@@ -460,7 +474,10 @@ def figure(entries: list[Entry]) -> Summary:
     """
     rules = rollup(entries)
     statuses = [data.scan_status for _, data in entries]
-    tallies = [Tally(rule.outcome, rule.severity, rule.expired_waiver) for rule in rules]
+    tallies = [
+        Tally(rule.outcome, rule.severity, rule.expired_waiver, rule.deviation is not None)
+        for rule in rules
+    ]
     unfinished = sum(1 for status in statuses if status != COMPLETED)
     not_selected = sum(data.not_selected for _, data in entries)
     return summarize(tallies, _run_status(statuses), len(statuses), unfinished, not_selected)
@@ -626,6 +643,42 @@ def off_platform_inputs(entries: list[Entry]) -> list[dict[str, object]]:
             "target_platform": marker.target_platform.to_dict(),
         }
         for artifact, data, marker in marked
+    ]
+
+
+def deviation_entries(entries: list[Entry]) -> list[dict[str, object]]:
+    """Return one structured entry per finding flagged ``operator_deviation`` (report schema 2.4).
+
+    Every input is read, off-platform runs included (``off_platform`` says which), so a
+    deviation stays visible whatever the section status. Each entry names the input, its
+    host key, benchmark, content version, profile and rule, the finding's outcome and the
+    deviation: the XCCDF value, the profile value and the value in force. Entries are
+    sorted by artifact, input digest and rule.
+    """
+    flagged = sorted(
+        (
+            (artifact, data, finding, finding.deviation)
+            for artifact, data in entries
+            for finding in data.findings
+            if finding.deviation is not None
+        ),
+        key=lambda item: (item[0], item[1].input_sha256, item[2].rule_id),
+    )
+    return [
+        {
+            "artifact": artifact,
+            "benchmark_id": data.benchmark_id,
+            "content_version": data.content_version,
+            "effective_value": deviation.effective_value,
+            "host": host_key(data).to_dict(),
+            "off_platform": data.off_platform is not None,
+            "outcome": finding.outcome.value,
+            "profile_id": data.profile_id,
+            "profile_value": deviation.profile_value,
+            "rule_id": finding.rule_id,
+            "value_id": deviation.value_id,
+        }
+        for artifact, data, finding, deviation in flagged
     ]
 
 

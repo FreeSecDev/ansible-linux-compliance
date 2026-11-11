@@ -1,0 +1,16 @@
+---
+minor_changes:
+  - >-
+    reporting - report schema 2.4 reads scan runs of findings model schema 1.3 and counts operator deviations
+    (FREES-203, ADR 0032 decision P). A finding flagged ``operator_deviation`` never counts as a pass: a flagged
+    ``pass`` leaves ``counts.pass`` but stays in ``evaluated``, so the percentage drops and ``all_evaluated_passed``
+    cannot be reached, and a flagged ``fail`` or ``waived`` finding stays in its count. Every summary gains
+    ``deviation`` and ``deviation_by_outcome``, every rule and rule source gains ``deviation``, a rule merged from
+    several scans is flagged when any of them is, ``sections.compliance.deviations`` lists every flagged finding of
+    every input whatever the section status, and ``overview.deviation`` counts them. A report without deviations has
+    the figures and bytes of schema 2.3 plus the new keys. Raw XCCDF and ARF results next to a 1.3 scan run stay
+    refused.
+  - >-
+    reporting - until they show operator deviations, the dashboard is not written for a report that lists any (the
+    JSON report is, and the command exits with status 3), and the STIG checklist export refuses a scan run with a
+    flagged finding (status 2), so a flagged pass never appears as a plain pass or as ``Not a Finding``.

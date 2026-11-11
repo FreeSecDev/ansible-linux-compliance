@@ -13,7 +13,10 @@ exported honestly:
 - no DISA content of its benchmark (and version) is available, or more than one is;
 - the content does not describe the run: another benchmark, profile or version, or a
   finding whose rule is not in it;
-- two inputs give the checklist of the same host and benchmark.
+- two inputs give the checklist of the same host and benchmark;
+- a finding of its scan run is flagged ``operator_deviation`` (findings schema 1.3,
+  FREES-203): a checklist status is a reviewer's verdict, and until the export marks a
+  flagged pass as ``Open`` such a run is never exported.
 
 A bundle's own XCCDF results are its content. Without them (a scan that did not complete
 writes none), and for ScanRun JSON and evaluations, ``--checklist-content`` supplies it. Whatever
@@ -335,6 +338,22 @@ def _mapped_content(
     return Path(name).name, benchmark, _checked_pairs(display, name, benchmark, [mapping])
 
 
+def refuse_deviations(run: model.ScanRun, display: str) -> None:
+    """Refuse a scan run with a finding flagged ``operator_deviation``.
+
+    Raises:
+        ChecklistError: If any finding of ``run`` carries an operator deviation.
+    """
+    flagged = sorted(finding.rule_id for finding in run.findings if finding.deviation is not None)
+    if flagged:
+        message = (
+            f"{display}: {len(flagged)} finding(s) of scan run {run.run_id} carry an operator "
+            f"deviation, for example {flagged[0]}; the checklist export does not mark a "
+            "deviation yet, so a run with deviations is never exported"
+        )
+        raise ChecklistError(message)
+
+
 def _source(
     result: ParseResult[ComplianceData],
     results: bytes | None,
@@ -352,6 +371,7 @@ def _source(
         )
         raise ChecklistError(message)
     run = data.scan_run
+    refuse_deviations(run, display)
     lapsed = frozenset(data.lapsed_waivers)
     if results is not None:
         _cross_checked(run, display, results)

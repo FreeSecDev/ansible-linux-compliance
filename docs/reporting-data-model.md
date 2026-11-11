@@ -3,8 +3,8 @@
 The reporting package `tools/reporting/` turns heterogeneous reports into one versioned JSON document. The decision
 record is [ADR 0016](adr/0016-report-schema-and-summary-semantics.md); the findings model is
 [ADR 0013](adr/0013-normalized-findings-model.md). The schema is
-`tools/reporting/schema/report-v2.json` (JSON Schema 2020-12, `schema_version` `"2.2"`); see
-[schema version notes](#schema-version-notes) for what changed from 1.0, 2.0 and 2.1.
+`tools/reporting/schema/report-v2.json` (JSON Schema 2020-12, `schema_version` `"2.4"`); see
+[schema version notes](#schema-version-notes) for what changed from 1.0 and each 2.x version.
 
 ## Running it
 
@@ -82,15 +82,15 @@ At most 1000 input files per section are accepted.
 
 | Key | Content |
 |---|---|
-| `schema_version` | `"2.2"` |
+| `schema_version` | `"2.4"` |
 | `scope` | `single_host`, `multi_host`, `benchmark` or `fleet`; applies to every statistic |
 | `metadata` | `commit`, `pull_request`, `workflow_run`, `started_at`, `finished_at`, `generated_at`; all nullable |
 | `sections` | `codebuild`, `compliance`, `coverage`, `exceptions`, `lint`, `molecule`, `packer`, `sbom`, `tests`, `vulnerabilities` |
-| `overview` | Section names grouped by `available`, `partial`, `unavailable` and `error`, `exceptions`: the exception counts of the [exceptions section](#exceptions-section) or `null`, and `off_platform`: the number of [off-platform inputs](#off-platform-results) |
+| `overview` | Section names grouped by `available`, `partial`, `unavailable` and `error`, `exceptions`: the exception counts of the [exceptions section](#exceptions-section) or `null`, `off_platform`: the number of [off-platform inputs](#off-platform-results), and `deviation`: the number of [flagged findings](#operator-deviations) |
 | `raw_artifacts` | One reference per input: `format`, `path` as supplied, `sha256`, `size`, `status`; the collection summary has the format `evidence_collection` |
 
 Each section has `status`, `reason`, `items`, `gaps` and `summary`; `compliance` also has `rules`, `groups` and
-`aggregates`, `notes`, `host_coverage` and `off_platform`, and `exceptions` also has `exceptions` and `source_sha256`. Each item has `format`, `status`, `reason`, `artifact` (`path`, `sha256`, `size`) and `data`. `gaps`
+`aggregates`, `notes`, `host_coverage`, `off_platform` and `deviations`, and `exceptions` also has `exceptions` and `source_sha256`. Each item has `format`, `status`, `reason`, `artifact` (`path`, `sha256`, `size`) and `data`. `gaps`
 lists every item that is not `available` with its path, status and reason.
 
 | Section | Item formats | Summary |
@@ -193,10 +193,13 @@ a note. Signed evidence that tells a genuine run from a forged one is proposed i
 | `expired_waivers` | Rules whose exception expired, also between the scan start and the controller time (exceptions evaluations only); they count as their evaluated outcome |
 | `open_by_severity` | `fail`, `error` and `notchecked` rules per severity |
 | `runs_total`, `runs_not_completed` | How many runs were summarised and how many did not complete |
+| `deviation` | Rules flagged `operator_deviation`, whatever their outcome ([operator deviations](#operator-deviations)) |
+| `deviation_by_outcome` | Those rules per outcome, every outcome present; a flagged `pass` is counted here and in `evaluated`, never in `counts` |
 
 Rules:
 
-- Only `pass` counts as pass. `notchecked`, `error`, `notapplicable`, `disabled` and `waived` never do.
+- Only `pass` counts as pass, and only without the flag `operator_deviation`. `notchecked`, `error`,
+  `notapplicable`, `disabled` and `waived` never do.
 - `notchecked`, `error` and `waived` are in the denominator, so they lower the percentage and are always counted.
 - `notapplicable` and `disabled` are shown separately and not in the denominator.
 - `notselected` results of XCCDF and ARF files (`oscap` lists every rule of the benchmark) are dropped from the
@@ -223,7 +226,8 @@ one host with the same benchmark, version and profile are merged, worst outcome 
 
 Since 2.3 every `rules` entry has `control`: the control placement of the rule (`family`, `topic`, `tags`, `stig_id`,
 `mapped_rules`, `partially_disabled_by`) from the first source, by artifact path, whose finding carries one, or
-`null`. SCC findings carry it through the STIG mapping, so a DISA rule is grouped with the control family of the
+`null`. Since 2.4 every `rules` entry and every `sources` entry has `deviation`, chosen the same way among the flagged
+sources ([operator deviations](#operator-deviations)). SCC findings carry it through the STIG mapping, so a DISA rule is grouped with the control family of the
 ComplianceAsCode rules of its STIG ID, or under `unmapped`
 ([audit guide](audit.md#scc-toggles-and-control-families)). The dashboard filters the rules by family and topic.
 
@@ -255,17 +259,29 @@ Findings model schema 1.3 (FREES-203,
 [ADR 0013 amendment](adr/0013-normalized-findings-model.md#amendment-2026-11-10-operator-deviations-and-schema-13-frees-203))
 carries operator deviations: a finding flagged `operator_deviation`, whose value in force is looser than the profile
 value because of an operator override ([ADR 0032](adr/0032-operator-control-community-modules-and-value-overrides.md)).
-Such a finding must never count as a pass, and report schema 2.3 has neither a count nor a field for it. Until the
-report reads the flag, a scan run of schema 1.3 is an input error, never a pass:
+The scanner's outcome is kept, so a check that does not test the value may still say `pass`. Report schema 2.4
+([ADR 0016 amendment](adr/0016-report-schema-and-summary-semantics.md#amendment-2026-11-11-schema-24-operator-deviations-frees-203))
+reads such runs and never counts a flagged finding as a pass:
 
-- a `--scan-run` file, an `--exceptions-evaluation` and an evidence bundle whose run is 1.3 become an item with status
-  `error` and a gap whose reason names the findings schema;
-- an `--xccdf` or `--arf` file next to a `scan-run.json` of schema 1.3 (in the same directory or the one above) is
-  refused the same way: the scanner reports a pass under a looser value as a plain pass, and raw results carry no
-  flag, so they are never figured, also once the report reads 1.3;
-- the run enters no rule list, group, aggregate or summary.
+- A flagged `pass` leaves `counts` but stays in `evaluated`, so the percentage drops and `all_evaluated_passed` cannot
+  be reached. A flagged `fail` or `waived` finding stays in its count. A waiver never removes the flag.
+- `deviation` counts every flagged rule and `deviation_by_outcome` splits it by outcome. The sum of `counts` plus
+  `deviation_by_outcome.pass` is the number of rules.
+- A rule merged from several scans is flagged when any of them is. Its outcome is still the worst one, so a flagged
+  `pass` merged with an `error` is counted as a flagged `error`.
+- `sections.compliance.deviations` lists every flagged finding of every input that parsed, whatever the section
+  status, with `artifact`, `host`, `benchmark_id`, `content_version`, `profile_id`, `rule_id`, `outcome`, `value_id`,
+  `profile_value`, `effective_value` and `off_platform`. A flagged finding of an off-platform run is listed with
+  `off_platform: true` and never figured. `overview.deviation` counts the entries.
+- An `--xccdf` or `--arf` file next to a `scan-run.json` of schema 1.3 (in the same directory or the one above) is still
+  refused: the scanner reports a pass under a looser value as a plain pass, and raw results carry no flag.
 
-Runs of schema 1.0 to 1.2 are read as before. No writer of the collection emits schema 1.3 yet.
+Example: a run with a flagged pass, a flagged fail, a pass and a notapplicable rule has `counts` pass 1, fail 1 and
+notapplicable 1, `deviation` 2 with `deviation_by_outcome` pass 1 and fail 1, `evaluated` 3 and 33.3 percent.
+
+Until the dashboard and the checklist export show deviations (ADR 0032 decision Q), they refuse them: the dashboard is
+not written for a report with entries in `deviations` (the JSON report is, and the command exits with status 3), and a
+scan run with a flagged finding is never exported as a checklist (status 2).
 
 ## Host coverage
 
@@ -381,7 +397,7 @@ Common behaviour of every parser:
 |---|---|---|
 | XCCDF 1.2 results | `parsers/xccdf.py` | Reuses `openscap.parse_results` of the findings model (more than 100000 selected rule results is an error): result mapping through `map_xccdf_result`, unknown values become `error`, exactly one TestResult. `notselected` results are counted in `not_selected`, not in the findings. `host` is `null`; `reported_host` is the self-asserted `target` or fqdn fact; a `target` and fqdn fact that name different hosts make the file an error. |
 | ARF 1.1 | `parsers/xccdf.py` | Bounds and parses with defusedxml, then requires exactly one embedded XCCDF 1.2 TestResult and hands it to the same parser. The asset fqdn and hostname must agree with the target and fact names. Other report contents are ignored. |
-| ScanRun JSON | `parsers/scanrun.py` | `model.loads`; the validated run is embedded unchanged and `findings` is empty in the item to avoid duplication. A run of findings model schema 1.3 is an error ([operator deviations](#operator-deviations)). |
+| ScanRun JSON | `parsers/scanrun.py` | `model.loads`; the validated run is embedded unchanged and `findings` is empty in the item to avoid duplication. Findings model schemas 1.0 to 1.3 are read; a flagged finding of a 1.3 run never counts as a pass ([operator deviations](#operator-deviations)). |
 | JUnit XML | `parsers/junit.py` | Roots `testsuite` or `testsuites`. Totals come from `testcase` elements. The `tests`, `failures` and `errors` attributes of a `testsuite`, if present, must match its own test cases, otherwise the file is an error. `error` outranks `failure`; no test cases is an error. Durations are not read. |
 | Cobertura | `parsers/cobertura.py` | Root `coverage`; `line-rate` and `branch-rate` must be numbers from 0 to 1 (also per package). Counts are optional, and `lines-covered` or `branches-covered` above its `-valid` count is an error. Per-class and per-line data are ignored. |
 | pytest JSON | `parsers/pytest_json.py` | pytest-json-report layout. `exitcode` is required: 2, 3, 4 and 5 (interrupted, internal error, usage error, no tests) are errors, 0 must agree with zero failures and 1 with at least one. `summary.total` must equal the sum of the outcome counts. `xpassed` counts as failed, `xfailed` as skipped. |
@@ -412,7 +428,15 @@ scenario is required. Any other `format` or `version` is an error.
 - 1.0: first version (FREES-75), including the `partial` section status, `groups`, `aggregates` and `gaps`. A change that adds a field bumps the minor version; a breaking change bumps the major
   version, and `report-v<major>.json` is a new file. The version, this page and ADR 0016 change together.
 - The HTML dashboard (FREES-77, ADR 0017) adds no field to the document and refuses every version it does not
-  know; it reads 2.0, 2.1, 2.2 and 2.3.
+  know; it reads 2.0 to 2.4.
+- 2.4 (FREES-203, [ADR 0016 amendment](adr/0016-report-schema-and-summary-semantics.md#amendment-2026-11-11-schema-24-operator-deviations-frees-203)):
+  a field addition, so a minor version in the same `report-v2.json`. `overview.deviation`,
+  `sections.compliance.deviations`, `deviation` on every rule and rule source, and `deviation` and
+  `deviation_by_outcome` in every summary are new and required in a 2.4 document. An embedded scan run may have
+  findings model schema 1.3, with the flag `operator_deviation`, the finding's `deviation`, the remediation status
+  `deviation` and the remediation value fields. A flagged pass is no longer in `counts.pass`. A 2.0 to 2.3 document has
+  none of these and still validates. A 2.3 consumer migrates by accepting `"2.4"`, the keys and the flag; a report
+  without deviations has the figures of 2.3.
 - 2.3 (FREES-170, [ADR 0016 amendment](adr/0016-report-schema-and-summary-semantics.md#amendment-2026-10-27-schema-23-control-placement-frees-170)):
   a field addition, so a minor version in the same `report-v2.json`. Every `rules` entry has `control`, an object or
   `null`, and an embedded scan run may have findings model schema 1.2, in which every finding has `control` and at

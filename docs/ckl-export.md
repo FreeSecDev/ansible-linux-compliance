@@ -241,7 +241,7 @@ SCC evaluates them.
 | 0 | the report and every checklist were written, and every input parsed |
 | 1 | written, but an input is missing or invalid; that input has no checklist |
 | 2 | nothing was written: invalid arguments, or an input that parsed cannot be exported honestly |
-| 3 | as for the report: the dashboard was too large (checklists are written) |
+| 3 | as for the report: the dashboard was not written, because it was too large or the report lists operator deviations (checklists are written) |
 
 Refusals with status 2 name the input and the reason:
 
@@ -254,6 +254,9 @@ Refusals with status 2 name the input and the reason:
 - content of another benchmark or profile, content that differs from a version the run recorded, a completed run that
   recorded none, or a finding whose rule it lacks;
 - a bundle whose own XCCDF results do not match its scan run;
+- a scan run with a finding flagged `operator_deviation` (findings schema 1.3): the export does not mark a deviation as
+  `Open` yet, so such a run is never exported
+  ([operator deviations](reporting-data-model.md#operator-deviations));
 - a checklist file name over 255 bytes;
 - a failed write of any output (nothing is left behind);
 - `--compare-stig` with SCC and OpenSCAP content of another release or other rules;

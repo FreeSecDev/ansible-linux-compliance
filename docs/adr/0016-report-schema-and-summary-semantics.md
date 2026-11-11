@@ -569,3 +569,80 @@ Rejected alternatives:
 
 A field addition, so a minor version: `schema_version` `"2.3"` in the same `report-v2.json`. A 2.3 document has
 `control` on every rule; a 2.0, 2.1 or 2.2 document has it on none and still validates. The dashboard reads 2.0 to 2.3.
+
+## Amendment 2026-11-11: schema 2.4, operator deviations (FREES-203)
+
+### Context
+
+An operator can set a value looser than the profile for a native rule
+([ADR 0032](0032-operator-control-community-modules-and-value-overrides.md)). The finding of that rule in the next scan
+carries the flag `operator_deviation` and a `deviation` object (findings model schema 1.3,
+[ADR 0013](0013-normalized-findings-model.md#amendment-2026-11-10-operator-deviations-and-schema-13-frees-203)). The
+scanner's outcome is kept, so a check that does not test the value still says `pass`. Report schema 2.3 had neither a
+count nor a field for the flag, so it refused every 1.3 scan run as an input error. ADR 0032 decision P sets the
+counting rules that this amendment implements.
+
+### Decision
+
+- **A flagged finding never counts as a pass.** A flagged `pass` leaves `counts` but stays in `evaluated`, so the
+  percentage drops and `all_evaluated_passed` cannot be reached. A flagged `fail` or `waived` finding stays in its own
+  count. Rule 1 of the summary semantics above ("only `pass` counts as pass") now reads "only an unflagged `pass`".
+- **Two new summary counts.** Every summary (the section summary, `groups`, `aggregates` and each item's own) has
+  `deviation`, the number of flagged rules, and `deviation_by_outcome`, those rules per outcome with every outcome
+  present. The sum of `counts` plus `deviation_by_outcome.pass` equals the number of rules, and `deviation` equals the
+  sum of `deviation_by_outcome`. `open_by_severity` is unchanged: a flagged `fail` is open, a flagged `pass` is not.
+- **Merged rules.** A rule rolled up from several scans is flagged when any of them is. Its `deviation` comes from the
+  first flagged source by artifact path, as `control` does, and every `sources` entry carries its own `deviation` or
+  `null`. The rolled-up outcome is still the worst one, so a flagged `pass` merged with an `error` counts as an `error`
+  that is flagged. The model allows the flag only on `pass`, `fail` and `waived`, so outside such a merge
+  `deviation_by_outcome` has counts only for those three; `notapplicable` and `disabled` are always 0, because a
+  flagged source is worse than either.
+- **Every flagged finding is listed.** `sections.compliance.deviations` has one entry per flagged finding of every
+  input that parsed, whatever the section status and off-platform runs included, so a partial report still names
+  them: `artifact`, `host`, `benchmark_id`, `content_version`, `profile_id`, `rule_id`, the finding's `outcome`,
+  `value_id`, `profile_value`, `effective_value` and `off_platform`. Entries are sorted by artifact, input digest and
+  rule, at most 1,000,000 (the rule limit; a larger list is refused like too many rules). `overview.deviation` counts
+  them.
+- **Off-platform runs stay outside every figure.** A flagged finding of an off-platform run is listed in
+  `deviations` with `off_platform: true` and counted in that item's own summary; it enters no rule, group, aggregate
+  or section summary, as before. The `counts` of its `off_platform` entry follow the summary rules, so a flagged pass
+  is in neither `counts` nor that entry.
+- **Raw results stay refused.** XCCDF and ARF files next to a `scan-run.json` of findings schema 1.3 carry no flag
+  and are still refused (ADR 0013 amendment of FREES-203).
+- **The schema enforces it.**
+  - An embedded scan run may have findings schema 1.3: every finding then has `control` and `deviation`, and at least
+    one finding has a deviation or a remediation result with `value_source`. A 1.0, 1.1 or 1.2 run has no
+    `deviation`, no `operator_deviation` flag and no remediation `value_source`.
+  - A finding has the flag exactly when its `deviation` is an object, and only on `pass`, `fail` and `waived`.
+  - A remediation result has `value_source`, `profile_value`, `effective_value` and `deviation` together or none of
+    them; the status `deviation` exactly when `deviation` is an object, with `value_source: override`.
+  - A rule has a `deviation` object exactly when a source has one, and a flagged source has a flagged outcome.
+  - A summary with a flagged pass is never `all_evaluated_passed`, and `deviation: 0` means every
+    `deviation_by_outcome` count is 0.
+  - JSON Schema cannot sum, so the two count invariants are the producer's; the unit tests check them.
+- **Readers that cannot show deviations refuse them.** Until the dashboard section and the checklist mapping of
+  ADR 0032 decision Q exist, the dashboard is not written for a report whose `deviations` list is not empty (the JSON
+  report is, and the command exits with status 3), and the checklist export refuses a scan run with a flagged finding
+  (status 2). A flagged pass would otherwise appear as a plain pass on the page and as `Not a Finding` in a checklist.
+
+### Versioning
+
+A field addition, so a minor version: `schema_version` `"2.4"` in the same `report-v2.json`.
+
+- **2.4 documents** have `overview.deviation`, `sections.compliance.deviations`, `deviation` on every rule and every
+  rule source, and `deviation` and `deviation_by_outcome` in every summary.
+- **2.0 to 2.3 documents** have none of these and no embedded 1.3 scan run, and still validate.
+- **Readers.** A 2.3 consumer migrates by accepting `"2.4"`, the keys, the flag, the remediation status `deviation`
+  and its fields, and by taking `counts.pass` as the passes it shows. The dashboard reads 2.0 to 2.4.
+- **Figures.** A report without deviations is the 2.3 document plus the new keys, all 0, `null` or empty. A unit test
+  pins the SHA-256 of such a report without the new keys to the one `main` produced before this change.
+
+Rejected alternatives:
+
+| Alternative | Reason rejected |
+|---|---|
+| Count a flagged pass as `fail` | Falsifies the scanner's result; the scan said pass, and that stays visible next to the deviation |
+| Take a flagged pass out of `evaluated` as well | The percentage would stay 100 for a host that runs a weaker value |
+| Keep refusing 1.3 runs | A deviation would then hide the whole run instead of being reported |
+| List deviations only for the figured inputs | A partial report or an off-platform run would hide them |
+| Show the report on the dashboard without the deviation section | The rule list would show a flagged pass as a plain pass |
