@@ -221,6 +221,14 @@ LIBPAM_CASES: Final[tuple[LibpamCase, ...]] = (
         ((SERVICE_FILE, f"password requisite {ELSEWHERE_MODULE} {LOOSE}\n"),),
         copies=((ELSEWHERE_MODULE, "pam_pwquality.so"),),
     ),
+    LibpamCase(
+        "libpam-link-to-module-copy-elsewhere",
+        ((SERVICE_FILE, f"password requisite {RENAMED_MODULE} {LOOSE}\n"),),
+        tuple(
+            (f"{directory}/{RENAMED_MODULE}", ELSEWHERE_MODULE) for directory in MODULE_DIRECTORIES
+        ),
+        copies=((ELSEWHERE_MODULE, "pam_pwquality.so"),),
+    ),
     _service("sufficient-skip", f"password sufficient pam_permit.so\n{PWQ} {LOOSE}\n"),
     _service("sufficient-skip-required", f"password sufficient pam_permit.so\n{PWQ} minlen=14\n"),
     LibpamCase(
@@ -446,6 +454,26 @@ PWHISTORY_STACKS: Final[tuple[tuple[str, str, tuple[str, ...]], ...]] = (
     ),
     ("stack-plain", "password requisite pam_pwhistory.so use_authtok\n", ("use_authtok",)),
     ("stack-bracket-glued", "password [default=die]pam_pwhistory.so remember=1\n", ("remember=1",)),
+    (
+        "stack-remember-int-wrap",
+        "password requisite pam_pwhistory.so remember=4294967297\n",
+        ("remember=4294967297",),
+    ),
+    (
+        "stack-remember-int-minus-one",
+        "password requisite pam_pwhistory.so remember=4294967295\n",
+        ("remember=4294967295",),
+    ),
+    (
+        "stack-remember-negative-wrap",
+        "password requisite pam_pwhistory.so remember=-4294967272\n",
+        ("remember=-4294967272",),
+    ),
+    (
+        "stack-remember-long-overflow",
+        "password requisite pam_pwhistory.so remember=99999999999999999999\n",
+        ("remember=99999999999999999999",),
+    ),
 )
 STACK_FILES: Final[dict[str, str]] = {
     "faillock": "deny = 3\nunlock_time = 900\n",

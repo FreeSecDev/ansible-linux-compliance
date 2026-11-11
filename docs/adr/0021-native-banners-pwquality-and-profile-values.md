@@ -636,3 +636,39 @@ less than either:
   checksum, with the packaged module missing and with it uninspectable (each `overridden` by the arguments), a missing
   or non-regular packaged module for a module of another name, and the Debian layout without `pam_pwquality.so` in
   the module directory (refused, the reason named).
+
+## Amendment of 2026-11-11: a link to another build of pam_pwquality (FREES-205)
+
+**Context.** The review of the second follow-up of FREES-212 named one more case of the boundary above. A PAM line
+can load a module path whose own file name does not hold `pam_pwquality` but which is a symbolic link to a build of
+the module that is not byte for byte the packaged one, for example `/usr/lib64/security/pam_pwq.so` linked to
+`/usr/local/lib/security/pam_pwquality.so` of a libpwquality built from source. The identity looked at the name of the
+path in the line and at the checksum of the file that libpam loads through it; neither matched, so the line was taken
+as another module, its arguments were not read, and the rule could be `compliant` while libpam passed
+`minlen=1 enforcing=0` to `pam_pwquality`.
+
+**Decision.**
+
+- The role inspects every module path a second time with `ansible.builtin.stat` and `follow: false` and passes these
+  stats to `pwquality_decide` as `links` in its fifth argument, next to `stats` (the stat through the link with the
+  SHA-256). For a symbolic link, `lnk_source` names the file that the link resolves to, through every further link.
+- A line loads `pam_pwquality` also when the path is a symbolic link whose resolved file name holds
+  `pam_pwquality`. The order is: the file name of the path, then the resolved file name, then the checksum. Each of
+  these can only add a `pam_pwquality` line, never remove one, so the family reads at least as many arguments as
+  before.
+- A path whose stat without following a link is missing, failed or names no resolved file refuses the rule
+  (`overridden`, with the reason) when the result would otherwise be "another module". It does not refuse when the
+  name or the checksum already identify the module, and a problem that the checksum comparison finds is reported
+  first, as before.
+- The boundary that remains is narrower: a build of the module with another checksum is not recognised when neither
+  the path in the line nor the file that it resolves to has `pam_pwquality` in its name (a renamed copy, or a hard
+  link under another name). A link whose own name and resolved name both lack `pam_pwquality`, but which passes
+  through an intermediate link named `pam_pwquality*`, is not recognised either, because `lnk_source` names only the
+  final file and libpam loads that file.
+- Evidence: the `libpam_cases` row `libpam-link-to-module-copy-elsewhere`: `pam_freesecdev-pwq.so` in the module
+  directory of each image links to a copy of the recording module at `/usr/local/lib/security/pam_pwquality.so` with
+  one byte appended; the real libpam of both images passes `minlen=1 enforcing=0` to it, and the decision is
+  `overridden` by the arguments. The test fails with the identity of the previous amendment. The unit tests of
+  `pwquality` cover a link to such a build with the packaged module present or missing, and with the file that the
+  link leads to missing or not inspectable, a link to a file of another name, and every way the stat without following
+  a link can be missing or incomplete.

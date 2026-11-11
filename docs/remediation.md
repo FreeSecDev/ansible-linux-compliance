@@ -440,13 +440,15 @@ refusal. `tests/unit/tools/test_pam_libpam_verdicts.py` checks each form against
 Molecule images passes to `pam_pwquality` (`libpam_cases` of `tests/fixtures/pam_conf/reader_verdicts.json`,
 `make pam-reader-verdicts`). A line loads `pam_pwquality` when the file name of the path that libpam loads for its
 module path holds `pam_pwquality`, in any directory (also a build installed elsewhere, such as
-`/usr/local/lib/security/pam_pwquality.so`), or when that path is a regular file with the SHA-256 of
-`pam_pwquality.so` of the module directory (a link or a copy under another name): the role inspects every module path
-with `stat` (filter `pwquality_pam_modules`, the module directory from the OS family and the architecture), and an
-unknown platform, a path with `$ISA`, a module that could not be inspected, or a module directory without
-`pam_pwquality.so` (which may then not be the directory that libpam loads from, as on a Debian system whose `/usr` is
-not merged) refuses every rule. A build of the module under another name and with another checksum is not
-recognised (ADR 0021). The family decides the values that
+`/usr/local/lib/security/pam_pwquality.so`), when that path is a symbolic link whose resolved file name holds
+`pam_pwquality` (`/usr/lib64/security/pam_pwq.so` linked to such a build, FREES-205), or when that path is a regular
+file with the SHA-256 of `pam_pwquality.so` of the module directory (a link or a copy under another name): the role
+inspects every module path with `stat` through a link and without following one (filter `pwquality_pam_modules`, the
+module directory from the OS family and the architecture), and an unknown platform, a path with `$ISA`, a module
+that could not be inspected, or a module directory without `pam_pwquality.so` (which may then not be the directory
+that libpam loads from, as on a Debian system whose `/usr` is not merged) refuses every rule. A build of the module
+with another checksum is not recognised when neither the path in the line nor the file that it resolves to has
+`pam_pwquality` in its name (ADR 0021). The family decides the values that
 `pam_pwquality` would use, not whether libpam runs it: a `sufficient` module or a jump before the line, a line of
 another type, or a stack without `pam_pwquality` leave the rule `compliant` or `applied` although no quality check
 happens; the stack rules that enable the module stay audit-only (FREES-212). With the main file, a setting that is set on
@@ -754,8 +756,8 @@ the filter against what the real readers of both images read (`make pam-reader-v
 | Rules | What is applied | Record and cleanup |
 |---|---|---|
 | `accounts_passwords_pam_faillock_deny`, `_unlock_time`, `_interval`, `_root_unlock_time` | `deny = <n>`, `unlock_time = <n>`, `fail_interval = <n>` or `root_unlock_time = <n>` in `/etc/security/faillock.conf`, with the profile's value (`var_accounts_passwords_pam_faillock_deny`, `_unlock_time`, `_fail_interval`, `_root_unlock_time`); a stricter value already set is kept, a time above 604800 (which `pam_faillock` ignores) is replaced, and a required `unlock_time` of `0` (never) is met only by `0` | `recorded_value` of `method` (`line`), `setting_line` (the prior physical line, or `null`), `written_line`, the file's `mode`, `owner`, `group` and `sha256`, and `baseline_sha256` (the file before the family's first write); cleanup writes the prior line back in its place or removes the line, while the setting is still the line written, and the last rule of the file restores only when the result has `baseline_sha256` |
-| `accounts_passwords_pam_faillock_deny_root`, `_even_deny_root_or_root_unlock_time`, `_audit`, `_silent` | The flag `even_deny_root` (both root rules share the line, because `root_unlock_time` alone does not lock root), `audit` or `silent` in `faillock.conf` | As above |
-| `accounts_password_pam_pwhistory_remember_password_auth`, `_remember_system_auth` (RHEL 9) | `remember = <var_password_pam_remember>` in `/etc/security/pwhistory.conf`; both rules share the line | As above; the first rule writes the line and records the prior state, the second records the same prior state |
+| `accounts_passwords_pam_faillock_deny_root`, `_even_deny_root_or_root_unlock_time`, `_audit`, `_silent` | The flag `even_deny_root` (both root rules share the line, because `root_unlock_time` alone does not lock root), `audit` or `silent` in `faillock.conf` | As above; a root rule switched off while the other stays on keeps the line (see below) |
+| `accounts_password_pam_pwhistory_remember_password_auth`, `_remember_system_auth` (RHEL 9) | `remember = <var_password_pam_remember>` in `/etc/security/pwhistory.conf`; both rules share the line | As above; the first rule writes the line and records the prior state, the second records the same prior state; a rule switched off while the other stays on keeps the line (see below) |
 | `accounts_password_pam_pwhistory_enforce_for_root` (RHEL 9) | The flag `enforce_for_root` in `pwhistory.conf` | As above |
 
 The statuses that refuse to act, with nothing changed and the entry kept, each with a reason: `notapplicable` (the file
@@ -782,7 +784,33 @@ seconds; the line is kept), `method_changed`, and at cleanup `modified_since_app
 `not_regular_file`, `changed_during_run` and `restore_mismatch` (the last rule of the file would not give back the
 recorded SHA-256, for example after a comment was added by hand elsewhere in the file). A
 setting that is already as before at cleanup, such as a line removed by hand or the shared `remember` line that the
-other rule restored, is `restored` without a write (FREES-173). The settings take effect only where the stack loads
+other rule restored, is `restored` without a write (FREES-173).
+
+A rule that is switched off while another rule of the family that the run applies sets the same setting
+(`even_deny_root`, `remember`) keeps the line: its cleanup is `restored` without a write, removes only its own ledger
+entry and names the rule that keeps the line. When that rule has no ledger entry, because it found the line already
+written and was `compliant`, it receives the recorded prior state first, so it restores the line exactly when it is
+switched off in turn. Root lock-out and the password history therefore never drop between the cleanup and the apply of
+a run, and check mode reports the statuses of the real run (FREES-205).
+
+`restore_mismatch` does not clear by itself: the last rule of the file restores only when the result is the file that
+its first write found, so a change by hand elsewhere in the file keeps the entry and makes the cleanup fail on every
+run. Undo that change, and the next run restores the line. To keep the file as it is instead, remove the entry of the
+rule; the collection then forgets the line it wrote, which stays in the file:
+
+```yaml
+- name: Keep faillock.conf as it is and forget the revert record of the deny rule
+  freesecdev.linux_compliance.control_state:
+    action: remove
+    rule_id: xccdf_org.ssgproject.content_rule_accounts_passwords_pam_faillock_deny
+  become: true
+```
+
+Not modelled (ADR 0027, amendment of FREES-205): `admin_group`, `local_users_only` and `dir` in `faillock.conf` or on
+a `pam_faillock` line, which narrow whom `pam_faillock` locks or where it keeps the failures without changing a
+setting that a rule writes, and the service files of an application that starts PAM with `pam_start_confdir()`.
+
+The settings take effect only where the stack loads
 `pam_faillock` or `pam_pwhistory`, and the content's checks pass only then; the Molecule regressions load such a stack
 for one run, and a container scan reports the rules `notapplicable` (their group is limited to
 `system_with_kernel`). Kept `audit_only`, with the reasons in ADR 0027: the rules

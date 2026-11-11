@@ -61,6 +61,16 @@
   tags:
     - always
 
+- name: PAM configuration line | Name an effective rule of the family that sets the same setting and keeps its line
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_sc_holder: >-
+      {{ __linux_compliance_remediate_family.apply
+         | selectattr('parameters.setting', 'equalto', __linux_compliance_remediate_rule.parameters.setting)
+         | rejectattr('rule_id', 'equalto', __linux_compliance_remediate_rule.rule_id) | list | first
+         | default(none) }}
+  tags:
+    - always
+
 - name: PAM configuration line | Compute the exact text that restores the recorded line, every other byte unchanged
   vars:
     __linux_compliance_remediate_sc_text: >-
@@ -107,6 +117,7 @@
               and __linux_compliance_remediate_sc_prior.owner | default('') is match('^[0-9]{1,10}$')
               and __linux_compliance_remediate_sc_prior.group | default('') is match('^[0-9]{1,10}$')
               and __linux_compliance_remediate_sc_expected is match('^[0-9a-f]{64}$'))
+         else none if __linux_compliance_remediate_sc_holder is not none
          else __linux_compliance_remediate_sc_restore.reason
               if __linux_compliance_remediate_sc_restore.reason is not none
          else 'modified_since_apply' if not __linux_compliance_remediate_sc_restore.already
@@ -124,6 +135,17 @@
   tags:
     - always
 
+- name: PAM configuration line | Keep the line when an effective rule of the family still sets the same setting
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_sc_released: >-
+      {{ __linux_compliance_remediate_sc_reason is none and __linux_compliance_remediate_sc_holder is not none }}
+    __linux_compliance_remediate_sc_handover: >-
+      {{ __linux_compliance_remediate_sc_reason is none and __linux_compliance_remediate_sc_holder is not none
+         and __linux_compliance_remediate_sc_holder.ledger_entry is not mapping
+         and __linux_compliance_remediate_sc_holder.rule_id not in __linux_compliance_remediate_sc_transferred }}
+  tags:
+    - always
+
 - name: PAM configuration line | Inspect the configuration file again just before the restore, without a link
   ansible.builtin.stat:
     path: "{{ __linux_compliance_remediate_sc.path }}"
@@ -136,6 +158,7 @@
   when:
     - __linux_compliance_remediate_sc_reason is none
     - not __linux_compliance_remediate_sc_already
+    - not __linux_compliance_remediate_sc_released
   tags:
     - always
 
@@ -164,6 +187,21 @@
   when:
     - __linux_compliance_remediate_sc_reason is none
     - not __linux_compliance_remediate_sc_already
+    - not __linux_compliance_remediate_sc_released
+  tags:
+    - always
+
+- name: PAM configuration line | Hand the recorded prior state to the effective rule that keeps the line
+  freesecdev.linux_compliance.control_state:
+    action: record
+    rule_id: "{{ __linux_compliance_remediate_sc_holder.rule_id }}"
+    family: "{{ __linux_compliance_remediate_sc_holder.family }}"
+    revert_strategy: "{{ __linux_compliance_remediate_sc_holder.revert_strategy }}"
+    prior_values: >-
+      {{ __linux_compliance_remediate_sc_prior | dict2items(key_name='name', value_name='value') }}
+    collection_version: "{{ __linux_compliance_remediate_collection_version }}"
+  register: __linux_compliance_remediate_sc_handed
+  when: __linux_compliance_remediate_sc_handover
   tags:
     - always
 
@@ -184,7 +222,24 @@
       {{ none if __linux_compliance_remediate_sc_last else __linux_compliance_remediate_sc_baseline }}
     __linux_compliance_remediate_sc_pending_text: "{{ __linux_compliance_remediate_sc_restore.new_text }}"
     __linux_compliance_remediate_sc_pending_read: "{{ __linux_compliance_remediate_sc_stat.stat.checksum }}"
-  when: __linux_compliance_remediate_sc_reason is none
+  when:
+    - __linux_compliance_remediate_sc_reason is none
+    - not __linux_compliance_remediate_sc_released
+  tags:
+    - always
+
+- name: PAM configuration line | Remember that the effective rule that keeps the line now holds the file
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_sc_entries: >-
+      {{ __linux_compliance_remediate_sc_entries | difference([__linux_compliance_remediate_rule.rule_id])
+         | union([__linux_compliance_remediate_sc_holder.rule_id]) }}
+    __linux_compliance_remediate_sc_transferred: >-
+      {{ __linux_compliance_remediate_sc_transferred
+         | combine({__linux_compliance_remediate_sc_holder.rule_id:
+                    {'prior_values': __linux_compliance_remediate_sc_prior
+                                     | dict2items(key_name='name', value_name='value')}}
+                   if __linux_compliance_remediate_sc_handover else {}) }}
+  when: __linux_compliance_remediate_sc_released
   tags:
     - always
 
@@ -201,6 +256,7 @@
            'status': __linux_compliance_remediate_sc_cleanup_status,
            'reason': __linux_compliance_remediate_sc_reason,
            'changed': (__linux_compliance_remediate_sc_restored is changed)
+                      or (__linux_compliance_remediate_sc_handed is changed)
                       or (__linux_compliance_remediate_sc_forget is changed),
            'message': __linux_compliance_remediate_rule.rule_id ~ ': ' ~ __linux_compliance_remediate_sc_cleanup_status
                       ~ ((' (' ~ __linux_compliance_remediate_sc_reason ~ ': '
@@ -208,6 +264,12 @@
                           ~ '; nothing was changed, the ledger entry is kept and the cleanup is retried on the'
                           ~ ' next run)')
                          if __linux_compliance_remediate_sc_reason
+                         else (' (the line stays, because ' ~ __linux_compliance_remediate_sc_holder.rule_id
+                               ~ ' still sets ' ~ __linux_compliance_remediate_rule.parameters.setting
+                               ~ (', and the recorded prior state was handed to it'
+                                  if __linux_compliance_remediate_sc_handover else '')
+                               ~ '; only the ledger entry of this rule was removed)')
+                         if __linux_compliance_remediate_sc_released
                          else ' (the setting was already as before; only the ledger entry was removed)'
                          if __linux_compliance_remediate_sc_already else '')
          }] }}

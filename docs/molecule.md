@@ -976,8 +976,10 @@ that the CIS level 1 profiles do not select with the STIG profile and a CIS leve
 that the file as built gained exactly the profile's lines; the STIG profiles start from an `unlock_time = 600`, which
 their required `0` (never) replaces in place and the cleanup puts back. `pwhistory` has three groups on Rocky Linux. `changes`
 (`lifecycle_pwhistory_regressions.yml`) has steps that check the shared `remember` line: the second rule records the
-line that the first wrote, switching either rule off restores the line and the other rule writes and records it again,
-a rule switched back on finds the other rule's line `compliant`; then a change of method and a line removed by hand.
+line that the first wrote, switching either rule off while the other stays on keeps the line and removes only the
+entry of the rule switched off, handing its record to the other rule when that one has none (FREES-205; both steps
+run in check mode first and must report the same statuses without a change), a rule switched back on finds the other
+rule's line `compliant`; then a change of method and a line removed by hand.
 `stack` (`lifecycle_pwhistory_stack.yml`) starts from the file as built: `remember=24` on the `pam_pwhistory` line of
 `system-auth` (both remember rules `overridden`), a change by hand that both remember rules keep until the written
 line is back, `conf=` on the `pam_pwhistory` line of `system-auth` (all three rules `overridden`) and a service file

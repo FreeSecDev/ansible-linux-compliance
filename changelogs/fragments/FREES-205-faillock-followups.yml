@@ -1,0 +1,26 @@
+---
+bugfixes:
+  - >-
+    remediate - the ``faillock`` and ``pwhistory`` families no longer drop a setting that two rules share
+    (``even_deny_root`` of ``accounts_passwords_pam_faillock_deny_root`` and
+    ``accounts_passwords_pam_faillock_even_deny_root_or_root_unlock_time``, ``remember`` of the two RHEL remember
+    rules) between the cleanup of one rule and the apply of the other. A rule switched off while another rule of the
+    run sets the same setting keeps the line and removes only its own ledger entry; when the other rule has no ledger
+    entry, it receives the recorded prior state, so the line is still restored exactly when it is switched off. Root
+    lock-out no longer stays off when a run fails between the two, and check mode reports the statuses of the real
+    run (FREES-205, ADR 0027 amendment).
+  - >-
+    remediate - the ``pwquality`` family took a PAM line whose module path is a symbolic link under another name to a
+    build of ``pam_pwquality`` with another checksum (``/usr/lib64/security/pam_pwq.so`` linked to
+    ``/usr/local/lib/security/pam_pwquality.so``) as another module, ignored its arguments and could report a rule
+    ``compliant`` while libpam passed looser ones. The role now also inspects every module path without following a
+    link, and a link whose resolved file name holds ``pam_pwquality`` loads the module; a path that could not be
+    inspected that way refuses the rule when the name and the checksum do not identify it. The ``pwquality_decide``
+    filter takes ``links`` in its fifth argument (FREES-205, ADR 0021 amendment).
+minor_changes:
+  - >-
+    remediate - the documentation of the ``faillock`` and ``pwhistory`` families explains how to keep the current file
+    when the last cleanup reports ``restore_mismatch`` (remove the entry with ``control_state``), and names
+    ``admin_group``, ``local_users_only``, ``dir`` and ``pam_start_confdir()`` as known limits. The test oracle models
+    how ``pam_pwhistory`` stores a ``remember=`` argument that does not fit in an ``int``, with four new cases in the
+    verdict table checked against the real readers (FREES-205, ADR 0027 amendment).

@@ -52,6 +52,10 @@ MODULES: Final[pwquality.Modules] = pwquality.Modules(
         MODULE_DIRECTORY + PAM_MODULE: {"exists": True, "isreg": True, "checksum": "pwquality"},
         MODULE_DIRECTORY + "pam_unix.so": {"exists": True, "isreg": True, "checksum": "unix"},
     },
+    {
+        MODULE_DIRECTORY + PAM_MODULE: {"exists": True, "islnk": False},
+        MODULE_DIRECTORY + "pam_unix.so": {"exists": True, "islnk": False},
+    },
 )
 SETTINGS: Final[tuple[str, ...]] = (
     "difok",

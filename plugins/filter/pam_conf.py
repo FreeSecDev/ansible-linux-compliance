@@ -110,7 +110,9 @@ C_SPACE: Final[str] = " \t\n\v\f\r"
 FAILLOCK_BUFFER: Final[int] = 1024
 MAX_TIME: Final[int] = 604800
 INT_MAX: Final[int] = 2**31 - 1
+LONG_MAX: Final[int] = 2**63 - 1
 ULONG_MAX: Final[int] = 2**64 - 1
+REMEMBER_MAX: Final[int] = 400
 READERS: Final[dict[str, tuple[str, str]]] = {
     "faillock": ("pam_faillock", "auth"),
     "pwhistory": ("pam_pwhistory", "password"),
@@ -270,6 +272,19 @@ def _first(lines: list[tuple[int, str, str]], key: str) -> str | None:
     return next((value for _index, name, value in lines if name.lower() == key), None)
 
 
+def remember_argument(value: str) -> int:
+    """Return the C(int) that C(parse_option) of pam_pwhistory stores for a C(remember=) value.
+
+    C(strtol) reads the number into a C(long) of 64 bits, saturating at C(LONG_MIN) and
+    C(LONG_MAX), and the assignment to the C(int) of the options keeps its low 32 bits, so
+    C(remember=4294967297) reads as 1 and C(remember=4294967295) as -1 (FREES-205).
+    """
+    match = re.match(r"[ \t\n\v\f\r]*([+-]?[0-9]+)", value)
+    number = int(match.group(1)) if match else 0
+    number = min(max(number, -LONG_MAX - 1), LONG_MAX)
+    return (number + 2**31) % 2**32 - 2**31
+
+
 def read_pwhistory(text: str, args: tuple[str, ...] = ()) -> dict[str, int]:
     """Return the options that pam_pwhistory takes from the file and the module arguments."""
     lines = pwhistory_lines(text)
@@ -283,9 +298,7 @@ def read_pwhistory(text: str, args: tuple[str, ...] = ()) -> dict[str, int]:
         options["enforce_for_root"] = 1
     for argument in args:
         if argument.lower().startswith("remember="):
-            match = re.match(r"[ \t\n\v\f\r]*([+-]?[0-9]+)", argument[9:])
-            number = int(match.group(1)) if match else 0
-            options["remember"] = min(max(number, 0), 400)
+            options["remember"] = min(max(remember_argument(argument[9:]), 0), REMEMBER_MAX)
         elif argument.lower() == "enforce_for_root":
             options["enforce_for_root"] = 1
     return options

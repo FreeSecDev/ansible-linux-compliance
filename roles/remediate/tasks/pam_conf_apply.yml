@@ -32,16 +32,26 @@
   tags:
     - always
 
+- name: PAM configuration line | Name the ledger entry of the rule, or the one that a cleanup of the run handed to it
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_sc_held: >-
+      {{ __linux_compliance_remediate_rule.ledger_entry
+         if __linux_compliance_remediate_rule.ledger_entry is mapping
+         else __linux_compliance_remediate_sc_transferred[__linux_compliance_remediate_rule.rule_id]
+              | default(none) }}
+  tags:
+    - always
+
 - name: PAM configuration line | Read the method and the values that the ledger entry of the rule records
   vars:
     __linux_compliance_remediate_sc_recorded: >-
-      {{ (__linux_compliance_remediate_rule.ledger_entry.prior_values | default([])
+      {{ (__linux_compliance_remediate_sc_held.prior_values | default([])
           | items2dict(key_name='name', value_name='value'))
-         if __linux_compliance_remediate_rule.ledger_entry is mapping else {} }}
+         if __linux_compliance_remediate_sc_held is mapping else {} }}
   ansible.builtin.set_fact:
     __linux_compliance_remediate_sc_entry: "{{ __linux_compliance_remediate_sc_recorded }}"
     __linux_compliance_remediate_sc_entry_method: >-
-      {{ none if __linux_compliance_remediate_rule.ledger_entry is not mapping
+      {{ none if __linux_compliance_remediate_sc_held is not mapping
          else __linux_compliance_remediate_sc_recorded.method | default('unknown') }}
   tags:
     - always
@@ -101,7 +111,7 @@
          | default(none) }}
   ansible.builtin.set_fact:
     __linux_compliance_remediate_sc_shared: >-
-      {{ __linux_compliance_remediate_rule.ledger_entry is none
+      {{ __linux_compliance_remediate_sc_held is none
          and __linux_compliance_remediate_sc_by_sibling is not none
          and __linux_compliance_remediate_sc_decision.status in ['applied', 'compliant']
          and __linux_compliance_remediate_sc_found == [__linux_compliance_remediate_sc_by_sibling.line] }}
@@ -111,7 +121,7 @@
          else 'not_regular_file' if not __linux_compliance_remediate_sc_stat.stat.isreg
          else __linux_compliance_remediate_sc_decision.status
               if __linux_compliance_remediate_sc_decision.status not in ['applied', 'compliant']
-         else 'applied' if __linux_compliance_remediate_rule.ledger_entry is none
+         else 'applied' if __linux_compliance_remediate_sc_held is none
               and __linux_compliance_remediate_sc_by_sibling is not none
               and __linux_compliance_remediate_sc_found == [__linux_compliance_remediate_sc_by_sibling.line]
          else __linux_compliance_remediate_sc_decision.status }}
@@ -193,7 +203,7 @@
   register: __linux_compliance_remediate_sc_record
   when:
     - __linux_compliance_remediate_sc_status == 'applied'
-    - __linux_compliance_remediate_rule.ledger_entry is none
+    - __linux_compliance_remediate_sc_held is none
   tags:
     - always
 

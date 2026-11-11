@@ -360,10 +360,14 @@ class Modules:
         stats: The ``ansible.builtin.stat`` with ``follow: true`` and the SHA-256 ``checksum``
             of every path that :func:`module_paths` returns, by path, or a mapping with only the
             ``msg`` of a stat that failed.
+        links: The ``ansible.builtin.stat`` with ``follow: false`` of the same paths, by path,
+            whose ``lnk_source`` names the file that a symbolic link resolves to, or a mapping
+            with only the ``msg`` of a stat that failed (FREES-205).
     """
 
     directory: str | None
     stats: Mapping[str, Mapping[str, object]]
+    links: Mapping[str, Mapping[str, object]]
 
     def _checksum(self, path: str) -> tuple[str | None, str | None]:
         """Return the checksum of the regular file at ``path``, or why the module is unknown.
@@ -385,6 +389,25 @@ class Modules:
             return None, f"{path} could not be read to compare it with {PAM_MODULE}"
         return checksum, None
 
+    def _resolved(self, path: str) -> tuple[str | None, str | None]:
+        """Return the path that a symbolic link at ``path`` resolves to, or why it is unknown.
+
+        A path that is not a symbolic link, or does not exist, resolves to nothing else.
+        """
+        if path not in self.links:
+            return None, f"{path} was not inspected without following a link"
+        stat = self.links[path]
+        if "exists" not in stat:
+            message = stat.get("msg")
+            detail = f": {message}" if isinstance(message, str) and message else ""
+            return None, f"stat could not inspect {path} without following a link{detail}"
+        if stat.get("exists") is not True or stat.get("islnk") is not True:
+            return None, None
+        source = stat.get("lnk_source")
+        if not isinstance(source, str) or not source:
+            return None, f"stat did not name the file that the symbolic link {path} resolves to"
+        return source, None
+
     def identify(self, module: str) -> bool | str:
         """Return whether a module path loads ``pam_pwquality``, or why it cannot be told.
 
@@ -392,10 +415,12 @@ class Modules:
         the file is: ``pam_pwquality.so`` of the module directory, a build of the module installed
         elsewhere (``/usr/local/lib/security/pam_pwquality.so`` of a libpwquality built from
         source, or an older copy left behind), or a file that is missing, whose arguments are
-        read then, which can only refuse. Any other path loads it when it is a regular file with
-        the checksum of ``pam_pwquality.so`` of the module directory: a link, a hard link or a
-        copy of the module under another name, as libpam loads it (FREES-212). A path that does
-        not exist or is not a regular file loads nothing.
+        read then, which can only refuse. So does a symbolic link whose resolved file name
+        holds ``pam_pwquality``, such as ``/usr/lib64/security/pam_pwq.so`` that leads to such a
+        build (FREES-205). Any other path loads it when it is a regular file with the checksum
+        of ``pam_pwquality.so`` of the module directory: a link, a hard link or a copy of the
+        module under another name, as libpam loads it (FREES-212). A path that does not exist
+        or is not a regular file loads nothing.
 
         The text is the reason why the family cannot tell: without the module directory, with
         ``$ISA`` in the path, when a file that must be compared could not be inspected or read,
@@ -403,8 +428,10 @@ class Modules:
         file. Without that module no other path can be compared with it, and a module directory
         without it may not be the one that libpam loads from (``/lib/<multiarch>/security/`` of
         a Debian system whose ``/usr`` is not merged), so the family refuses rather than taking
-        such a line as another module. A build of the module under another name with another
-        checksum is not recognised (ADR 0021).
+        such a line as another module. It is also the reason when a path that would otherwise
+        not be ``pam_pwquality`` could not be inspected without following a link. A build of the
+        module with another checksum, whose own file name does not hold ``pam_pwquality``, is
+        not recognised (ADR 0021).
         """
         if self.directory is None:
             return (
@@ -416,7 +443,13 @@ class Modules:
             return f"{module} holds {ISA_MARK}, which libpam replaces and the collection does not"
         if MODULE_NAME in path.rpartition("/")[2]:
             return True
-        return self._same_as_module(path, self.directory + PAM_MODULE)
+        resolved, unresolved = self._resolved(path)
+        if resolved is not None and MODULE_NAME in resolved.rpartition("/")[2]:
+            return True
+        same = self._same_as_module(path, self.directory + PAM_MODULE)
+        if same is True or isinstance(same, str) or unresolved is None:
+            return same
+        return unresolved
 
     def _same_as_module(self, path: str, reference: str) -> bool | str:
         """Return whether ``path`` is a regular file with the checksum of ``reference``."""

@@ -21,8 +21,31 @@ UNIX_MODULE = MODULE_DIRECTORY + "pam_unix.so"
 PWQ_STAT: dict[str, object] = {"exists": True, "isreg": True, "checksum": "a1"}
 UNIX_STAT: dict[str, object] = {"exists": True, "isreg": True, "checksum": "b2"}
 MODULE_STATS: dict[str, dict[str, object]] = {PWQ_MODULE: PWQ_STAT, UNIX_MODULE: UNIX_STAT}
-MODULES = pwquality.Modules(MODULE_DIRECTORY, MODULE_STATS)
-FILTER_MODULES: dict[str, object] = {"directory": MODULE_DIRECTORY, "stats": MODULE_STATS}
+NOT_A_LINK: dict[str, object] = {"exists": True, "islnk": False}
+
+
+def plain(stats: dict[str, dict[str, object]]) -> dict[str, dict[str, object]]:
+    """Return the stats without following a link of paths that are not links."""
+    return {
+        path: {"exists": False} if stat.get("exists") is False else NOT_A_LINK
+        for path, stat in stats.items()
+    }
+
+
+def identities(
+    directory: str | None,
+    stats: dict[str, dict[str, object]],
+    links: dict[str, dict[str, object]] | None = None,
+) -> pwquality.Modules:
+    return pwquality.Modules(directory, stats, plain(stats) if links is None else links)
+
+
+MODULES = identities(MODULE_DIRECTORY, MODULE_STATS)
+FILTER_MODULES: dict[str, object] = {
+    "directory": MODULE_DIRECTORY,
+    "stats": MODULE_STATS,
+    "links": plain(MODULE_STATS),
+}
 
 
 def stack(files: list[tuple[str, str]], modules: pwquality.Modules = MODULES) -> pwquality.PamStack:
@@ -194,6 +217,14 @@ DECIDE_SHAPES: list[tuple[tuple[object, object, object, object, object], str]] =
     (
         (GOOD_RULE | {"directory": 1}, EMPTY, "", EMPTY, FILTER_MODULES),
         "directory must be a string",
+    ),
+    (
+        (GOOD_RULE, EMPTY, "", EMPTY, {"directory": None, "stats": {}}),
+        "the links of the modules must be a mapping",
+    ),
+    (
+        (GOOD_RULE, EMPTY, "", EMPTY, {"directory": None, "stats": {}, "links": {PWQ_MODULE: 1}}),
+        "every module link stat must be a mapping under its path",
     ),
 ]
 
@@ -565,11 +596,95 @@ def missing_reference(path: str) -> str:
 def test_a_module_is_pam_pwquality_when_libpam_loads_that_file_whatever_its_name(
     module: str, stats: dict[str, dict[str, object]], outcome: bool | str
 ) -> None:
-    assert pwquality.Modules(MODULE_DIRECTORY, stats).identify(module) == outcome
+    assert identities(MODULE_DIRECTORY, stats).identify(module) == outcome
+
+
+def link_to(source: str) -> dict[str, object]:
+    return {"exists": True, "islnk": True, "lnk_source": source, "lnk_target": source}
+
+
+LINKED_TO_BUILD: dict[str, dict[str, object]] = {LINKED: link_to(ELSEWHERE_PWQ)}
+
+
+@pytest.mark.parametrize(
+    ("stats", "links", "outcome"),
+    [
+        (MODULE_STATS | {LINKED: UNIX_STAT}, plain(MODULE_STATS) | LINKED_TO_BUILD, True),
+        ({LINKED: UNIX_STAT, PWQ_MODULE: {"exists": False}}, LINKED_TO_BUILD, True),
+        ({LINKED: {"msg": "Permission denied"}}, LINKED_TO_BUILD, True),
+        ({LINKED: {"exists": False}}, LINKED_TO_BUILD, True),
+        (
+            MODULE_STATS | {LINKED: UNIX_STAT},
+            plain(MODULE_STATS) | {LINKED: link_to(ELSEWHERE)},
+            False,
+        ),
+        (
+            MODULE_STATS | {LINKED: PWQ_STAT},
+            plain(MODULE_STATS) | {LINKED: link_to(ELSEWHERE)},
+            True,
+        ),
+        (
+            MODULE_STATS | {LINKED: UNIX_STAT},
+            plain(MODULE_STATS),
+            f"{LINKED} was not inspected without following a link",
+        ),
+        (
+            MODULE_STATS | {LINKED: UNIX_STAT},
+            plain(MODULE_STATS) | {LINKED: {"msg": "Permission denied"}},
+            f"stat could not inspect {LINKED} without following a link: Permission denied",
+        ),
+        (
+            MODULE_STATS | {LINKED: UNIX_STAT},
+            plain(MODULE_STATS) | {LINKED: {"msg": 1}},
+            f"stat could not inspect {LINKED} without following a link",
+        ),
+        (
+            MODULE_STATS | {LINKED: UNIX_STAT},
+            plain(MODULE_STATS) | {LINKED: {"exists": True, "islnk": True, "lnk_source": ""}},
+            f"stat did not name the file that the symbolic link {LINKED} resolves to",
+        ),
+        (
+            {LINKED: UNIX_STAT, PWQ_MODULE: {"exists": False}},
+            {LINKED: link_to(ELSEWHERE)},
+            missing_reference(LINKED),
+        ),
+    ],
+)
+def test_a_link_is_pam_pwquality_when_the_file_that_it_resolves_to_is_named_so(
+    stats: dict[str, dict[str, object]], links: dict[str, dict[str, object]], outcome: bool | str
+) -> None:
+    """A link to a build of the module with another checksum loads pam_pwquality (FREES-205)."""
+    assert identities(MODULE_DIRECTORY, stats, links).identify(LINKED) == outcome
+
+
+def test_a_link_to_another_pam_pwquality_build_that_loosens_the_rule_overrides_the_file() -> None:
+    text = f"password requisite {LINKED} minlen=1 enforcing=0\n"
+    stats = MODULE_STATS | {LINKED: UNIX_STAT}
+    linked = identities(MODULE_DIRECTORY, stats, plain(MODULE_STATS) | LINKED_TO_BUILD)
+    assert pwquality.read_pam(stack([(SERVICE, text)], linked)).arguments == (
+        (SERVICE, "minlen=1"),
+        (SERVICE, "enforcing=0"),
+    )
+    decision = pwquality.decide(rule(), [], "minlen = 14\n", stack([(SERVICE, text)], linked))
+    assert (decision["status"], decision["text"]) == ("overridden", None)
+    assert decision["reason"] == f"pam_pwquality arguments override the file: {SERVICE}: minlen=1"
+    filtered = pwquality_decide.pwquality_decide(
+        GOOD_RULE,
+        [],
+        "minlen = 14\n",
+        [{"path": SERVICE, "content": text}],
+        {"directory": MODULE_DIRECTORY, "stats": stats, "links": linked.links},
+    )
+    assert filtered["status"] == "overridden"
+    unlinked = identities(MODULE_DIRECTORY, stats)
+    assert (
+        pwquality.decide(rule(), [], "minlen = 14\n", stack([(SERVICE, text)], unlinked))["status"]
+        == "compliant"
+    )
 
 
 def test_no_module_is_known_without_the_module_directory() -> None:
-    assert pwquality.Modules(None, {}).identify("pam_pwquality.so") == (
+    assert identities(None, {}).identify("pam_pwquality.so") == (
         "the collection does not know the directory that libpam loads pam_pwquality.so from on"
         " this platform"
     )
@@ -577,8 +692,8 @@ def test_no_module_is_known_without_the_module_directory() -> None:
 
 def test_a_renamed_pam_pwquality_that_loosens_the_rule_overrides_the_file() -> None:
     text = f"password requisite {LINKED} minlen=1 enforcing=0\n"
-    linked = pwquality.Modules(MODULE_DIRECTORY, MODULE_STATS | {LINKED: PWQ_STAT})
-    other = pwquality.Modules(MODULE_DIRECTORY, MODULE_STATS | {LINKED: UNIX_STAT})
+    linked = identities(MODULE_DIRECTORY, MODULE_STATS | {LINKED: PWQ_STAT})
+    other = identities(MODULE_DIRECTORY, MODULE_STATS | {LINKED: UNIX_STAT})
     assert pwquality.read_pam(stack([(SERVICE, text)], linked)).arguments == (
         (SERVICE, "minlen=1"),
         (SERVICE, "enforcing=0"),
@@ -605,7 +720,7 @@ def test_a_pam_pwquality_build_outside_the_module_directory_overrides_the_file(
     stats: dict[str, dict[str, object]],
 ) -> None:
     text = f"password requisite {ELSEWHERE_PWQ} minlen=1 enforcing=0\n"
-    modules = pwquality.Modules(MODULE_DIRECTORY, stats)
+    modules = identities(MODULE_DIRECTORY, stats)
     assert pwquality.read_pam(stack([(SERVICE, text)], modules)).arguments == (
         (SERVICE, "minlen=1"),
         (SERVICE, "enforcing=0"),
@@ -626,13 +741,13 @@ def test_a_module_directory_without_pam_pwquality_refuses_every_other_module() -
         rule(),
         [],
         "minlen = 14\n",
-        stack([(SERVICE, text)], pwquality.Modules(MODULE_DIRECTORY, stats)),
+        stack([(SERVICE, text)], identities(MODULE_DIRECTORY, stats)),
     )
     assert (decision["status"], decision["text"]) == ("overridden", None)
     assert str(decision["reason"]).startswith(
         f"{SERVICE} loads the module pam_unix.so, but {missing_reference(UNIX_MODULE)}"
     )
-    alone = pwquality.Modules(MODULE_DIRECTORY, stats)
+    alone = identities(MODULE_DIRECTORY, stats)
     assert pwquality.read_pam(stack([(SERVICE, f"{PWQ} minlen=14\n")], alone)).arguments == (
         (SERVICE, "minlen=14"),
     )
@@ -642,18 +757,18 @@ def test_a_module_directory_without_pam_pwquality_refuses_every_other_module() -
     ("modules", "reason"),
     [
         (
-            pwquality.Modules(MODULE_DIRECTORY, MODULE_STATS),
+            identities(MODULE_DIRECTORY, MODULE_STATS),
             f"{SERVICE} loads the module {LINKED}, but {LINKED} was not inspected",
         ),
         (
-            pwquality.Modules(None, {}),
+            identities(None, {}),
             (
                 f"{SERVICE} loads the module pam_unix.so, but the collection does not know the"
                 " directory that libpam loads pam_unix.so from on this platform"
             ),
         ),
         (
-            pwquality.Modules(
+            identities(
                 MODULE_DIRECTORY, {PWQ_MODULE: {"exists": False}, UNIX_MODULE: {"exists": False}}
             ),
             f"{SERVICE} loads the module pam_unix.so, but {missing_reference(UNIX_MODULE)}",

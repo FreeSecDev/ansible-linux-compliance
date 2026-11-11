@@ -77,6 +77,46 @@
     "{{ item.0 }}": "{{ item.1 }}"
   loop: "{{ [pwr_root_toggle, pwr_password_toggle, pwr_system_toggle] | zip(pwr_step.toggles) | list }}"
 
+- name: Pwhistory step | Read pwhistory.conf before check mode
+  ansible.builtin.slurp:
+    src: "{{ pwr_conf }}"
+  register: pwr_unchecked
+  when: pwr_step.check | default(false)
+
+- name: Pwhistory step | Run the topic in check mode first
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: true
+    lifecycle_family: pwhistory
+  when: pwr_step.check | default(false)
+
+- name: Pwhistory step | Read pwhistory.conf after check mode
+  ansible.builtin.slurp:
+    src: "{{ pwr_conf }}"
+  register: pwr_checked
+  when: pwr_step.check | default(false)
+
+- name: Pwhistory step | Read the ledger after check mode
+  freesecdev.linux_compliance.control_state:
+    action: list
+  register: pwr_ledger_checked
+  when: pwr_step.check | default(false)
+
+- name: Pwhistory step | Check that check mode reported the statuses of the real run and changed nothing
+  vars:
+    pwr_expected: >-
+      {{ dict([pwr_root, pwr_password, pwr_system] | zip(pwr_step.statuses))
+         | dict2items | rejectattr('value', 'equalto', 'none') | items2dict }}
+  ansible.builtin.assert:
+    that:
+      - lifecycle_results | items2dict(key_name='rule_id', value_name='status') == pwr_expected
+      - pwr_checked.content == pwr_unchecked.content
+      - pwr_ledger_checked.entries == pwr_ledger_before.entries
+    fail_msg: "{{ pwr_label }}, {{ pwr_step.name }}, check mode: {{ lifecycle_results }}"
+    quiet: true
+  when: pwr_step.check | default(false)
+
 - name: Pwhistory step | Run the topic
   ansible.builtin.include_tasks:
     file: lifecycle_remediate.yml
