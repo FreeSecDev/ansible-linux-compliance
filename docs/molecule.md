@@ -1000,7 +1000,7 @@ fails until the table covers the corpus.
 
 With `file_permissions` (four cycles), `banners` (four cycles) and `pwquality` (two cycles), one lifecycle step per
 platform ran ten cycles in a row, and on PR #56 each `molecule-docker` job took 52 minutes on GitHub's `ubuntu-24.04`
-runners, past the 30-minute response limit of the merge queue. The job logs at 6628b92 showed where the time went, per
+runners, past the 30-minute response limit that the merge queue had then (on 2026-11-10 raised to 90 minutes, then to 240 the same day). The job logs at 6628b92 showed where the time went, per
 platform: `file_permissions` 11 to 12 minutes, `banners` 18 to 19, `pwquality` 12 to 14 and the pwquality regressions
 3 to 4.5, against 5 to 6 minutes for `create` to `verify`. The 18 real scans took under a minute in all and the image
 build under half a minute; most of each cycle is remediate runs, check-mode runs and the 76 whole-instance records
@@ -1034,7 +1034,8 @@ in job 124055287121 building the Rocky Linux instance image alone took 9 minutes
 Since FREES-182 the images are built once per run and every leg loads them
 ([built once per run](#images-and-collections-built-once-per-run)). A leg that
 approaches 20 minutes should be split further, for example per pre-state, rather than given a longer limit, so that
-no required job comes near the merge queue's 30 minutes. The `test` job, 21 minutes at 6628b92, was split the same way: `test` keeps
+no required job comes near the merge queue's check timeout (30 minutes until 2026-11-10, then 90, then 240 the same day after merge queue runs took 90 to
+108 minutes). The `test` job, 21 minutes at 6628b92, was split the same way: `test` keeps
 the coverage, audit-exception, golden-content and browser tests, and `test-playbooks` ran the check-mode playbooks
 (`test-evidence`, `test-remediate-check`, `test-role-guards`, `test-verify`).
 
@@ -1049,7 +1050,8 @@ neither has a condition, so every event that ran the former `test` job runs both
 on the slower of the two runner classes seen, `test` took 5.0 minutes (`make test-coverage` 289 seconds instead of
 829 to 853) and `test-suites` 4.4. `test` then got a timeout of 12 minutes: one and a half times its longest duration
 is 7.5, and the rest covers the runner variance (the slower runners took up to 1.9 times as long before) and the
-growth of the suite, while a hung run is still cancelled long before the merge queue's 30 minutes. The suite grew
+growth of the suite, while a hung run is still cancelled long before the 30 minutes that the merge queue then allowed (on
+2026-11-10 raised to 90, then to 240 the same day). The suite grew
 faster than that: by 5a97b7b, with about 10,400 tests, `test` took 5.6 to 9.1 minutes in the seven latest runs
 (544 seconds on the slower runners) and 7.9 in the first run of the split below, so its timeout is 15 minutes:
 one and a half times 544 seconds is 13.6, and the rest covers the runner variance.

@@ -16,7 +16,11 @@ repository and is consumed here by digest only.
 
 - Every change maps to a Jira issue in project `FREES` on `vidlunnia.atlassian.net`.
 - Branch names: `<type>/FREES-<number>-<short-slug>`, for example `feat/FREES-42-openscap-audit-module`.
-- Commits follow Conventional Commits and end with a `Refs: FREES-<number>` footer.
+- Commits follow Conventional Commits and carry a `Refs: FREES-<number>` footer. Branch commits end with it. The
+  squash commit on `main` takes its message from the pull request body, so the body ends with the footer, with
+  attribution lines before it, and the squash commit carries it. GitHub appends `Co-authored-by:` lines after the
+  body, so on `main` the footer is not the last line of the commit and not a Git trailer. Dependabot pull requests
+  carry no footer (FREES-81).
 - Every change lands through a pull request into `main`; squash merge only, rebased on the latest `main`.
 - Significant decisions are recorded as ADRs in [`docs/adr/`](docs/adr/) before implementation.
 - Documentation lives in Git under [`docs/`](docs/) and changes in the same PR as the code it describes.
@@ -26,9 +30,9 @@ repository and is consumed here by digest only.
 
 1. Never use `ansible.builtin.shell`, `ansible.builtin.command`, `ansible.builtin.raw`,
    `ansible.builtin.script` or their aliases, anywhere, including Molecule and test playbooks.
-   Missing functionality becomes a typed Python module, action plugin or `module_utils` code, or, once
-   [ADR 0032](docs/adr/0032-operator-control-community-modules-and-value-overrides.md) is accepted, an allow-listed
-   community module.
+   Missing functionality becomes a typed Python module, action plugin or `module_utils` code, or, in a task file of
+   `roles/remediate`, a module of a community collection on the allow list of
+   [ADR 0032](docs/adr/0032-operator-control-community-modules-and-value-overrides.md) §1 (`make lint-repo`).
 2. External executables (for example `oscap`) are only run from Python with an explicit argument
    list, `shell=False`, a resolved absolute binary path, validated inputs and a timeout.
 3. Use fully qualified collection names for every module, role, plugin and collection reference.

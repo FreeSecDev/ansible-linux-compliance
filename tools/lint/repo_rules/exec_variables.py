@@ -66,7 +66,15 @@ CONFIG_EXEC_VARIABLES: Final[frozenset[str]] = frozenset(
     }
 )
 BACKEND_VARIABLES: Final[frozenset[str]] = frozenset(
-    {"ansible_package_use", "pkg_mgr", "ansible_pkg_mgr", "service_mgr", "ansible_service_mgr"}
+    {
+        "ansible_package_use",
+        "pkg_mgr",
+        "ansible_pkg_mgr",
+        "service_mgr",
+        "ansible_service_mgr",
+        "ansible_network_os",
+        "network_os",
+    }
 )
 EXEC_KEYWORDS: Final[frozenset[str]] = frozenset({"become_exe", "become_flags"})
 COLLECTION_EXEC_VARIABLES: Final[frozenset[str]] = frozenset({"docker_extra_args"})

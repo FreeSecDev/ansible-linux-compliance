@@ -40,3 +40,6 @@
 - [ ] No inline comments, secrets or unpinned references
 - [ ] Tests and docs updated; required CI is green including the report artifact
 - [ ] Reviewer is not the author
+- [ ] The last line of this body is `Refs: FREES-<n>`; attribution lines come before it
+
+Refs: FREES-NNN

@@ -11,6 +11,7 @@ from tools.lint.repo_rules import exec_modules
 ALLOWED_FILE = "roles/remediate/tasks/sudo_dropin_apply.yml"
 VISUDO = "/usr/sbin/visudo -cf %s"
 REFUSED = "parameter 'validate' of"
+MODULE_RULE = "is not allowed in roles/remediate"
 
 
 def found(root: Path, text: str, name: str = ALLOWED_FILE) -> list[str]:
@@ -40,7 +41,10 @@ def test_the_reviewed_validate_is_used_by_its_file() -> None:
 
 @pytest.mark.parametrize("module", ["copy", "ansible.builtin.copy", "ansible.legacy.copy"])
 def test_the_reviewed_visudo_check_is_allowed_in_its_file(tmp_path: Path, module: str) -> None:
-    assert found(tmp_path, task(module)) == []
+    messages = found(tmp_path, task(module))
+    assert [message for message in messages if REFUSED in message] == []
+    assert all(MODULE_RULE in message for message in messages)
+    assert bool(messages) == (module != "ansible.builtin.copy")
 
 
 @pytest.mark.parametrize(

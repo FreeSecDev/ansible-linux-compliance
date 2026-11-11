@@ -4,7 +4,7 @@ description: Threat modelling and adversarial review of security-critical change
 license: Apache-2.0
 metadata:
   owner: lead-architect
-  version: "1.0.0"
+  version: "1.0.1"
 ---
 
 # Security review

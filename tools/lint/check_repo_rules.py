@@ -106,6 +106,46 @@ Rules:
   (including ``usg fix``) or run a script that it provides, except the exact ``PINNED_EXCEPTIONS``
   of ``tools/lint/repo_rules/own_remediation.py``.
 
+* Remediation runs only reviewed modules (FREES-203, ADR 0032 §1): in every YAML task file below
+  ``roles/remediate/``, a task key that is not a task keyword of ansible-core (``TASK_KEYWORDS``,
+  plus the ``with_`` loops) and the module of an ``action`` or ``local_action`` must be a
+  module of ``BUILTIN_MODULES``, a ``freesecdev.linux_compliance`` module or a community module on
+  ``ALLOWED_COMMUNITY_MODULES`` of ``tools/lint/repo_rules/remediate_modules.py``, by its fully
+  qualified name; short, ``ansible.legacy`` and templated names are refused, and so is an
+  ``action`` or ``local_action`` whose module is not a plain string (a JSON load marker such as
+  ``__ansible_unsafe`` is a module name to Ansible). ``BUILTIN_MODULES``
+  holds the module files of the pinned ansible-core that its ``plugin_routing`` neither redirects
+  nor removes, so ``ansible.builtin.make`` (``community.general.make``) and
+  ``ansible.builtin.sysctl`` (``ansible.posix.sysctl``) are refused, and its
+  ``DISPATCHING_MODULES`` ``gather_facts``, ``package`` and ``service`` are refused because their
+  action plugins choose the module to run while the play runs; a collection module needs its
+  file in ``plugins/modules`` or ``plugins/action`` and no routing entry other than
+  ``deprecation`` in ``meta/runtime.yml``. ``include_role``, ``import_role`` and a dependency in
+  ``roles/remediate/meta/main.yml`` are refused, and ``include_tasks`` and ``import_tasks`` must
+  be task keys whose target is ``{{ role_path }}/tasks/<literal path>``. The allow list is
+  empty, and an allow-listed module needs its collection pinned at one exact version in
+  ``galaxy.yml``, ``extensions/molecule/requirements.yml`` and
+  ``extensions/molecule/collections.pins``. Because Ansible also loads ``main.json``, ``main``
+  without a suffix, any file that ``tasks_from`` or ``handlers_from`` names, JSON that PyYAML
+  cannot read and vaulted files as a role's tasks, handlers or metadata,
+  ``tools/lint/repo_rules/remediate_files.py`` refuses every file below
+  ``roles/remediate/tasks/``, ``handlers/`` and ``meta/`` that is not a readable ``.yml`` or
+  ``.yaml`` file of task lists (``meta/``: mappings) or that holds a key starting with
+  ``__ansible_``, which ansible-core's JSON loader decodes into another value. ``delegate_to``,
+  ``delegate_facts``, ``local_action`` and ``connection`` are refused as keywords of the role's
+  tasks and blocks, and ``meta/runtime.yml`` may route modules and action plugins only with
+  ``redirect``, ``tombstone`` and ``deprecation``, ``module_utils`` only with ``deprecation``, and
+  holds no ``import_redirection`` (``tools/lint/repo_rules/remediate_routing.py``). The rule is a
+  guard against mistakes, not a sandbox; its boundary is in ADR 0032 (2026-11-10).
+
+* Names that Ansible learns only at run time (FREES-203): in every task list, ``set_fact`` keys are
+  literal (a templated key is accepted only below ``extensions/molecule/``), ``args``,
+  ``module_defaults`` entries and the mapping form of ``action`` are mappings with literal keys, a
+  free-form argument string holds no template except an include target, and ``loop_var``,
+  ``index_var``, ``register`` and the ``name`` of ``include_vars`` and ``vars_prompt`` are
+  literal names that are not execution-altering variables
+  (``tools/lint/repo_rules/runtime_names.py``).
+
 * Every remediation family has an internal variable prefix of its own (FREES-208,
   ``tools/lint/repo_rules/family_prefixes.py``): the task files below ``roles/remediate/tasks``
   that include or import one another (a family file, its helpers and the families that share

@@ -2,6 +2,8 @@
 
 - **Status:** accepted
 - **Date:** 2026-11-09
+- **Amended:** 2026-11-10 (re-review after an update from `main`, pull request body footer, merge queue timeout;
+  FREES-204)
 - **Deciders:** project owner (decision of 2026-11-09: the owner's account may merge its own pull requests, and the
   agent reviews, accepts and merges)
 - **Jira:** FREES-204
@@ -56,6 +58,8 @@ in the same session.
    A push after the verdict needs a new verdict for the new head. When the push only brings in `main`, a re-review
    of that update is enough. That is either a rebase whose range-diff against the reviewed head is empty, or a merge
    of `main` whose tree equals an automatic merge apart from the conflicts it resolved.
+   The [amendment of 2026-11-10](#amendment-2026-11-10-re-review-after-an-update-from-main-frees-204) replaces this
+   exception.
 5. The release gate of ADR 0012 checks the marker instead of an approval (ADR 0012, amendment of 2026-11-09).
 
 ## Alternatives evaluated
@@ -99,3 +103,76 @@ in the same session.
   verdict-based merge condition.
 - `docs/dependency-management.md` and ADR 0012 state it too.
 - `.github/rulesets/main.json` matches the live ruleset.
+
+## Amendment 2026-11-10: re-review after an update from `main` (FREES-204)
+
+**Context.** The independent re-review of this ADR asked to drop "a merge of `main`" from the re-review exception of
+§4, because AGENTS.md asks for a rebase. On 2026-11-09 and 2026-11-10 (UTC commit dates) several pull requests brought
+in `main` with a merge instead:
+
+- #79: 29f206e on 2026-11-09;
+- #78: 728943e on 2026-11-09, aca9658 and adef6d7 on 2026-11-10;
+- #86: e0e32d4 on 2026-11-09, 6819d6a and e4d5bc1 on 2026-11-10;
+- #89: 3af7609 on 2026-11-09, a80145c on 2026-11-10.
+
+Those merges needed real conflict resolution, and the reviews around them and CI found semantic conflicts that Git
+did not report:
+
+- the merge into #78 at 728943e dropped two families from a native family list in a test;
+- the merge into #86 at e4d5bc1 kept the branch's count of natively remediated rules (192) where the merged
+  catalogue held 203;
+- after that merge exactly 1000 rules were left `audit_only`, so a playbook floor of more than 1000 failed in CI;
+- on 2026-11-10 a review found that #86 and #78 used 12 of the same internal variable names, and #86 renamed its
+  prefix from `sc_` to `kp_`.
+
+The independent re-reviews of these merges compared the merged tree with `git merge-tree` and looked for semantic
+conflicts. A clean rebase can hide the same semantic conflicts.
+
+**Decision.** Rebasing stays the rule. The last paragraph of §4 is replaced by:
+
+A push after the verdict needs a new verdict for the new head. When the push only brings in `main`, a re-review of
+that update replaces the full review. It is done by a reviewer independent of the author and of whoever resolved the
+conflicts, and its verdict names the new head. Anything else in the push needs a full re-review.
+
+- **Rebase.** `git range-diff` between the branch's commits before and after the rebase shows every commit as
+  unchanged. A commit shown as changed, added or removed is reviewed as a conflict resolution (as in c. below) or
+  gets a full re-review. Checks d. to f. below apply as well.
+- **Merge of `main`.** Always a merge re-review with these checks, also when Git reported no conflict:
+  - a. **Parents:** the merge commit has exactly two parents, the reviewed head and a commit on `main`.
+  - b. **Diff against the automatic merge:** every difference between the merge commit's tree and the tree of
+    `git merge-tree --write-tree <reviewed head> <main commit>` is either the resolution of a conflict that command
+    reports or the fix of a semantic conflict found in d. to f., and the review names each one.
+  - c. **Resolutions:** every resolved hunk keeps the intent of both sides; no line of either side is lost, and no
+    line comes from neither side.
+  - d. **Values both sides changed:** in every file both sides changed, conflicted or not, counts, totals, floors and
+    thresholds, lists that hold the union of both sides, names and prefixes both sides introduce, and numbering are
+    recomputed from their source.
+  - e. **Generated files:** every generated file either side touched equals its generator's output for the merged
+    sources.
+  - f. **Tests:** the tests both sides added or changed pass on the merge commit, and `ci-gate` is green on it.
+
+The review states the kind of update, the reviewed and new heads, and the result of each check. The steps and
+commands are in `.agents/skills/code-review/references/re-review-after-main.md`.
+
+## Amendment 2026-11-10: the pull request body ends with the Jira footer (FREES-204)
+
+The repository squash merges with the pull request body as the commit message (`squash_merge_commit_message:
+PR_BODY`). Several commits on `main`, among them b623e7b (this ADR), have a body that ends with attribution lines
+instead of the `Refs: FREES-<n>` footer that AGENTS.md asks for.
+
+**Decision.** The last line of the pull request body is `Refs: FREES-<n>`, in a paragraph of trailer lines only, with
+attribution lines before it. The acceptance check of the `code-review` skill includes it. The `pr-body` workflow
+(`make lint-pr-body`) checks it on every pull request; it is not a required status check, and a pull request runs its
+own copy of the workflow and the checker. Dependabot pull requests are exempt, because Dependabot writes its own body
+and has no Jira key (FREES-81).
+
+**What this guarantees.** The squash commit on `main` carries the footer. The footer is the last line of the body,
+not of the commit: GitHub appends a `---------` line and `Co-authored-by:` lines after the body of every squash
+commit, so Git does not read the footer as a trailer (`git log --format='%(trailers:key=Refs)'` finds nothing).
+Tooling that needs the key searches the message for a line that matches `^Refs: FREES-`.
+
+## Amendment 2026-11-10: merge queue check timeout (FREES-204)
+
+On 2026-11-10 the merge queue's check timeout (`check_response_timeout_minutes`) in the live ruleset was raised from
+30 to 90 minutes, and the same day to 240 minutes after merge queue runs took 90 to 108 minutes.
+`.github/rulesets/main.json` follows, so it still matches the live ruleset.
