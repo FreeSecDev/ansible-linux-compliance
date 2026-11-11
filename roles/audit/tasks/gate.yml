@@ -8,6 +8,7 @@
       - linux_compliance_audited.exceptions is defined
       - linux_compliance_audit_fail_on_noncompliant is boolean
       - linux_compliance_audit_fail_on_noncompliant_after_waivers is boolean
+      - linux_compliance_audit_fail_on_deviation is boolean
     fail_msg: >-
       The gate needs the fact linux_compliance_audited from the audit role, and boolean gate variables.
     quiet: true
@@ -38,6 +39,9 @@
       error: "{{ linux_compliance_audited.summary.error | int if __linux_compliance_audit_gate_counted else none }}"
       waived: >-
         {{ __linux_compliance_audit_gate_summary.waived | int if __linux_compliance_audit_gate_counted else none }}
+      fail_on_deviation: "{{ linux_compliance_audit_fail_on_deviation }}"
+      deviation: >-
+        {{ __linux_compliance_audit_gate_summary.deviation | int if __linux_compliance_audit_gate_counted else none }}
   tags:
     - always
 
@@ -68,6 +72,22 @@
     quiet: true
   when:
     - linux_compliance_audit_fail_on_noncompliant
+    - linux_compliance_audited.gate.counted
+  tags:
+    - always
+
+- name: Audit | Stop on operator deviations when requested
+  ansible.builtin.assert:
+    that:
+      - (linux_compliance_audited.gate.deviation | int) == 0
+    fail_msg: >-
+      The audit reported {{ linux_compliance_audited.gate.deviation }} finding(s) flagged operator_deviation,
+      counted on the {{ linux_compliance_audited.gate.basis }} result: rules whose value in force a
+      linux_compliance_remediate_value_overrides entry made looser than the profile's (ADR 0032), whatever the
+      scanner's outcome. They are listed in linux_compliance_audited.deviations.flagged. The host was not changed.
+    quiet: true
+  when:
+    - linux_compliance_audit_fail_on_deviation
     - linux_compliance_audited.gate.counted
   tags:
     - always

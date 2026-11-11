@@ -12,6 +12,8 @@ argument_specs:
       - "It writes evidence files below linux_compliance_audit_output_dir."
       - "It fails when the scan did not complete."
       - "It fails on failed or errored rules when linux_compliance_audit_fail_on_noncompliant is true."
+      - "It reads the deviation register of the remediation ledger and flags the findings of its rules (ADR 0032)."
+      - "It fails on operator deviations when linux_compliance_audit_fail_on_deviation is true."
       - "With linux_compliance_exceptions_file set, it validates the file on the controller before any host is scanned."
       - "It then applies the file to the scan run of each host and publishes the waived result next to the raw one."
     author: "FreeSecDev contributors"
@@ -41,6 +43,14 @@ argument_specs:
           - "Rules with outcome error always count, in both modes, because an error is never waived."
           - "Without an exceptions file, or when no waiver was applied, the gate counts the raw result."
           - "It has no effect unless linux_compliance_audit_fail_on_noncompliant is true."
+      linux_compliance_audit_fail_on_deviation:
+        type: bool
+        default: false
+        description:
+          - "Fail the play when the gate counts at least one finding flagged operator_deviation (ADR 0032)."
+          - "Such a rule runs under a value that a remediation override made looser than the profile's."
+          - "The flag is set whatever the scanner's outcome, also on pass and on waived findings."
+          - "Independent of linux_compliance_audit_fail_on_noncompliant; a scan that did not complete always fails."
       linux_compliance_exceptions_file:
         type: str
         default: null
@@ -665,6 +675,11 @@ argument_specs:
         default: false
         description:
           - "Count the waived result instead of the raw result in the gate; error always counts."
+      linux_compliance_audit_fail_on_deviation:
+        type: bool
+        default: false
+        description:
+          - "Fail the play when the gate counts at least one finding flagged operator_deviation."
       linux_compliance_exceptions_file:
         type: str
         default: null
@@ -690,6 +705,11 @@ argument_specs:
         default: false
         description:
           - "Count the waived result instead of the raw result in the gate; error always counts."
+      linux_compliance_audit_fail_on_deviation:
+        type: bool
+        default: false
+        description:
+          - "Fail the play when the gate counts at least one finding flagged operator_deviation."
       linux_compliance_exceptions_file:
         type: str
         default: null
@@ -711,6 +731,11 @@ argument_specs:
         default: false
         description:
           - "Count the waived result instead of the raw result in the gate; error always counts."
+      linux_compliance_audit_fail_on_deviation:
+        type: bool
+        default: false
+        description:
+          - "Fail the play when the gate counts at least one finding flagged operator_deviation."
       linux_compliance_exceptions_file:
         type: str
         default: null
@@ -723,6 +748,7 @@ argument_specs:
       - "Records the gate decision with deferred true and enforced true."
       - "Then fails the host when the scan did not complete."
       - "With linux_compliance_audit_fail_on_noncompliant it also fails the host on failed or errored rules."
+      - "With linux_compliance_audit_fail_on_deviation it also fails the host on operator deviations."
     author: "FreeSecDev contributors"
     options:
       linux_compliance_audit_fail_on_noncompliant:
@@ -735,6 +761,11 @@ argument_specs:
         default: false
         description:
           - "Count the waived result instead of the raw result in the gate; error always counts."
+      linux_compliance_audit_fail_on_deviation:
+        type: bool
+        default: false
+        description:
+          - "Fail the play when the gate counts at least one finding flagged operator_deviation."
   stale.yml:
     short_description: "Report the exceptions that matched no finding on any audited host"
     description:

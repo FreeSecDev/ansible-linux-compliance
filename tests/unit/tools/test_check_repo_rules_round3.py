@@ -458,7 +458,7 @@ def test_fileio_stays_restricted_to_the_ledger(tmp_path: Path) -> None:
 
 def test_the_seam_owners_are_pinned() -> None:
     assert dict(rules.SEAM_OWNERS) == {
-        Path(AUDIT): {"owner_uid", "registry", "clock"},
+        Path(AUDIT): {"owner_uid", "registry", "clock", "state_dir"},
         Path("plugins/module_utils/compliance/catalog.py"): {"owner_uid"},
         Path("plugins/module_utils/compliance/fileio.py"): {"owner_uid"},
         Path(LEDGER): {"state_dir", "owner_uid", "lock_timeout"},

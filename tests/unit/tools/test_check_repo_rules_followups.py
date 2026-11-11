@@ -56,7 +56,7 @@ FREES_107_KEYWORDS = frozenset({"wildcard"})
 FREES_191_KEYWORDS = frozenset({"on_position", "on_markup"})
 FREES_186_KEYWORDS = frozenset({"checked", "exact", "flag"})
 FREES_200_KEYWORDS = frozenset({"client", "dropin", "effective"})
-FREES_203_KEYWORDS = frozenset({"deviated", "with_deviation"})
+FREES_203_KEYWORDS = frozenset({"deviated", "with_deviation", "counted"})
 PRODUCTION_KEYWORDS = (
     MERGED_PRODUCTION_KEYWORDS
     | PR_18_KEYWORDS
@@ -277,7 +277,7 @@ def test_the_test_seams_of_the_plugins_are_banned_keywords() -> None:
         "plugins/module_utils/compliance/fileio.py": {"owner_uid"},
         "plugins/module_utils/compliance/ledger.py": {"state_dir", "owner_uid", "lock_timeout"},
         "plugins/module_utils/compliance/openscap.py": {"runner", "clock", "limits"},
-        "plugins/module_utils/compliance/audit.py": {"owner_uid", "registry", "clock"},
+        "plugins/module_utils/compliance/audit.py": {"owner_uid", "registry", "clock", "state_dir"},
         "plugins/module_utils/compliance/sysctl.py": {"proc_root"},
     }
     for name, expected in seams.items():

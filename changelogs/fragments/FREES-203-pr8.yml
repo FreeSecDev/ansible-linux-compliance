@@ -1,0 +1,34 @@
+---
+minor_changes:
+  - >-
+    compliance_scan - reads the deviation register of the remediation ledger before it scans (FREES-203, ADR 0032).
+    The finding of a recorded rule whose outcome is ``pass`` or ``fail`` gets the flag ``operator_deviation`` and its
+    ``deviation`` (findings model schema 1.3); the scanner's outcome is never changed. Recorded rules whose finding
+    cannot carry the flag (``error``, ``notchecked``, ``notapplicable``, ``disabled``, or not in the profile) are
+    listed in the new result ``deviations.unflagged``, the flagged ones in ``deviations.flagged``, and ``summary``
+    gains ``deviation``. A run without deviations keeps its schema and its bytes.
+  - >-
+    audit role - publishes ``deviations`` in ``linux_compliance_audited``, the gate record gains ``deviation`` and
+    ``fail_on_deviation``, and the new ``linux_compliance_audit_fail_on_deviation`` (default ``false``) fails the host
+    when the gate counts a finding flagged ``operator_deviation``, independent of
+    ``linux_compliance_audit_fail_on_noncompliant``.
+  - >-
+    scan_summary filter - counts ``deviation``, the findings flagged ``operator_deviation``, also in the waived run.
+  - >-
+    compare_scans filter and verify role - a rule whose later finding is a flagged ``pass`` is the new category
+    ``deviated``, never ``improved`` or ``unchanged``; every rule record shows ``operator_deviation`` and ``deviation``,
+    the result gains ``deviations`` and ``deviation_detected``, and the verify role prints
+    ``WARNING: DEVIATION`` with every deviated rule.
+  - >-
+    verify role - ``preflight.yml`` also refuses ``linux_compliance_audit_fail_on_deviation``, which would fail
+    deviated hosts in the audit after remediation before the comparison reports them.
+  - >-
+    evidence role - accepts and validates the deviation keys of the audit gate record (the manifest of schema 1.0 does
+    not record them; the bundled scan run carries every flagged finding), and ``summary.yml`` warns about every target
+    host whose audit flagged deviations.
+breaking_changes:
+  - >-
+    compliance_scan - an audit on a host whose ledger (``/var/lib/freesecdev/linux_compliance/state.json``) is corrupt,
+    unsafe or of an unsupported schema now fails before the scan with ``deviation_source_invalid``, as remediation
+    already does; inspect it with ``control_state``. With ``backend=scc`` an audit fails with
+    ``deviation_backend_unsupported`` while the deviation register holds a record (FREES-203).

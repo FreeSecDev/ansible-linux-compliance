@@ -10,6 +10,7 @@ linux_compliance_audit_scc_content_sha256: null
 linux_compliance_audit_scc_profile_id: "xccdf_mil.disa.stig_profile_MAC-1_Classified"
 linux_compliance_audit_allow_off_platform_benchmark: false
 linux_compliance_audit_fail_on_noncompliant_after_waivers: false
+linux_compliance_audit_fail_on_deviation: false
 linux_compliance_exceptions_file: null
 linux_compliance_file_permissions_enabled: true
 linux_compliance_sysctl_enabled: true

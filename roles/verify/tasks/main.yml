@@ -127,6 +127,10 @@
         __linux_compliance_verify_comparison.new_failure_detected is boolean
         or (__linux_compliance_verify_comparison.new_failure_detected is none
             and not __linux_compliance_verify_comparison.complete)
+      - >-
+        __linux_compliance_verify_comparison.deviation_detected is boolean
+        or (__linux_compliance_verify_comparison.deviation_detected is none
+            and not __linux_compliance_verify_comparison.complete)
     fail_msg: >-
       An internal fact of the verify role does not have the type and shape that the role just gave it,
       so a role parameter, an include parameter or an extra variable replaced it. The failed assertion
@@ -197,6 +201,24 @@
   when:
     - linux_compliance_verified.complete
     - linux_compliance_verified.passed_now_not_applicable | length > 0
+  tags:
+    - always
+
+- name: Verify | Report every rule that passes only under an operator deviation
+  ansible.builtin.debug:
+    msg: >-
+      {{ ['WARNING: DEVIATION on ' ~ inventory_hostname ~ ': '
+          ~ linux_compliance_verified.counts.deviated
+          ~ ' rule(s) pass only under a value that an operator override made looser than the profile value;'
+          ~ ' they are not improvements and a report never counts them as passing.']
+         + linux_compliance_verified.deviations
+           | map(attribute='rule_id')
+           | ansible.builtin.zip(linux_compliance_verified.deviations | map(attribute='post.deviation.value_id'))
+           | map('join', ' under ')
+           | list }}
+  when:
+    - linux_compliance_verified.complete
+    - linux_compliance_verified.deviation_detected
   tags:
     - always
 

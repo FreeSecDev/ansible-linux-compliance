@@ -10,6 +10,7 @@ import pytest
 
 from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance import (
     audit,
+    audit_result,
     model,
     scanner,
 )
@@ -271,4 +272,4 @@ def test_the_summary_names_the_off_platform_marker(harness: Harness) -> None:
     job = harness.job(backend="scc", host=TARGET, allow_off_platform_benchmark=True)
     result: dict[str, Any] = auditor(MarkingBackend()).run(job, check_mode=False)
     assert result["summary"]["off_platform"] == MARKER.to_dict()
-    assert audit.summarize(None) is None
+    assert audit_result.summarize(None) is None

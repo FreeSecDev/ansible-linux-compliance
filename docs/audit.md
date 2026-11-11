@@ -36,7 +36,7 @@ pinned content.
 6. Runs `compliance_scan` with `become: true` on that task only and `fail_on_incomplete: false`, so the result is
    always registered.
 7. Publishes the fact `linux_compliance_audited` (`run_id`, `run_status`, `summary`, `scan_run`, `evidence`,
-   `evidence_written`, `disabled_rules`, `planned`) for the evidence and verify roles. `summary` and `scan_run` are
+   `evidence_written`, `disabled_rules`, `planned`, `deviations`) for the evidence and verify roles. `summary` and `scan_run` are
    the raw result and are never changed afterwards.
 8. Applies the exceptions file to the scan run of the host and adds the waived result as
    `linux_compliance_audited.exceptions`, next to the raw one.
@@ -45,6 +45,8 @@ pinned content.
     `error` of the raw result by default, or `fail` of the waived result plus `error` with
     `linux_compliance_audit_fail_on_noncompliant_after_waivers` ([the gate](#the-failure-gate-and-waivers)). The
     decision is recorded as `linux_compliance_audited.gate`.
+11. Fails when `linux_compliance_audit_fail_on_deviation` is true and the gate counts at least one finding flagged
+    `operator_deviation` ([operator deviations](#operator-deviations-adr-0032)).
 
 The variables are listed in the [role README](../roles/audit/README.md). The `evidence` role collects the evidence
 of each run, with the waived evaluation, into a bundle on the controller ([evidence bundles](evidence.md)).
@@ -57,7 +59,8 @@ of each run, with the waived evaluation, into a bundle on the controller ([evide
    ([content directory rules](#content-directory-rules)) before the file is opened; verify the datastream SHA-256 and
    parse it with the hardened catalog parser; find the profile (a missing profile is `profile_not_found`, never
    replaced); check that the datastream file name fits the provenance label (`[A-Za-z0-9._+-]{1,64}`); check that every
-   disabled rule is selected by the profile and that at least one rule stays enabled; inspect the output directory
+   disabled rule is selected by the profile and that at least one rule stays enabled; read the deviation register of
+   the remediation ledger ([operator deviations](#operator-deviations-adr-0032)); inspect the output directory
    without creating anything. Everything the backend would refuse is refused here, before anything is created.
 2. **Execute** (outside check mode). Create missing components of the output directory (mode `0700`), create the run
    directory `<output_dir>/<run_id>` (mode `0700`, must not exist), make the private copy of the datastream (below),
@@ -450,7 +453,8 @@ counts is an explicit choice:
   check can never pass the gate.
 
 `linux_compliance_audited.gate` records `enabled`, `after_waivers`, `basis` (`raw` or `waived`), `counted` (false for
-`not_run`) and the `fail`, `error` and `waived` counts that the gate used.
+`not_run`) and the `fail`, `error` and `waived` counts that the gate used, and `fail_on_deviation` and `deviation`, the
+number of findings flagged `operator_deviation` in the counted result ([operator deviations](#operator-deviations-adr-0032)).
 
 ### Stale exceptions, once for all hosts
 
@@ -537,7 +541,64 @@ finding that is `fail` in the baseline and `waived` afterwards is `unchanged`, n
 fails, and a waiver never counts as a fix or as a pass. This rule was recorded on FREES-136 for FREES-54.
 `playbooks/remediate.yml` runs the audit role twice through `audit.yml`; the role itself is unchanged by FREES-54.
 Both `remediate.yml` and `verify.yml` refuse `linux_compliance_audit_fail_on_noncompliant: true` before any host is
-audited, because the gate would fail hosts in the second audit before the verify role reports their regressions.
+audited, because the gate would fail hosts in the second audit before the verify role reports their regressions. They
+refuse `linux_compliance_audit_fail_on_deviation: true` for the same reason.
+
+## Operator deviations (ADR 0032)
+
+An operator may set a remediation target that is looser than the profile's
+(`linux_compliance_remediate_value_overrides`, [ADR 0032](adr/0032-operator-control-community-modules-and-value-overrides.md)).
+The remediate role then reports the rule as `deviation` and records it in the **deviation register** of its ledger
+(`/var/lib/freesecdev/linux_compliance/state.json`, ledger schema 2, [remediation](remediation.md)). The register holds
+the rule, the XCCDF value, the profile value and the value in force; it is kept apart from the revert entries,
+because a looser value that the host already had needs a record although nothing was written.
+
+**Where the audit gets the deviation.** `compliance_scan` reads the register in its plan, before anything is created
+and before the scanner runs (decision A of ADR 0032). It does not judge the value again: the remediation judged it with
+the reader of the family, and the scanner judges the check. Values are compared as the canonical text that the
+family's comparison function wrote into the register.
+
+| Register | Audit |
+|---|---|
+| No ledger, or no `deviations` | No deviations; the scan run keeps its schema (`1.0`, `1.1` or `1.2`) and its bytes |
+| Records | Each finding of a recorded rule whose outcome is `pass` or `fail` gets the flag `operator_deviation` and a `deviation` object (`value_id`, `profile_value`, `effective_value`); the scan run is findings model schema `1.3` ([ADR 0013](adr/0013-normalized-findings-model.md)) |
+| Corrupt or unsafe: not strict JSON, an unknown or missing key, an unsupported schema version, a symbolic link, not owned by root, group or world access to the directory, a record the findings model refuses | `deviation_source_invalid` before anything is scanned (fail closed, as remediation refuses such a ledger); the message names `control_state`, which lists the ledger |
+| Records, with `backend: scc` | `deviation_backend_unsupported` before anything is scanned: SCC reports DISA rules, which the register does not name; until the audit maps them (FREES-203), a recorded deviation would otherwise be lost |
+
+**The scanner's outcome is never changed.** A check that does not test the value (for example
+`sudo_require_reauthentication`, which accepts any non-negative timeout) still says `pass`; the flag is what tells
+the report that the value is looser than the profile's, and the report never counts a flagged pass as a pass (report
+schema 2.4, [ADR 0016](adr/0016-report-schema-and-summary-semantics.md)). An exception that turns a flagged `fail` into
+`waived` keeps the flag: a deviation is not a waiver.
+
+**Outcomes that cannot carry the flag** (decision D). The model allows the flag only on `pass`, `fail` and `waived`.
+A recorded rule whose finding is `error`, `notchecked`, `notapplicable` or `disabled`, or that the profile does not
+select at all, gets no flag. None of those outcomes ever counts as a pass, and the module lists such rules in
+`deviations.unflagged`, with the outcome or null. In Docker most `login_defs` checks are `notapplicable`, so their
+deviations are listed there; a libvirt instance shows the flag.
+
+**Check mode.** The preview scan is stamped the same way. When check mode runs no scan (`not_run`), every record is
+listed in `deviations.unflagged` with a null outcome.
+
+**A stale record over-reports**, which is the safe direction: a record that the host no longer matches flags a finding
+until the next enabled remediation run removes it. Only root can change the register, and whoever can write it as
+root can also hide a deviation ([threat model](security/threat-model.md)).
+
+The module returns:
+
+| Key | Content |
+|---|---|
+| `summary.deviation` | Findings flagged `operator_deviation`. They are also counted under their outcome, so `pass` stays the scanner's count; this summary counts outcomes and is not a report figure |
+| `deviations.recorded` | Rules in the register |
+| `deviations.flagged` | `rule_id`, `outcome`, `value_id`, `profile_value` and `effective_value` of each flagged finding |
+| `deviations.unflagged` | The same for every other recorded rule, `outcome` being that of its finding or null |
+
+The role publishes `deviations` in `linux_compliance_audited`, and `scan_summary` counts `deviation` in the waived
+summary too. `linux_compliance_audit_fail_on_deviation` (default `false`, like
+`linux_compliance_audit_fail_on_noncompliant`) fails the host when the gate counts at least one flagged finding, on the
+same basis (`raw`, or `waived` with `linux_compliance_audit_fail_on_noncompliant_after_waivers`); the flag stays on a
+waived finding, so the count is the same on both bases. It is independent of `linux_compliance_audit_fail_on_noncompliant`,
+so CI can fail on deviations alone.
 
 ## Disabled rules (ADR 0011)
 
@@ -663,6 +724,8 @@ and the dashboard filters the rules by family and topic.
 | `evidence_write_failed` | An evidence file could not be written, or the check-mode scan could not write its files |
 | `cleanup_failed` | The private copy or the temporary check-mode directory could not be removed; `evidence_dir` names what is left |
 | `scan_incomplete` | The scan did not complete and `fail_on_incomplete` is true; the full result is included |
+| `deviation_source_invalid` | The deviation register of the ledger cannot be trusted (corrupt, unsafe or unsupported); nothing is scanned ([operator deviations](#operator-deviations-adr-0032)) |
+| `deviation_backend_unsupported` | The register holds records and the backend is `scc`, which cannot report them yet; nothing is scanned |
 
 ## Tests
 
@@ -688,6 +751,17 @@ in writable, foreign and sticky directories, chains that resolve through a writa
 the 40-link bound, dangling links, a final component that is a symlink, unreadable links, a group-writable inode
 reached through a hard link, races, and `effective_uid`. The discover module tests cover the same refusals through
 `benchmark_info` and `profile_info`. `audit.py`, `catalog.py` and the modules have 100% line and branch coverage.
+
+`tests/unit/plugins/module_utils/compliance/test_audit_deviations.py` covers the operator deviations: no ledger and an
+empty register (schema and bytes unchanged), a flagged `pass` and `fail` and the stamped `scan-run.json`, `error`,
+`notchecked`, `notapplicable`, `disabled` and a rule outside the profile listed as unflagged, a scan that did not
+complete, a stamped check-mode preview that keeps nothing, check mode without a scan, a corrupt ledger, an unsupported
+ledger version, a group-accessible ledger directory, a ledger of another owner and a record that the findings model
+refuses (each `deviation_source_invalid` before anything is created), and `scc` with and without records. The flag
+follows the outcomes the model allows for every outcome. `test_compliance_scan.py` checks the module result and the
+refusal of a corrupt ledger, `tests/unit/plugins/filter/test_exceptions_filters.py` the `deviation` count of
+`scan_summary` before and after waivers, and `tests/playbooks/audit-exceptions.yml` (`make test-audit-exceptions`) the
+gate record, the gate with and without `linux_compliance_audit_fail_on_deviation`, and a string for it.
 
 The toggle resolution is covered by `tests/unit/plugins/module_utils/compliance/test_toggles.py` and
 `tests/unit/plugins/filter/test_audit_disabled_rules.py` (a rule toggle, a topic toggle, a rule toggle that overrides

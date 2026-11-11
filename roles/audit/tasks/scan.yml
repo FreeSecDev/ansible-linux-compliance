@@ -6,6 +6,7 @@
       - linux_compliance_audit_profile is match('^[a-z0-9][a-z0-9_]{0,127}$')
       - linux_compliance_audit_fail_on_noncompliant is boolean
       - linux_compliance_audit_fail_on_noncompliant_after_waivers is boolean
+      - linux_compliance_audit_fail_on_deviation is boolean
       - >-
         linux_compliance_exceptions_file is none or
         (linux_compliance_exceptions_file is string and linux_compliance_exceptions_file is match('^/'))
@@ -135,6 +136,7 @@
       evidence_written: "{{ __linux_compliance_audit_scan.evidence_written }}"
       disabled_rules: "{{ __linux_compliance_audit_scan.disabled_rules }}"
       planned: "{{ __linux_compliance_audit_scan.planned }}"
+      deviations: "{{ __linux_compliance_audit_scan.deviations }}"
   tags:
     - always
 

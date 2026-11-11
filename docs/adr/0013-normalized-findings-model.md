@@ -661,3 +661,45 @@ Rejected alternatives:
 | Keeping the deviation only in the remediation result | The finding of the next scan is what the report counts; a pass must carry the flag itself |
 | Always writing `deviation: null` | Changes the bytes and digests of every existing run for no information |
 | Raising the module line limit | A unit test pins it; the placement set the precedent of a sibling module |
+
+## Amendment 2026-11-11: the audit writes operator deviations (FREES-203, part 2)
+
+The amendment above defined the flag and schema 1.3 and left the writer to the audit. `compliance_scan` is now that
+writer ([audit guide](../audit.md#operator-deviations-adr-0032), decisions A, D and O of
+[ADR 0032](0032-operator-control-community-modules-and-value-overrides.md)).
+
+- **Source.** The audit reads the deviation register of the remediation ledger (ledger schema 2, ADR 0011) in its
+  plan, before anything is created. It does not judge any value again; the remediation judged it with the family's
+  reader. A missing ledger has no deviations. A corrupt or unsafe ledger, or a record that this model refuses (for
+  example a profile value equal to the value in force), fails the audit with `deviation_source_invalid` before the
+  scan. The `scc` backend is refused with `deviation_backend_unsupported` while the register holds a record, because
+  its findings are DISA rules that the register does not name.
+- **Stamping.** After the scan, and after disabled rules and control placements are applied, each finding of a
+  recorded rule whose outcome is in `FLAG_OUTCOMES[operator_deviation]` gets the flag and the `Deviation` of the
+  record. The outcome is never changed. The run then serializes as `1.3`; a run without any flagged finding keeps its
+  version and its bytes, so existing evidence digests are unchanged. The check-mode preview is stamped the same way.
+  An exception later turns a flagged `fail` into `waived` and keeps the flag, as before.
+- **Outcomes that cannot carry the flag** (the bullet above that left this to the audit change). A recorded rule whose
+  finding is `error`, `notchecked`, `notapplicable` or `disabled`, or that the run does not report at all, gets no flag.
+  The module lists it in `deviations.unflagged` with the outcome of its finding, or null. The remediation result keeps
+  its deviation either way, and none of these outcomes counts as a pass (ADR 0016).
+- **Summaries.** The audit summary and `scan_summary` gain `deviation`, the number of flagged findings. They stay outcome
+  counts: a flagged `pass` is also counted in `pass`. The report, not this summary, takes flagged passes out of the
+  pass count (report schema 2.4, ADR 0016).
+- **Comparisons.** `compare_scans` classifies a rule whose later finding is a flagged `pass` as `deviated`, before any
+  other category, so a pass under a looser value is never an improvement (amendment of FREES-54 above). A flagged
+  `fail` is classified like any other `fail`.
+- **Where it lives.** `audit.py` is held to the module line limit, so the stamping, the summary (`summarize`, moved
+  unchanged but for `deviation`) and the reading of the register live in
+  `plugins/module_utils/compliance/audit_result.py`, which imports only the standard library, `deviations`, `ledger`,
+  `model` and `vocabulary`. `audit.py` keeps the seam
+  (`Auditor(state_dir=...)`, `plan(..., state_dir=...)`), which the repository guard bans in plugin code.
+
+Rejected alternatives:
+
+| Alternative | Reason rejected |
+|---|---|
+| Re-judging the value at scan time | Needs a copy of every family reader in the audit; the reader that remediated is the one that judges |
+| Reading a corrupt register as empty | A weakened host would scan as a plain pass; refusing is the fail-closed direction |
+| Stamping SCC findings by rule identifier | SCC reports DISA rules, so no record would ever match and every deviation would be silently unflagged |
+| A flag on `notapplicable` or `error` findings | Refused by the model (amendment above); the unflagged list keeps the deviation visible instead |

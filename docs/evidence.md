@@ -215,6 +215,15 @@ document was written from (`linux_compliance_audited.exceptions.evaluation`,
 The machine ID of the facts and the one in the scan run must agree when both are set. Both come from the host and
 are self-asserted; a machine ID is not a secret.
 
+**Operator deviations** (ADR 0032) reach the bundle in `raw/scan-run.json`: a finding of a rule whose value in force an
+operator override made looser than the profile's carries the flag `operator_deviation` and its `deviation` (findings
+model schema 1.3, [audit](audit.md#operator-deviations-adr-0032)), and the waived evaluation keeps both. The report
+counts them from there (report schema 2.4). The audit role's gate record has two more keys, `fail_on_deviation` and
+`deviation` (the flagged findings it counted). The evidence role validates them when they are present (a boolean, and
+a non-negative count, null exactly when nothing was counted), but the manifest of schema `1.0` does not record them;
+the flagged findings themselves are in the bundled scan run. The deviation register of the ledger is not collected:
+the ledger also holds prior values, some of them sensitive, and stays outside every bundle.
+
 ### The collection summary
 
 `summary.yml` writes one collection summary per run, `<linux_compliance_evidence_output_dir>/collection-<collection_id>.json`,
@@ -500,7 +509,9 @@ The audit role's `deferred.yml` and `enforce.yml` entry points defer and enforce
 - `tests/unit/plugins/module_utils/compliance/test_evidence.py`: the plan (allow-list, exclusions, paths outside the
   run directory, malformed facts), the documents (checksum, size, mode and owner mismatches, a changed exceptions file,
   an evaluation that does not verify or belongs to another run, the stale result), the manifest (every invalid field)
-  and `check_bundle` (tampered, unlisted, missing and signature files, resealed bundles with inconsistent content).
+  and `check_bundle` (tampered, unlisted, missing and signature files, resealed bundles with inconsistent content), and
+  the deviation gate keys of the audit role (accepted, kept out of the manifest, refused when only one is set, not a
+  boolean, negative, a boolean count, or set although nothing was counted).
   `evidence.py` and the three filters have 100% line and branch coverage.
 - `tests/unit/tools/reporting/test_bundle.py`: the report reads waived findings and exception statuses from bundles,
   a bundle without exceptions, missing, tampered, symlinked, special-file and oversized bundles, conflicting exceptions
@@ -576,6 +587,9 @@ Not covered yet: a Molecule scenario that collects the bundle of a real scan fro
   only when it is built with `--evidence-collection`. A report covers at most 1000 target hosts; split a larger
   fleet into runs with separate summaries and reports ([fleets of more than 1000 hosts](#fleets-of-more-than-1000-hosts)).
 - The collection summary is not signed until ADR 0018 (FREES-140); protect the evidence directory.
+- The collection summary and the manifest carry no deviation counts; `summary.yml` prints a warning that names every
+  target host whose audit flagged `operator_deviation` findings, with their number, and the bundled scan runs hold the
+  findings.
 - A bundle is not signed; see [signing](#signing-adr-0018).
 - `ansible.builtin.fetch` with `become` reads the whole file into memory on the controller (it uses `slurp`), so very
   large ARF files cost memory.

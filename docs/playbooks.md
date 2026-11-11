@@ -56,9 +56,9 @@ playbook. Every remediation therefore starts from a verified profile and a recor
 `remediate` role gets the `linux_compliance_discovered` fact it requires. The full play sequence is:
 
 1. Preflight: the `verify` role's `preflight.yml` entry point fails every host whose
-   `linux_compliance_audit_fail_on_noncompliant` is not unset or `false`, before anything is audited. That gate would
-   skip every non-compliant host after the first audit and fail every host with a failing rule in the second audit
-   before the comparison could report its regressions.
+   `linux_compliance_audit_fail_on_noncompliant` or `linux_compliance_audit_fail_on_deviation` is not unset or
+   `false`, before anything is audited. Those gates would skip hosts after the first audit and fail hosts in the
+   second audit before the comparison could report what changed.
 2. `audit.yml`: `discover` and `audit` on the target hosts, then the stale-exceptions report on `localhost`.
 3. Record the baseline: the `verify` role's `baseline.yml` entry point copies `linux_compliance_audited` to
    `linux_compliance_baseline` on each host and marks it as recorded in the facts of the host. It fails if a marker
@@ -113,6 +113,7 @@ Role variables are documented in each role `README.md` and in `meta/argument_spe
 | `linux_compliance_discover_content_path`, `linux_compliance_discover_content_sha256` | empty, required | `discover` |
 | `linux_compliance_audit_fail_on_noncompliant` | `false` | `audit`; refused by `remediate.yml` and `verify.yml` |
 | `linux_compliance_audit_fail_on_noncompliant_after_waivers` | `false` | `audit` |
+| `linux_compliance_audit_fail_on_deviation` | `false` | `audit`; refused by `remediate.yml` and `verify.yml` |
 | `linux_compliance_exceptions_file` | `null` | `audit`, `verify` |
 | `linux_compliance_audit_output_dir` | `/var/lib/freesecdev/linux_compliance/evidence` | `audit` |
 | `linux_compliance_audit_scan_timeout` | `1800` | `audit` |

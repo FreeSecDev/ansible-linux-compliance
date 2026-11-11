@@ -203,7 +203,7 @@ BANNED_KEYWORDS: Final[frozenset[str]] = frozenset(
 SEAM_OWNERS: Final[Mapping[Path, frozenset[str]]] = MappingProxyType(
     {
         Path("plugins/module_utils/compliance/audit.py"): frozenset(
-            {"owner_uid", "registry", "clock"}
+            {"owner_uid", "registry", "clock", "state_dir"}
         ),
         Path("plugins/module_utils/compliance/catalog.py"): frozenset({"owner_uid"}),
         Path("plugins/module_utils/compliance/fileio.py"): frozenset({"owner_uid"}),

@@ -76,6 +76,7 @@ argument_specs:
     description:
       - "Fails when linux_compliance_audit_fail_on_noncompliant is not false."
       - "With it, the audit after remediation fails every host with a failing rule before the verify role reports."
+      - "Fails likewise when linux_compliance_audit_fail_on_deviation is not false, which fails every deviated host."
       - "playbooks/remediate.yml and playbooks/verify.yml run it first."
       - "Changes nothing on the host."
     author: "FreeSecDev contributors"

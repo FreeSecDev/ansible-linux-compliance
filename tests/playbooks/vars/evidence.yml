@@ -36,3 +36,5 @@ evidence_fixture_gate:
   fail: 2
   error: 1
   waived: 0
+  fail_on_deviation: false
+  deviation: 0

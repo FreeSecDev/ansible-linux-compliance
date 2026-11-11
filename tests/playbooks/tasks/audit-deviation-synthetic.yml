@@ -1,0 +1,34 @@
+---
+- name: Build the synthetic scan run without deviations
+  ansible.builtin.include_tasks: audit-exceptions-synthetic.yml
+
+- name: Start the findings of the synthetic run with operator deviations
+  ansible.builtin.set_fact:
+    audit_deviation_findings: []
+
+- name: Flag the findings of the recorded rules as the audit module would (findings model schema 1.3)
+  ansible.builtin.set_fact:
+    audit_deviation_findings: >-
+      {{ audit_deviation_findings + [item | ansible.builtin.combine({
+           'control': none,
+           'deviation': audit_deviation_values[item.rule_id] | default(none),
+           'flags': ['operator_deviation'] if item.rule_id in audit_deviation_values else []})] }}
+  loop: "{{ audit_exceptions_scan_run.findings }}"
+  loop_control:
+    label: "{{ item.rule_id }}"
+
+- name: Publish the synthetic audit result with its deviations in the shape of the main entry point
+  ansible.builtin.set_fact:
+    audit_exceptions_scan_run: >-
+      {{ audit_exceptions_scan_run | ansible.builtin.combine({'schema_version': '1.3',
+                                                               'findings': audit_deviation_findings}) }}
+
+- name: Publish the audit result of the synthetic run with deviations
+  ansible.builtin.set_fact:
+    linux_compliance_audited: >-
+      {{ linux_compliance_audited | ansible.builtin.combine({
+           'scan_run': audit_exceptions_scan_run,
+           'summary': audit_exceptions_scan_run | freesecdev.linux_compliance.scan_summary,
+           'deviations': {'recorded': audit_deviation_values | length,
+                          'flagged': audit_deviation_findings | selectattr('deviation') | list,
+                          'unflagged': []}}) }}
