@@ -184,12 +184,16 @@ A rule with a profile value becomes overridable by the operator (ADR 0032) once 
 `value_comparison: <name>` next to `profile_value` or `profile_value_id`, where the name is an entry of
 `COMPARATORS` in `plugins/module_utils/compliance/values.py`. A comparator validates an operator's value (only the
 values the family's own validator accepts and the reader reads as written), says whether a value is at least as strict
-as the profile's (`meets`, which knows the reader's special values such as `deny = 0` or `unlock_time = 0`) and picks
-the stricter of two values. The generator copies the name into the rule's parameters and fails for a rule without a
-profile value, for a banner rule, for an unknown name and when a profile value is not a canonical value of the
-comparator. Add a comparator to `values.py` with a table test in
+as the profile's (`meets`, which knows the reader's special values such as `deny = 0` or `unlock_time = 0`), reads a
+profile's value (`read_profile`, which for an auditd choice takes a set such as `syslog|single|halt` while an override
+is one keyword) and picks the stricter of two values. The generator copies the name into the rule's parameters and
+fails for a rule without a profile value, for a banner rule, for an unknown name and when a profile value is not a
+canonical value of the comparator. Comparators exist for every family with profile values except `banners`: the
+integer families, the sshd numbers, `MaxStartups` and algorithm lists, the sudo timeout and log file, the kernel
+parameters and each auditd setting. Add a comparator to `values.py` with a table test in
 `tests/unit/plugins/module_utils/compliance/test_values.py` that pins it to the family's reader before any rule names
-it; no rule names one until its family is wired for overrides.
+it (for a text family, what the reader prints or reads back for each form of the value); no rule names one until its
+family is wired for overrides.
 
 Never hard-code a value that a profile refines, and never fall back to another profile's value. A value that the
 operator chooses (the banner text) is a role variable with the content's default, validated against the profile's
