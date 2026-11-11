@@ -32,6 +32,43 @@
     group: root
   when: stack_case.target is defined or stack_case.source is defined
 
+- name: Faillock stack case | Inspect the vendor PAM directory before it becomes a link to itself
+  ansible.builtin.stat:
+    path: "{{ stack_vendor_directory }}"
+    follow: false
+  register: stack_vendor_stat
+  when: stack_case.directory_loop | default(false)
+
+- name: Faillock stack case | List the vendor PAM directory, which must hold nothing to be replaced
+  ansible.builtin.find:
+    paths: "{{ stack_vendor_directory }}"
+    file_type: any
+    hidden: true
+  register: stack_vendor_held
+  when:
+    - stack_case.directory_loop | default(false)
+    - stack_vendor_stat.stat.exists
+
+- name: Faillock stack case | Check that the vendor PAM directory is an empty directory or absent
+  ansible.builtin.assert:
+    that:
+      - not stack_vendor_stat.stat.exists or stack_vendor_stat.stat.isdir
+      - stack_vendor_held.files | default([]) == []
+    fail_msg: "{{ stack_label }}: {{ stack_vendor_directory }} is not an empty directory."
+    quiet: true
+  when: stack_case.directory_loop | default(false)
+
+- name: Faillock stack case | Make the vendor PAM directory a symbolic link to itself, which stat cannot follow
+  ansible.builtin.file:
+    src: pam.d
+    dest: "{{ stack_vendor_directory }}"
+    state: link
+    force: true
+    follow: false
+    owner: root
+    group: root
+  when: stack_case.directory_loop | default(false)
+
 - name: Faillock stack case | Switch every rule of the topic on
   ansible.builtin.set_fact:
     "{{ item }}": true
@@ -108,6 +145,23 @@
       - stack_cleaned.content == stack_original.results[0].content
     fail_msg: "{{ stack_label }}, {{ stack_case.name }}, cleanup: {{ lifecycle_results }}"
     quiet: true
+
+- name: Faillock stack case | Remove the vendor PAM directory that loops
+  ansible.builtin.file:
+    path: "{{ stack_vendor_directory }}"
+    state: absent
+  when: stack_case.directory_loop | default(false)
+
+- name: Faillock stack case | Give the vendor PAM directory back where the platform ships it
+  ansible.builtin.file:
+    path: "{{ stack_vendor_directory }}"
+    state: directory
+    mode: "{{ stack_vendor_stat.stat.mode }}"
+    owner: root
+    group: root
+  when:
+    - stack_case.directory_loop | default(false)
+    - stack_vendor_stat.stat.exists
 
 - name: Faillock stack case | Remove the service file of the case and the file that its link names
   ansible.builtin.file:

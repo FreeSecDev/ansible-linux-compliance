@@ -27,17 +27,26 @@ description:
   - A rule is C(compliant) or C(applied) only when the library, reading the files as they are or as
     they will be, takes the profile's value from the line or the drop-in that the rule writes, and
     no C(pam_pwquality) argument sets the setting to another value (FREES-200).
+  - The PAM files are read with the reader of the C(faillock) and C(pwhistory) families
+    (C(pam_reader)), as both line readers of libpam 1.5.1 and 1.5.3 assemble and split them. A PAM
+    file with a NUL byte or a line of 1023 bytes or more, a file whose lines that load
+    C(pam_pwquality) or include a file the two readers assemble differently, and an include,
+    substack or C(@include) of a path in any form that libpam accepts make the rule C(overridden)
+    (FREES-212).
   - For the main file method it also returns the new text of the main file, with the setting's line
     replaced in place or appended, and every other byte unchanged.
 author:
   - FreeSecDev (@FreeSecDev)
-positional: _input, dropins, main, pam, directory
+positional: _input, dropins, main, pam, modules
 options:
   _input:
     description:
       - The rule, with C(setting), C(value) (empty for a flag), C(method) (C(main_file) or
-        C(dropin)), C(main) (the path of the main file), C(dropin) (the path of its drop-in) and
-        C(content) (what it writes into the drop-in).
+        C(dropin)), C(main) (the path of the main file), C(dropin) (the path of its drop-in),
+        C(content) (what it writes into the drop-in) and C(directory).
+      - C(directory) is the kind of the drop-in directory, C(directory) (the default), C(missing),
+        C(link) or C(other). A link or anything else than a directory makes the rule
+        C(not_directory) with both methods, because libpwquality reads through it.
     type: dict
     required: true
   dropins:
@@ -65,16 +74,32 @@ options:
         Any such entry makes the rule C(overridden) before anything else is decided, because
         libpam may open it and a C(pam_pwquality) argument there could override the file
         (FREES-213).
+      - So do a link or a PAM directory that resolves below C(/proc), C(/sys) or C(/dev), and
+        C(/etc/pam.conf) when libpam reads it instead of the PAM directories, with the C(detail)
+        of the entry in the reason (FREES-212).
     type: list
     elements: dict
     required: true
-  directory:
+  modules:
     description:
-      - The kind of the drop-in directory, C(directory), C(missing), C(link) or C(other). A link or
-        anything else than a directory makes the rule C(not_directory) with both methods, because
-        libpwquality reads through it.
-    type: str
-    default: directory
+      - Which file the module path of every PAM line loads, with C(directory), the module
+        directory that the C(pwquality_pam_modules) filter returns (or C(None)), and C(stats),
+        the C(ansible.builtin.stat) with C(follow=true) and the SHA-256 C(checksum) of every path
+        that it returns, by path, or a mapping with only the C(msg) of a stat that failed.
+      - The arguments of a line count as C(pam_pwquality) arguments when the file name of the
+        path that libpam loads for it holds C(pam_pwquality), in any directory (a build of the
+        module installed elsewhere, such as C(/usr/local/lib/security/pam_pwquality.so)), or
+        when that path is a regular file with the checksum of C(pam_pwquality.so) of the module
+        directory, such as a link or a copy under another name (FREES-212). A line whose module
+        cannot be told, because the module directory is not known, the path holds C($ISA), a
+        path that must be compared was not inspected or could not be read, or
+        C(pam_pwquality.so) is missing from the module directory (which may then not be the one
+        that libpam loads from), makes the rule C(overridden).
+      - Whether libpam runs C(pam_pwquality) at all is not decided. A line of another type than
+        C(password), a jump or a C(sufficient) module before it, or a stack without it are not
+        looked at; the rule decides the values that C(pam_pwquality) would use.
+    type: dict
+    required: true
 """
 
 EXAMPLES = r"""
@@ -84,7 +109,7 @@ EXAMPLES = r"""
       {{ {'setting': 'minlen', 'value': '14', 'method': 'main_file',
           'main': '/etc/security/pwquality.conf',
           'dropin': '/etc/security/pwquality.conf.d/50-freesecdev-minlen.conf', 'content': ''}
-         | freesecdev.linux_compliance.pwquality_decide([], main_text, pam_files) }}
+         | freesecdev.linux_compliance.pwquality_decide([], main_text, pam_files, pam_modules) }}
 """
 
 RETURN = r"""
@@ -143,8 +168,46 @@ def _pam(pam: list[object]) -> tuple[list[tuple[str, str]], list[str]]:
         raise DecisionInputError(str(error)) from error
 
 
+def _stats(value: object) -> dict[str, Mapping[str, object]]:
+    """Return the module stats by path, each a mapping."""
+    if not isinstance(value, Mapping):
+        message = "the stats of the modules must be a mapping"
+        raise DecisionInputError(message)
+    stats: dict[str, Mapping[str, object]] = {}
+    for path, stat in cast("Mapping[object, object]", value).items():
+        if not isinstance(path, str) or not isinstance(stat, Mapping):
+            message = "every module stat must be a mapping under its path"
+            raise DecisionInputError(message)
+        stats[path] = cast("Mapping[str, object]", stat)
+    return stats
+
+
+def _modules(modules: object) -> pwquality.Modules:
+    """Return the module directory and stats that the role passes."""
+    if not isinstance(modules, Mapping):
+        message = "the modules must be a mapping with directory and stats"
+        raise DecisionInputError(message)
+    fields = cast("Mapping[str, object]", modules)
+    directory = fields.get("directory")
+    if directory is not None and not (isinstance(directory, str) and directory.endswith("/")):
+        message = "the module directory must be None or a path that ends with a slash"
+        raise DecisionInputError(message)
+    return pwquality.Modules(directory, _stats(fields.get("stats")))
+
+
+def _dropins(dropins: list[object]) -> list[Mapping[str, object]]:
+    """Return the drop-in entries, each a mapping."""
+    entries: list[Mapping[str, object]] = []
+    for entry in dropins:
+        if not isinstance(entry, Mapping):
+            message = "every drop-in must be a mapping"
+            raise DecisionInputError(message)
+        entries.append(cast("Mapping[str, object]", entry))
+    return entries
+
+
 def pwquality_decide(
-    rule: object, dropins: object, main: object, pam: object, directory: object = "directory"
+    rule: object, dropins: object, main: object, pam: object, modules: object
 ) -> dict[str, object]:
     """Return the decision of :func:`pwquality.decide` for the rule and the files."""
     if not isinstance(rule, Mapping) or not isinstance(dropins, (list, tuple)):
@@ -162,17 +225,15 @@ def pwquality_decide(
         dropin=_text(fields.get("dropin"), "dropin"),
         content=_text(fields.get("content"), "content"),
     )
-    entries: list[Mapping[str, object]] = []
-    for entry in cast("list[object]", dropins):
-        if not isinstance(entry, Mapping):
-            message = "every drop-in must be a mapping"
-            raise DecisionInputError(message)
-        entries.append(cast("Mapping[str, object]", entry))
+    entries = _dropins(cast("list[object]", dropins))
+    identities = _modules(modules)
     files, described = _pam(cast("list[object]", pam))
     refused = pwquality.unreadable_refusal(planned, described)
     if refused is not None:
         return refused
-    return pwquality.decide(planned, entries, main, files, _text(directory, "directory"))
+    directory = _text(fields.get("directory", pwquality.DIRECTORY), "directory")
+    stack = pwquality.PamStack(files, identities)
+    return pwquality.decide(planned, entries, main, stack, directory)
 
 
 class FilterModule:

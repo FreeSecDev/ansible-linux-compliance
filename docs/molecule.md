@@ -840,7 +840,20 @@ removed again), with `pam_pwquality.so minlen=8 enforcing=0`, makes `minlen` `ov
 file refuses both rules with the file below `/usr/share/pam.d` named (the empty directory of Rocky Linux is put back
 with its mode); and a link to nothing next to a link to `/dev/null` and a link to itself refuses both rules with all
 three named; and the vendor directory made a link to itself refuses both rules with `/usr/share/pam.d` named; nothing
-is written in any of them. The test declares `/usr/share/pam.d` as rewritten, so the whole-instance comparison leaves out
+is written in any of them. Then (FREES-212) `/etc/pam.d/freesecdev-readers` with a comment line that ends with a
+backslash followed by `pam_pwquality.so minlen=8 enforcing=0`, which libpam runs, refuses both rules with the arguments
+named; the same file with `password include \` and `../security/freesecdev-readers-included` on the next line, which
+libpam joins and opens, refuses both rules with the include named; the same file with a comment line of exactly 1023
+bytes followed by the loose line, which Ubuntu's fixed-buffer reader splits off and runs, refuses both rules on both
+platforms with the long line named; and `/etc/pam.d/freesecdev-readers-environ`, a link to `/proc/self/environ`, refuses
+both rules with the resolved `/proc/<pid>/environ` named; the reasons of the link to itself and of the looping
+directory carry the message of the failed `stat` (`Too many levels of symbolic links`). After the review of FREES-212,
+`/etc/pam.d/freesecdev-readers-rooted`, a link to `/proc/self/root/etc/security/freesecdev-readers-included`, which the
+module resolves outside `/proc`, refuses both rules with the target named; `/etc/pam.d/freesecdev-readers-chained`, a
+link to the link `/etc/security/freesecdev-readers-hop`, refuses both rules as a link reached through a further link;
+and `/etc/pam.d/freesecdev-readers` loading `/etc/security/freesecdev-readers-module.so`, a link to the platform's
+`pam_pwquality.so`, with `minlen=8 enforcing=0` refuses both rules with the arguments named, because the module is
+identified by its file, not by its name. The test declares `/usr/share/pam.d` as rewritten, so the whole-instance comparison leaves out
 the times and the inode of that directory and the times of `/usr/share`. It ends with the whole-instance comparison.
 
 The auditd topics ([ADR 0030](adr/0030-native-auditd-settings-and-audit-rules.md), FREES-110) select their rules
@@ -948,9 +961,14 @@ deny=3`, make `deny` `overridden` with that file named; an include of `/etc/secu
 collection does not read, makes both rules `unreadable_stack`; `deny=3` in a service file that is a symbolic link to
 a file in `/etc/security`, as authselect links them (FREES-213), makes `deny` `overridden` with the link named, and a
 service file that is a link to nothing, and one that is a link to itself, make both rules `unreadable_stack` with the
-link named (the order of `/etc/pam.d`, `/usr/lib/pam.d` and
-`/usr/share/pam.d` is unit-tested only, because the whole-instance record keeps the times of `/usr`, which a file
-written there changes for good); no
+link named, the latter with the message of the failed `stat`; and (FREES-212) a service file that is a link to
+`/proc/self/environ` makes both rules `unreadable_stack` with the resolved `/proc/<pid>/environ` named, and the vendor
+directory `/usr/share/pam.d` made a link to itself (the empty directory of Rocky Linux is put back with its mode, and
+the link removed again on Ubuntu) makes both rules `unreadable_stack` with the directory and the message of the failed
+`stat` named. The group declares `/usr/share/pam.d` as rewritten, so the whole-instance comparison leaves out the
+times and the inode of that directory and the times of `/usr/share` (the order of `/etc/pam.d`, `/usr/lib/pam.d` and
+`/usr/share/pam.d` is unit-tested only, because a file written below `/usr` other than that directory changes times
+that the whole-instance record keeps); no
 scan runs, because both contents put the faillock rules below a group limited to `system_with_kernel`, so a container
 scan reports them `notapplicable` even with the module in the stack; each cleanup restores the file byte for byte and the stack files are put back at the end.
 `profiles` (`lifecycle_faillock_other_profiles.yml`) applies in check mode and for real, repeats and cleans up the rules
@@ -1046,15 +1064,26 @@ test-remediate-check` (with `test-remediate-disruptive`), timeout 15, one and a 
 `test-playbooks-evidence` runs `make test-evidence`, `make test-role-guards` and `make test-verify`, timeout 10, one and
 a half times its longest 6.6 minutes. Neither has a condition or `needs`, and only `molecule-lifecycle` and
 `molecule-libvirt` read the plan of `molecule-plan`, so every event that ran `test-playbooks` runs both;
-`ci-gate` needs both. When `test-playbooks-remediate` nears its limit, its playbooks can be split across jobs the same
-way.
+`ci-gate` needs both. By e5006f2 `test-playbooks-remediate` neared its limit: in the 16 latest successful runs on
+2026-11-10 it took 9.7 to 14.8 minutes against its 15, every playbook slower in the same proportion on the slower
+runners. Since FREES-214 its playbooks are split across two jobs that run alongside each other, by two `Makefile`
+targets that `make test-remediate-check` runs both of. `test-playbooks-remediate` runs `make test-remediate-check-role`
+(with `test-remediate-disruptive`): the two runs of `remediate-check-mode.yml` and `remediate-skip-always.yml`, 5.2 to
+7.6 minutes of those runs (disruptive 12 to 18 seconds, each check-mode run 140 to 223). It keeps
+its timeout of 20 minutes (below).
+`test-playbooks-native` runs `make test-remediate-check-native`: `remediate-native-check.yml`,
+`remediate-login-defs-check.yml` and `remediate-pam-conf-check.yml`, 4.4 to 7.1 minutes of those runs (173 to 276, 46 to
+76 and 47 to 77 seconds), with a timeout of 12 minutes: one and a half times its longest share and the setup. Neither
+has a condition or `needs`, and `ci-gate` needs both; `tests/unit/tools/test_ci_test_jobs.py` checks that the two
+targets together run exactly the former six playbook runs, and every `remediate-*.yml` playbook. The native share grows
+with every native topic; the next split is per playbook.
 
 The timeout of `test-playbooks-remediate` is 20 minutes since FREES-213. Over the ten latest runs on `main` before it
 (4e50d0a to e5006f2) the job took 8.9 to 14.5 minutes, and the first run of FREES-213 was cancelled at 15 with every
 playbook about 30 percent slower than on `main`, also the ones that do not touch PAM (the disruptive play took 19
 seconds instead of 14), so the runner was slower; on the same worker the playbooks took no longer on the branch than on
 `main`. One and a half times 14.5 minutes is above the 20 minutes that `tests/unit/tools/test_ci_test_jobs.py` allows a
-test job, so the job gets those 20; the next step when it nears them is the split above.
+test job, so the job gets those 20, and keeps them after the split above.
 
 With `sudo` (FREES-175) the regressions moved out of the cycle legs: `make molecule-matrix` adds one leg per regression
 group that a declaration lists and platform it runs on, with the mode `regressions-<group>`, after the two toggle
@@ -1127,6 +1156,14 @@ from the full matrices of `make molecule-matrix` and every leg without a topic i
 the pull request that introduced the planner, the full matrix runs. The job log lists the scope, the topics and the
 reason for every path.
 
+For a pull request the base revision is the first parent of the merge commit that `actions/checkout` checks out, when
+its second parent is the pull request's head (`github.event.pull_request.head.sha`); otherwise it is the event's
+`pull_request.base.sha`, as before. The event's base can lag behind the merge commit's: in 2 of the 29 pull request runs
+of 2026-11-10 (UTC) that planned it was one commit behind (runs 42818227940 and 42841441928), so the planner counted the
+paths of that newer `main` commit (the Python lock of #95, the `pwquality` plugins of #97) as changes of the pull
+request (FREES-214). Both runs had a reason of their own for the full matrix. For a merge group the base revision is the
+merge base of the group's head and the target branch.
+
 `ci-gate` stays the only required check. It accepts the scope `affected` only for `pull_request` and `merge_group`, and
 a skipped `molecule-lifecycle` only when such a plan has exactly zero lifecycle legs, as for a pull request that
 touches no topic. Measured examples are in the pull request of FREES-189: one topic's task file plans that topic's
@@ -1139,6 +1176,61 @@ still break another topic's legs, through state on the instance that both inspec
 and only the full matrix shows it, after the merge. The other residual risks are in the ADR amendment. To see what a
 branch would plan, run `make molecule-plan` (`MOLECULE_PLAN_BASE` defaults to `origin/main`); it changes nothing and
 needs the base revision's planner.
+
+### Load of a run and the merge queue
+
+Measured on 2026-11-10 (FREES-214), with up to nine pull requests open, over the ten latest completed `pull_request`
+runs and the ten latest `merge_group` runs of `ci.yml` (the tables are in the pull request of FREES-214):
+
+- A run with the full matrix has 161 jobs: 107 Docker lifecycle legs, 29 libvirt legs and 25 other jobs. Its jobs take
+  about 1,200 runner-minutes, 94 percent of them in `molecule-lifecycle` and `molecule-libvirt`; the other jobs take
+  about 65.
+- The organisation ran at most 60 jobs at a time (the most jobs that ran at once over the 56 runs measured, 00:31 to
+  20:38 UTC), so a full run takes at least 20 minutes of all of the organisation's runners, and each further full run in
+  flight adds about as much to the time of every other. In the seven merge groups with the full matrix the median job
+  waited 12 to 56 minutes before it started, and the group took 55 to 140 minutes from its creation to its last job;
+  three took longer than 90 minutes (106, 109 and 140) and one 88. A merge group of 133 jobs took 23 minutes while
+  almost nothing else ran (#78).
+- The merge queue builds one merge group, and so one full run, for every pull request it holds, up to
+  `max_entries_to_build` (5) at a time: the groups of #99, #100 and #101 were created within a minute of each other.
+- A merge group whose `ci-gate` did not report within `check_response_timeout_minutes` is removed from the queue
+  (`checks_timed_out`) even when its run passes later. The removal also invalidates every group queued behind it,
+  because each of them contains the removed entry, and the queue rebuilds them, each with a new full run. The pull
+  request timelines (`REMOVED_FROM_MERGE_QUEUE_EVENT`) show these removals for `checks_timed_out`: #88 3, #94 3 and
+  #90 2 from the evening of 2026-11-09 to the night after (30 minutes then), and #99 1 (17:18 UTC) and #100 1 (19:13
+  UTC) on 2026-11-10 (90 minutes). The merge group runs of the same pull requests, counted separately: #88 8, #94 9,
+  #90 6, #99 3, #100 2 and #101 2. Each pull request had one run per time it was added to the queue, and the rest
+  were rebuilds after an entry ahead of it was removed: #99's third run and #101's second started at 19:13, seconds
+  after #100, ahead of both, was removed. One removal therefore costs a full run, about 1,200 runner-minutes, for
+  the removed entry and one for every group behind it, and that load makes the other runs slower again. All of these
+  runs ended `success` except #90's first (created 2026-11-09 22:00 UTC), which was cancelled.
+- Most pull requests ran the full matrix, and the plan was right for each (they changed plugins, `module_utils`,
+  `tools/roles` or the `Makefile`). A pull request that changes only documentation, tests and fixtures, check-mode
+  playbooks or the lint tools plans no lifecycle leg and runs 28 or 29 jobs.
+
+What changed in FREES-214: a new push to a pull request cancels the superseded run of that pull request, and every other
+run has a concurrency group of its own, so no merge group or run on `main` is cancelled or waits for another
+([development](development.md#pull-request-workflow)); the planner uses the base of the merge commit for a pull request
+([above](#affected-legs-on-pull-requests)); and `test-playbooks-remediate` is split ([above](#ci-legs)). None of this
+makes a full run smaller.
+
+Open point, not measured in detail: when the queue invalidates a group, the run of its `gh-readonly-queue/...` branch
+can keep running (run 42715894165 of #88 ran until 00:29 UTC although #88 left the queue at 23:25), and the `ci-gate` of
+a cancelled pull request run still waits for a runner (run 42883888513 was cancelled at 19:45 and its `ci-gate` ran at
+20:36). Both take capacity from the runs that count. Cancelling the runs of invalidated `gh-readonly-queue` branches
+could free it; whether GitHub cancels them in some cases, and how a workflow could detect an invalidated branch, needs a
+separate look.
+
+The queue settings are the owner's to change in the live ruleset; `.github/rulesets/main.json` follows the live ruleset
+([ADR 0033](adr/0033-review-policy-independent-verdict-without-required-approval.md)). Proposed from the data above:
+
+| Setting | Now | Proposed | Why |
+|---|---|---|---|
+| `max_entries_to_build` | 5 | 2 | Two merge groups in flight instead of five. The runs of the queue then compete with one other group and the pull request runs, not with four groups, so each finishes sooner. Either way the queue cannot merge faster than the runners allow: at the 60 concurrent jobs observed (not a confirmed limit of the plan) about three full runs an hour |
+| `check_response_timeout_minutes` | 240 | 240 | The live value, read on 2026-11-10. A drop costs a full run and makes the queue slower, and the longest merge group measured took 140 minutes, so the limit stays well above that. Every job has its own `timeout-minutes` and `ci-gate` always reports, so a long limit only matters for a run that never reports. Once merge groups with two in flight are measured, one and a half times the longest of them is enough |
+| `min_entries_to_merge` | 1 | 1 | A larger minimum does not save a run, because every entry gets its own merge group, and makes a lone pull request wait for `min_entries_to_merge_wait_minutes` |
+| `max_entries_to_merge` | 5 | 5 | No effect on the load |
+| `grouping_strategy` | `ALLGREEN` | `ALLGREEN` | `HEADGREEN` would merge a pull request whose own group failed or timed out when a later group that contains it passes; the drops came from capacity, not from the grouping |
 
 ### Adding a topic without touching shared files
 

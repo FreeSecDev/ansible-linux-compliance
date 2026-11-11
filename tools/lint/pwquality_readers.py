@@ -45,6 +45,14 @@ PLATFORMS: Final[tuple[str, ...]] = ("ubuntu", "rocky")
 STATES: Final[str] = "states.json"
 DECISIONS: Final[str] = "decisions.json"
 PAM_MODULE: Final[str] = "pam_pwquality.so"
+MODULE_DIRECTORY: Final[str] = "/usr/lib64/security/"
+MODULES: Final[pwquality.Modules] = pwquality.Modules(
+    MODULE_DIRECTORY,
+    {
+        MODULE_DIRECTORY + PAM_MODULE: {"exists": True, "isreg": True, "checksum": "pwquality"},
+        MODULE_DIRECTORY + "pam_unix.so": {"exists": True, "isreg": True, "checksum": "unix"},
+    },
+)
 SETTINGS: Final[tuple[str, ...]] = (
     "difok",
     "minlen",
@@ -181,10 +189,15 @@ def after_dropins(case: Mapping[str, object], rule: pwquality.Rule) -> list[dict
 def decide_case(
     case: Mapping[str, object], rule: pwquality.Rule
 ) -> tuple[dict[str, object], State, State | None]:
-    """Return the decision of a rule for a case, the state of the case and the state after it."""
+    """Return the decision of a rule for a case, the state of the case and the state after it.
+
+    The PAM lines of the cases load ``pam_pwquality.so`` or ``pam_unix.so`` by name, which
+    :data:`MODULES` holds as two different files of the module directory.
+    """
     main = cast("str | None", case.get("main"))
     directory = str(case.get("directory", pwquality.DIRECTORY))
-    decision = pwquality.decide(rule, dropins_of(case), main, pam_of(case), directory)
+    pam = pwquality.PamStack(pam_of(case), MODULES)
+    decision = pwquality.decide(rule, dropins_of(case), main, pam, directory)
     arguments = arguments_of(case)
     before = state_of(main, probe_dropins(case), arguments, directory)
     if decision["status"] != "applied":
