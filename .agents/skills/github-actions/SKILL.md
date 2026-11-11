@@ -47,6 +47,7 @@ that `make ci` reproduces CI locally. Pull request validation and publishing are
 - Every workflow sets `concurrency`; every job sets `timeout-minutes`.
 - The aggregate `ci-gate` job runs with `if: always()`, depends on all required jobs and fails if any needed job failed or was cancelled, so required checks always report.
 - Support the `merge_group` trigger alongside `pull_request`.
+- `ci.yml` has two tiers (ADR 0034): `ci-tier` gives `fast` for a pull request into `integration`, the promotion of `integration` into `main` and a push to `main`, and `full` otherwise. A new job runs in both tiers unless it is Molecule; a full-only job needs `ci-tier`, runs on `needs.ci-tier.outputs.tier == 'full'`, and `ci-gate` requires it to be skipped in the fast tier.
 - Expensive AWS and libvirt stages use `workflow_dispatch` or explicit selective triggers.
 - Self-hosted runners require an ADR. Whether libvirt runs on GitHub-hosted runners with KVM or elsewhere is an ADR decision.
 

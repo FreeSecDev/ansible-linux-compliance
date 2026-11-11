@@ -33,8 +33,12 @@ described in [SECURITY.md](SECURITY.md), never in a public issue or pull request
    Refs: FREES-22
    ```
 
-4. Keep the branch rebased on the latest `main`. The history is linear.
-5. Open a pull request into `main`. Never push to `main` directly. The title is a Conventional Commit and includes the
+4. Keep the branch rebased on the latest `integration` (on `main` until `integration` exists, and for a hotfix). The
+   history of `integration` is linear.
+5. Open a pull request into `integration` ([ADR 0034](docs/adr/0034-daily-integration-branch.md)); only a hotfix, a
+   single commit, goes straight into `main`. Never push to `main` or `integration` directly. Before asking for a
+   review, run the legs that `make affected-legs` lists as required on a Docker host and paste its table with the
+   results into the pull request ([Molecule](docs/molecule.md#legs-before-a-merge-into-integration)). The title is a Conventional Commit and includes the
    Jira key, for example `feat: add OpenSCAP audit module (FREES-42)`. Fill in the pull request template.
 
    The squash merge uses the pull request body as the commit message, so the last line of the body is the
@@ -61,11 +65,14 @@ described in [SECURITY.md](SECURITY.md), never in a public issue or pull request
    `approve-with-follow-ups` verdict for its current head. When a push after the verdict only brings in `main`, a
    re-review of that update is enough: a range-diff check for a rebase, and the merge re-review for a merge of `main`
    ([ADR 0033](docs/adr/0033-review-policy-independent-verdict-without-required-approval.md), amendment of
-   2026-11-10). All review threads must be resolved and `ci-gate` must pass. GitHub does not require an approving review
+   2026-11-10). For a pull request into `integration` the verdict also lists the Molecule legs of
+   `make affected-legs` with their results, and the daily promotion into `main` gets a merge re-review (amendment of
+   2026-11-11). All review threads must be resolved and `ci-gate` must pass. GitHub does not require an approving review
    ([ADR 0033](docs/adr/0033-review-policy-independent-verdict-without-required-approval.md)). The repository has no
    `CODEOWNERS` file on purpose: code-owner rules would automatically request the maintainer's review, and the project
    owner decided not to be asked for reviews.
-7. Pull requests are merged by squash merge only.
+7. Pull requests into `integration` are squash merged. The merge queue merges the daily promotion and a hotfix into
+   `main` with a merge commit, so each squash commit of `integration` stays on `main`.
 
 User-visible changes need a changelog fragment in `changelogs/fragments/`, and behaviour changes need documentation
 in the same pull request.

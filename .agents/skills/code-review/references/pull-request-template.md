@@ -22,6 +22,10 @@ FREES-<n>
 ## Testing
 <Commands run and results; link to CI run.>
 
+## Molecule legs on the Docker host
+<For a pull request into `integration`: the table of `make -s affected-legs` with the result of every required leg
+on the current head. For a hotfix into `main`: "full matrix in CI".>
+
 ## Documentation
 <Pages changed in this pull request, or "none: reason".>
 
@@ -32,7 +36,8 @@ FREES-<n>
 <Trust boundaries touched; security-review verdict link, or "not triggered: reason".>
 
 ## Checklist
-- [ ] Branch is `<type>/FREES-<n>-<slug>` and rebased on latest `main`
+- [ ] Branch is `<type>/FREES-<n>-<slug>`, targets `integration` (a hotfix: `main`) and is rebased on it
+- [ ] Every required leg of `make affected-legs` passed on the Docker host for the current head
 - [ ] Title is a Conventional Commit with the FREES reference
 - [ ] No shell, command, raw or script modules; FQCN used; YAML starts with `---`
 - [ ] No inline comments, secrets or unpinned references

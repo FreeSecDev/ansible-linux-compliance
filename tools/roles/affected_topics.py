@@ -11,7 +11,7 @@ Nothing is listed by hand: every path is classified from the topic declarations,
 the file names. A path that the mapping cannot confine to topics plans the full matrix (fail safe):
 
 * **No lifecycle effect.** Documentation, changelog fragments, unit tests and fixtures, the
-  check-mode playbooks, the reporting, lint, docs and IaC tools, and the configuration of
+  check-mode playbooks, the reporting, lint, docs, IaC and CI tools, and the configuration of
   linters and bots. None of them is read by a Molecule scenario.
 * **Generated and checked for drift.** The role guards and the family dispatch
   (``make lint-role-guards``) are a function of files that are classified themselves, by
@@ -122,6 +122,7 @@ NO_LIFECYCLE_PREFIXES: Final[tuple[str, ...]] = (
     "tools/skills/",
     "tools/lint/",
     "tools/iac/",
+    "tools/ci/",
     "infra/",
     "typings/",
     "extensions/ci/",

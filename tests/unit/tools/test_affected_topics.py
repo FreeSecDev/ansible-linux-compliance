@@ -125,6 +125,8 @@ def first_rule(data: dict[str, object], family: str) -> dict[str, object]:
         "tests/sanity/ignore-2.20.txt",
         "tools/reporting/dashboard.py",
         "tools/lint/check_repo_rules.py",
+        "tools/ci/affected_legs.py",
+        "tools/ci/rulesets/main-protection.json",
         "infra/account/main.tf",
         "extensions/ci/scc/scc.pins",
         ".github/workflows/scc-release-watch.yml",

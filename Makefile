@@ -27,6 +27,10 @@ MOLECULE_AFFECTED_DOCKER ?=
 MOLECULE_AFFECTED_LIBVIRT ?=
 MOLECULE_PLAN_BASE ?= origin/main
 MOLECULE_PLAN_DIR := $(CURDIR)/build/molecule-plan
+AFFECTED_LEGS_BASE ?= $(shell git rev-parse --verify --quiet refs/remotes/origin/integration >/dev/null 2>&1 && printf origin/integration || printf origin/main)
+AFFECTED_LEGS_DIR := $(CURDIR)/build/affected-legs
+AFFECTED_LEGS_FORMAT ?= markdown
+AFFECTED_LEGS_PREFIX ?=
 MOLECULE_DOCKER_SELFTEST ?= true
 MOLECULE_SELFTEST_DIR := $(CURDIR)/build/molecule-selftest
 MOLECULE_SELFTEST_CONFIG := $(MOLECULE_SELFTEST_DIR)/instance_config.yml
@@ -328,6 +332,8 @@ Tests
   auditd-conf-verdicts  Run the auditd of each Docker Molecule image on the auditd.conf cases and record the verdict table
   molecule-plan         Print the legs that a pull request against MOLECULE_PLAN_BASE runs, as the base's planner decides
   molecule-affected     Keep the legs of the topics that a change affects (run by the base revision's planner in CI)
+  affected-legs         List the Molecule legs that a branch runs on a Docker host before it merges into integration
+                        (AFFECTED_LEGS_BASE, AFFECTED_LEGS_FORMAT=markdown|commands|json, AFFECTED_LEGS_PREFIX)
   test-molecule-libvirt Molecule libvirt scenarios on KVM virtual machines and their self-test (requires KVM and libvirt)
   test-molecule-libvirt-selftest Guard bypass attempts, decoys, strangers and the destroy fallback against real libvirt objects
   molecule-libvirt-images Fetch the pinned cloud images and packages and check the vendors' signed checksum files
@@ -379,7 +385,7 @@ export HELP_TEXT
 	lint-containerfile oscap-image scc-expiry-check scc-fetch scc-image scc-image-ubuntu2604 scc-smoke scc-integration scc-own-expiry-check scc-image-clean scc-release-watch lint-iac lock-check tofu-validate aws-bootstrap-render lint-packer lint-repo lint-skills lint-pr-body security typecheck test test-unit test-sanity test-audit-exceptions test-evidence test-remediate-check test-remediate-disruptive test-role-guards test-verify \
 	test-ansible-units package-check collection-tree collection-link sanity-pythons name-sets test-name-sets \
 	test-integration test-coverage test-content-golden test-oscap-integration test-browser browser-test-deps molecule-dependencies molecule-content molecule-matrix auditd-conf-verdicts \
-	molecule-affected molecule-plan molecule-collections-fetch molecule-collections-lock molecule-images-build molecule-images-plan molecule-images-ids pam-reader-verdicts \
+	molecule-affected molecule-plan affected-legs molecule-collections-fetch molecule-collections-lock molecule-images-build molecule-images-plan molecule-images-ids pam-reader-verdicts \
 	test-molecule-docker test-molecule-docker-selftest test-molecule-libvirt \
 	test-molecule-libvirt-selftest molecule-libvirt-images molecule-libvirt-preflight \
 	molecule-libvirt-host-fetch molecule-libvirt-host-install molecule-libvirt-host-pins molecule-task-timings sysctl-reader-verdicts \
@@ -464,6 +470,17 @@ molecule-plan: require-uv collection-link
 	@PYTHONPATH='$(CURDIR)/build/collections' $(RUN) python -m tools.roles.molecule_matrix --driver libvirt > '$(MOLECULE_PLAN_DIR)/libvirt.json'
 	@tools/molecule/plan-lifecycle.sh pull_request "$$(git merge-base HEAD '$(MOLECULE_PLAN_BASE)')" '' \
 		'$(MOLECULE_PLAN_DIR)/docker.json' '$(MOLECULE_PLAN_DIR)/libvirt.json'
+
+affected-legs: require-uv collection-link
+	@mkdir -p '$(AFFECTED_LEGS_DIR)'
+	@PYTHONPATH='$(CURDIR)/build/collections' $(RUN) python -m tools.roles.molecule_matrix --driver docker > '$(AFFECTED_LEGS_DIR)/docker.json'
+	@PYTHONPATH='$(CURDIR)/build/collections' $(RUN) python -m tools.roles.molecule_matrix --driver libvirt > '$(AFFECTED_LEGS_DIR)/libvirt.json'
+	@tools/molecule/plan-lifecycle.sh pull_request "$$(git merge-base HEAD '$(AFFECTED_LEGS_BASE)')" '' \
+		'$(AFFECTED_LEGS_DIR)/docker.json' '$(AFFECTED_LEGS_DIR)/libvirt.json' > '$(AFFECTED_LEGS_DIR)/plan.json' \
+		|| : > '$(AFFECTED_LEGS_DIR)/plan.json'
+	@$(RUN) python -m tools.ci.affected_legs --plan '$(AFFECTED_LEGS_DIR)/plan.json' \
+		--docker '$(AFFECTED_LEGS_DIR)/docker.json' --libvirt '$(AFFECTED_LEGS_DIR)/libvirt.json' \
+		--workflow .github/workflows/ci.yml --format '$(AFFECTED_LEGS_FORMAT)' --prefix '$(AFFECTED_LEGS_PREFIX)'
 
 lock-check: require-uv
 	uv lock --check

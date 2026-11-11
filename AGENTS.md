@@ -21,7 +21,14 @@ repository and is consumed here by digest only.
   attribution lines before it, and the squash commit carries it. GitHub appends `Co-authored-by:` lines after the
   body, so on `main` the footer is not the last line of the commit and not a Git trailer. Dependabot pull requests
   carry no footer (FREES-81).
-- Every change lands through a pull request into `main`; squash merge only, rebased on the latest `main`.
+- Every change lands through a pull request into `integration`, squash merged, rebased on the latest `integration`;
+  its Molecule legs (`make affected-legs`) pass on a Docker host before the merge. Once a day the promotion pull
+  request `integration` -> `main` goes through the merge queue, which runs the full CI matrix and merges with a merge
+  commit. A hotfix pull request into `main` (one commit) runs the full matrix as well. Until the branch `integration`
+  exists, pull requests target `main`
+  ([ADR 0034](docs/adr/0034-daily-integration-branch.md)).
+- The required check is `ci-gate` on both branches: the fast tier for a pull request into `integration` and for the
+  promotion pull request, the full matrix in the merge queue and for a hotfix pull request.
 - Significant decisions are recorded as ADRs in [`docs/adr/`](docs/adr/) before implementation.
 - Documentation lives in Git under [`docs/`](docs/) and changes in the same PR as the code it describes.
 - Record progress, decisions, blockers, failed tests, PR links and CI links on the Jira issue.

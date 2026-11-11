@@ -472,6 +472,7 @@ def gate_needs(
     }
     return json.dumps(
         {
+            "ci-tier": {"result": "success", "outputs": {"tier": "full"}},
             "lint": {"result": "success", "outputs": {}},
             "scc-changes": {"result": "success", "outputs": {"scc": "true", "expiry": "current"}},
             "scc-smoke": {"result": "success", "outputs": {}},
@@ -555,9 +556,16 @@ def test_ci_gate_accepts_a_skipped_lifecycle_only_when_the_plan_says_so(
 def test_the_lifecycle_job_runs_only_when_the_plan_has_legs() -> None:
     found = jobs()
     lifecycle = found["molecule-lifecycle"]
-    assert lifecycle["needs"] == ["molecule-plan", "molecule-collections", "molecule-images"]
-    assert lifecycle["if"] == "needs.molecule-plan.outputs.lifecycle_legs != '0'"
-    assert "if" not in found["molecule-libvirt"]
+    assert lifecycle["needs"] == [
+        "ci-tier",
+        "molecule-plan",
+        "molecule-collections",
+        "molecule-images",
+    ]
+    assert lifecycle["if"] == (
+        "needs.ci-tier.outputs.tier == 'full' && needs.molecule-plan.outputs.lifecycle_legs != '0'"
+    )
+    assert found["molecule-libvirt"]["if"] == "needs.ci-tier.outputs.tier == 'full'"
     plan = found["molecule-plan"]
     assert plan["outputs"] == {
         "matrix": "${{ steps.plan.outputs.matrix }}",
