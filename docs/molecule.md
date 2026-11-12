@@ -1022,9 +1022,12 @@ up into the container's writable layer, which gives the directory a new ctime, a
 whole-instance comparison of the first topic with a real scan refused it (as it did in the first local run of the
 `banners` topic leg). A new native topic gets its two legs per platform without a change to the
 workflow, and the tool fails when a platform has no lifecycle scenario. `ci-gate` needs `molecule-plan` and
-`molecule-lifecycle`, so every planned leg is required, on `pull_request` and `merge_group` alike, and a plan that
-fails fails the gate. Since FREES-189 a pull request or merge group plans only the legs of the topics that it affects
-([below](#affected-legs-on-pull-requests)).
+`molecule-lifecycle`, so every planned leg is required in every run of the full tier, and a plan that fails fails the
+gate. Since FREES-189 a pull request or merge group plans only the legs of the topics that it affects
+([below](#affected-legs-on-pull-requests)). Since FREES-215 the Molecule jobs run only in the full tier of `ci.yml`: a
+pull request into `integration`, the promotion pull request and a push to `main` run none, and a pull request into
+`integration` runs its legs on a Docker host before the merge
+([below](#legs-before-a-merge-into-integration), [ADR 0034](adr/0034-daily-integration-branch.md)).
 
 On GitHub's runners at b1630d8 the twelve legs took 5.5 to 11.6 minutes (the longest is `ubuntu`, `pwquality`,
 `rule`, which includes the regressions), the standard scenarios 4.0 and 4.6 and the self-test 2.9; the run took
@@ -1129,8 +1132,9 @@ is all that the organisation runs at a time. Every new topic adds two legs per p
 more per regression group and platform ([above](#ci-legs) for the current matrix). On `pull_request` and
 `merge_group`, `molecule-plan` therefore keeps only the lifecycle legs of the topics that the change can affect, and
 always the legs without a topic: the libvirt base scenarios `libvirt-<platform>` and `libvirt-selftest`. The standard
-scenarios of `molecule-docker` run as before. A push to `main`, the nightly schedule and `workflow_dispatch` always run
-the full matrix ([ADR 0011](adr/0011-control-toggles-and-cleanup.md#amendment-2026-10-30-only-the-affected-lifecycle-legs-on-pull-requests-frees-189)).
+scenarios of `molecule-docker` run as before. The nightly schedule and `workflow_dispatch` always run the full matrix;
+since FREES-215 a push to `main` runs no Molecule job, because its commit is the merge group's head that ran them
+([ADR 0011](adr/0011-control-toggles-and-cleanup.md#amendment-2026-10-30-only-the-affected-lifecycle-legs-on-pull-requests-frees-189)).
 
 `tools/roles/affected_topics.py` classifies every path of `git diff --no-renames <base> <head>`; a rename counts as a
 deletion and an addition. Nothing is listed per topic by hand:
@@ -1146,7 +1150,7 @@ deletion and an addition. Nothing is listed per topic by hand:
 | `roles/remediate/vars/main.yml` | the topics of the files that use each changed key; a key that no file or a shared file uses plans the full matrix |
 | `roles/{audit,remediate}/meta/argument_specs.yml` | per entry point and option, without descriptions: a gained, lost or changed topic toggle option with exactly the generated `type: bool` and `default: true` affects the families that the toggle controls, as above, and so does a family or umbrella that the choices of `linux_compliance_remediate_allow_disruptive` gain or lose; a change only to descriptions affects none; anything else plans the full matrix |
 | the role guards, `roles/remediate/tasks/dispatch.yml`, `playbooks/run_start.yml`, `content/catalogue.yml` | none: they are generated or a generator's input, checked for drift by the required `lint` and `test-suites` jobs, and their effect is classified through their sources |
-| documentation, changelog fragments, unit tests and fixtures, check-mode playbooks, the reporting, lint, docs and IaC tools, the SCC and OpenSCAP image definitions, linter and bot configuration | none |
+| documentation, changelog fragments, unit tests and fixtures, check-mode playbooks, the reporting, lint, docs, IaC and CI tools (`tools/ci`), the SCC and OpenSCAP image definitions, linter and bot configuration | none |
 | anything else: the shared harness and tasks, images and pins, scenarios, plugins and `module_utils`, the other role defaults and the entry points, content pins, `tools/roles`, `tools/molecule`, `ci.yml`, the `Makefile`, the Python lock, a symbolic link, an unknown path | the full matrix |
 
 The base revision decides, as for the [SCC smoke test](adr/0019-scc-scanner-backend-and-ci-image.md):
@@ -1173,11 +1177,51 @@ legs on both platforms (four for `banners`, nine for `sudo`), and a documentatio
 Since FREES-195 the generated toggles are classified by their entries as well ([ADR 0011](adr/0011-control-toggles-and-cleanup.md#amendment-2026-10-31-topic-files-and-generated-toggles-plan-only-their-topics-frees-195)),
 so a topic that keeps to its own files plans only its own legs (see [below](#adding-a-topic-without-touching-shared-files)).
 
-Cross-topic interactions are caught only on `main` and nightly: a change that the mapping confines to one topic can
-still break another topic's legs, through state on the instance that both inspect or the order in which topics run,
-and only the full matrix shows it, after the merge. The other residual risks are in the ADR amendment. To see what a
+Cross-topic interactions are caught only by a full matrix, in the daily merge group of the promotion and nightly: a
+change that the mapping confines to one topic can still break another topic's legs, through state on the instance that
+both inspect or the order in which topics run, and only the full matrix shows it, after the merge into `integration`
+and before `main` moves. The other residual risks are in the ADR amendment. To see what a
 branch would plan, run `make molecule-plan` (`MOLECULE_PLAN_BASE` defaults to `origin/main`); it changes nothing and
 needs the base revision's planner.
+
+### Legs before a merge into integration
+
+Since FREES-215 a pull request into `integration` runs only the fast tier on GitHub, without any Molecule job, and the
+full matrix runs once a day in the merge group of the promotion into `main`
+([ADR 0034](adr/0034-daily-integration-branch.md)). Before the merge, the author and the independent reviewer run the
+pull request's Molecule legs on a Docker host; the maintainer uses a second machine for it, one leg at a time. List
+them with:
+
+```text
+make -s affected-legs
+```
+
+The target plans the branch against `AFFECTED_LEGS_BASE` (`origin/integration`, or `origin/main` while `integration`
+does not exist) exactly as the `molecule-plan` job does: the base revision's `tools/molecule/plan-lifecycle.sh` runs the
+base revision's `make molecule-affected` over the merge base of `HEAD` and that branch. Commit first; the planner reads
+commits, not the working tree. `tools/ci/affected_legs.py` then checks the plan as the job's step does and prints one
+row per leg, with the CI job name, where it runs and its `make` command:
+
+| Plan | On the Docker host, required | On the Docker host, optional | Left to the daily full run |
+|---|---|---|---|
+| `affected` with lifecycle legs | the scenarios of `molecule-docker` (`docker-ubuntu`, `docker-rhel-compatible`, `docker-selftest`, read from `ci.yml`) and every lifecycle leg of the plan | none | the libvirt legs |
+| `affected` without lifecycle legs (documentation, unit tests, lint tools) | none | none | the libvirt legs without a topic |
+| `full` | the scenarios of `molecule-docker` and the lifecycle legs of the topics that the plan names | every other lifecycle leg | every libvirt leg |
+| missing, not JSON, or not a subset of the full matrices that keeps every leg without a topic | as `full`, without named topics | every lifecycle leg | every libvirt leg |
+
+A `full` plan has about 110 Docker legs, about eleven hours on one host, so only its named topics are required; the
+reviewer asks for more legs, or for a full run of the branch on GitHub (`gh workflow run ci.yml --ref <branch>`),
+when the change reaches beyond them. The libvirt legs need KVM and the libvirt packages of the hosted runner
+([libvirt](molecule-libvirt.md)).
+
+`AFFECTED_LEGS_FORMAT=commands` prints only the required commands, one per line, each after `AFFECTED_LEGS_PREFIX`,
+the command that runs a `make` command on the Docker host (empty for this machine). The default format, `markdown`,
+is the table for the review verdict, with a result column to fill in, and the planner's reason for every path;
+`json` prints the same as one line. The verdict lists every row with its result
+([ADR 0033](adr/0033-review-policy-independent-verdict-without-required-approval.md#amendment-2026-11-11-the-daily-integration-branch-frees-215)).
+
+When the daily full run fails, the failing leg's command from the same table also drives `git bisect run` over the
+day's commits (`git bisect start origin/integration origin/main`), as ADR 0034 describes.
 
 ### Load of a run and the merge queue
 
@@ -1215,6 +1259,11 @@ run has a concurrency group of its own, so no merge group or run on `main` is ca
 ([development](development.md#pull-request-workflow)); the planner uses the base of the merge commit for a pull request
 ([above](#affected-legs-on-pull-requests)); and `test-playbooks-remediate` is split ([above](#ci-legs)). None of this
 makes a full run smaller.
+
+What changed in FREES-215: a full run is no longer made per pull request. Pull requests merge into `integration` with
+the fast tier (about 22 jobs and 50 runner-minutes) and their affected legs on a Docker host, and the full matrix runs
+once a day in the merge group of the promotion into `main`, plus the nightly schedule
+([above](#legs-before-a-merge-into-integration), [ADR 0034](adr/0034-daily-integration-branch.md)).
 
 Open point, not measured in detail: when the queue invalidates a group, the run of its `gh-readonly-queue/...` branch
 can keep running (run 42715894165 of #88 ran until 00:29 UTC although #88 left the queue at 23:25), and the `ci-gate` of

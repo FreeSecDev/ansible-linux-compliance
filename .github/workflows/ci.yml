@@ -3,7 +3,7 @@ name: ci
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, integration]
   push:
     branches: [main]
   merge_group:
@@ -20,6 +20,40 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  ci-tier:
+    name: ci-tier
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions: {}
+    outputs:
+      tier: ${{ steps.tier.outputs.tier }}
+    steps:
+      - name: Decide whether this run is the fast tier or the full matrix
+        id: tier
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          tier=full
+          reason="the ${EVENT_NAME} event runs the full matrix"
+          if [[ "$EVENT_NAME" == pull_request && "$BASE_REF" == integration ]]; then
+            tier=fast
+            reason="a pull request into integration; the Molecule legs run on a Docker host before the merge"
+          elif [[ "$EVENT_NAME" == pull_request && "$BASE_REF" == main && "$HEAD_REF" == integration \
+            && "$HEAD_REPO" == "$REPOSITORY" ]]; then
+            tier=fast
+            reason="the promotion of integration into main; its merge group runs the full matrix"
+          elif [[ "$EVENT_NAME" == push && "$REF" == refs/heads/main ]]; then
+            tier=fast
+            reason="main moves only through the merge queue, whose merge group ran the full matrix on this commit"
+          fi
+          printf 'tier: %s (%s)\n' "$tier" "$reason"
+          printf 'tier=%s\n' "$tier" >> "$GITHUB_OUTPUT"
+
   lint:
     name: lint
     needs: molecule-collections
@@ -63,6 +97,25 @@ jobs:
           enable-cache: false
       - name: Run typecheck
         run: make typecheck
+
+  docs:
+    name: docs
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884  # v10.3.0
+        with:
+          version: 0.13.1
+          enable-cache: false
+      - name: Run docs
+        run: make docs
 
   test:
     name: test
@@ -412,6 +465,8 @@ jobs:
 
   molecule-images:
     name: molecule-images
+    needs: [ci-tier]
+    if: needs.ci-tier.outputs.tier == 'full'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
@@ -487,7 +542,8 @@ jobs:
 
   molecule-docker:
     name: molecule-docker (${{ matrix.scenario }})
-    needs: [molecule-collections, molecule-images]
+    needs: [ci-tier, molecule-collections, molecule-images]
+    if: needs.ci-tier.outputs.tier == 'full'
     runs-on: ubuntu-24.04
     timeout-minutes: 18
     permissions:
@@ -529,6 +585,8 @@ jobs:
 
   molecule-plan:
     name: molecule-plan
+    needs: [ci-tier]
+    if: needs.ci-tier.outputs.tier == 'full'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
@@ -594,8 +652,8 @@ jobs:
 
   molecule-lifecycle:
     name: molecule-lifecycle (${{ matrix.platform }}, ${{ matrix.topic }}, ${{ matrix.mode }})
-    needs: [molecule-plan, molecule-collections, molecule-images]
-    if: needs.molecule-plan.outputs.lifecycle_legs != '0'
+    needs: [ci-tier, molecule-plan, molecule-collections, molecule-images]
+    if: needs.ci-tier.outputs.tier == 'full' && needs.molecule-plan.outputs.lifecycle_legs != '0'
     runs-on: ubuntu-24.04
     timeout-minutes: 18
     permissions:
@@ -638,7 +696,8 @@ jobs:
     name: >-
       molecule-libvirt (${{ matrix.scenario }}${{ matrix.topic && format(', {0}, {1}', matrix.topic, matrix.mode)
       || '' }})
-    needs: [molecule-plan, molecule-collections]
+    needs: [ci-tier, molecule-plan, molecule-collections]
+    if: needs.ci-tier.outputs.tier == 'full'
     runs-on: ubuntu-24.04
     timeout-minutes: 28
     permissions:
@@ -738,7 +797,9 @@ jobs:
     name: ci-gate
     if: always()
     needs:
+      - ci-tier
       - lint
+      - docs
       - typecheck
       - test
       - test-suites
@@ -764,30 +825,52 @@ jobs:
     env:
       NEEDS: ${{ toJSON(needs) }}
       EVENT_NAME: ${{ github.event_name }}
+      REF: ${{ github.ref }}
+      BASE_REF: ${{ github.event.pull_request.base.ref }}
+      HEAD_REF: ${{ github.event.pull_request.head.ref }}
+      HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+      REPOSITORY: ${{ github.repository }}
     steps:
-      - name: Require every needed job to succeed
+      - name: Require every needed job of the run's tier to succeed
         run: |
           jq -r 'to_entries[] | "\(.key): \(.value.result)"' <<<"$NEEDS"
           jq -e --arg event "$EVENT_NAME" '
-            (.["scc-changes"].result == "success")
+            ["molecule-images", "molecule-docker", "molecule-plan", "molecule-lifecycle", "molecule-libvirt"]
+              as $full_only
+            | (.["ci-tier"].outputs.tier // "") as $tier
+            | (.["ci-tier"].result == "success")
+            and ($tier | IN("fast", "full"))
+            and (.["scc-changes"].result == "success")
             and (.["scc-changes"].outputs.scc | IN("true", "false"))
             and (.["scc-changes"].outputs.expiry | IN("current", "expired"))
-            and all(to_entries[] | select(.key | IN("scc-smoke", "molecule-lifecycle") | not);
+            and all(to_entries[] | select(.key | IN("scc-smoke", $full_only[]) | not);
               .value.result == "success")
             and (.["scc-smoke"].result == "success"
               or (.["scc-smoke"].result == "skipped"
                 and (.["scc-changes"].outputs.scc == "false" or .["scc-changes"].outputs.expiry == "expired")
                 and ($event | IN("pull_request", "merge_group"))))
-            and (.["molecule-plan"].outputs.scope == "full"
-              or (.["molecule-plan"].outputs.scope == "affected" and ($event | IN("pull_request", "merge_group"))))
-            and (.["molecule-plan"].outputs.lifecycle_legs | test("^(0|[1-9][0-9]*)$"))
-            and (.["molecule-lifecycle"].result == "success"
-              or (.["molecule-lifecycle"].result == "skipped"
-                and .["molecule-plan"].outputs.lifecycle_legs == "0"
-                and .["molecule-plan"].outputs.scope == "affected"
-                and ($event | IN("pull_request", "merge_group"))))
+            and if $tier == "full" then
+              all(to_entries[] | select(.key | IN($full_only[]) and . != "molecule-lifecycle");
+                .value.result == "success")
+              and (.["molecule-plan"].outputs.scope == "full"
+                or (.["molecule-plan"].outputs.scope == "affected" and ($event | IN("pull_request", "merge_group"))))
+              and (.["molecule-plan"].outputs.lifecycle_legs | test("^(0|[1-9][0-9]*)$"))
+              and (.["molecule-lifecycle"].result == "success"
+                or (.["molecule-lifecycle"].result == "skipped"
+                  and .["molecule-plan"].outputs.lifecycle_legs == "0"
+                  and .["molecule-plan"].outputs.scope == "affected"
+                  and ($event | IN("pull_request", "merge_group"))))
+            else
+              (($event == "push" and $ENV.REF == "refs/heads/main")
+                or ($event == "pull_request" and $ENV.BASE_REF == "integration")
+                or ($event == "pull_request" and $ENV.BASE_REF == "main" and $ENV.HEAD_REF == "integration"
+                  and ($ENV.HEAD_REPO // "") != "" and $ENV.HEAD_REPO == $ENV.REPOSITORY))
+              and all(to_entries[] | select(.key | IN($full_only[])); .value.result == "skipped")
+            end
           ' <<<"$NEEDS" >/dev/null
-          jq -r '.["molecule-plan"].outputs | "molecule plan: \(.scope), \(.lifecycle_legs) lifecycle legs"' <<<"$NEEDS"
+          jq -r '"tier: \(.["ci-tier"].outputs.tier)",
+            (.["molecule-plan"] | select(.result == "success") | .outputs
+              | "molecule plan: \(.scope), \(.lifecycle_legs) lifecycle legs")' <<<"$NEEDS"
           if jq -e '.["scc-smoke"].result == "skipped" and .["scc-changes"].outputs.scc == "true"
             and .["scc-changes"].outputs.expiry == "expired"' <<<"$NEEDS" >/dev/null; then
             printf '::warning title=SCC not built or run::%s %s\n' \

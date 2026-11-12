@@ -608,7 +608,8 @@ download ([Molecule guide](../molecule.md#images-and-collections-built-once-per-
     that one image and nothing else. Unlike the collections and the libvirt files, **the image cache has no content
     pin**: builds are not reproducible, so a matching label on the base layers says nothing about the layers on top.
   - The image cache key carries the ISO week of the run, so a planted image entry is restored at most until the week
-    ends; a scheduled run never saves an image entry, and a push to `main` saves one only on a miss.
+    ends; a scheduled run never saves an image entry, and since FREES-215 a push to `main` runs no Molecule job and
+    saves none either (ADR 0034), so no run on `main` writes an image entry.
   - The job always writes the archive it shares anew from the verified image, so the legs never receive
     the cache's bytes, and a leg refuses an archive that loads any other image.
   - A pull request from a fork neither restores nor saves these caches, as for SCC (T-SCC-1).

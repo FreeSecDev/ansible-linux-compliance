@@ -3,7 +3,8 @@
 - **Status:** accepted
 - **Date:** 2026-11-09
 - **Amended:** 2026-11-10 (re-review after an update from `main`, pull request body footer, merge queue timeout;
-  FREES-204)
+  FREES-204); 2026-11-11 (daily integration branch: worker legs in the verdict, merge re-review of the promotion;
+  FREES-215)
 - **Deciders:** project owner (decision of 2026-11-09: the owner's account may merge its own pull requests, and the
   agent reviews, accepts and merges)
 - **Jira:** FREES-204
@@ -176,3 +177,48 @@ Tooling that needs the key searches the message for a line that matches `^Refs: 
 On 2026-11-10 the merge queue's check timeout (`check_response_timeout_minutes`) in the live ruleset was raised from
 30 to 90 minutes, and the same day to 240 minutes after merge queue runs took 90 to 108 minutes.
 `.github/rulesets/main.json` follows, so it still matches the live ruleset.
+
+## Amendment 2026-11-11: the daily integration branch (FREES-215)
+
+**Context.** [ADR 0034](0034-daily-integration-branch.md) moves the work pull requests to the branch `integration`,
+where GitHub runs only the fast tier of `ci.yml`, and promotes `integration` into `main` once a day through the merge
+queue, whose merge group runs the full matrix. The Molecule legs of a pull request run on a Docker host before it
+merges, and GitHub does not see them.
+
+**Decision.**
+
+1. **Pull requests into `integration`.** Every one needs an independent verdict on its current head, as in §2 to §4;
+   the merge condition is that verdict and a green `ci-gate`, which is the fast tier there. The verdict also lists the
+   Molecule legs of `make affected-legs` for that head, each with its result (`passed`, `failed`, or `not run` with
+   the reason), and states the plan's scope. Every required leg must have passed on the reviewed head: the reviewer
+   runs them, or checks the author's results and logs for exactly that head. An optional leg of a `full` plan that
+   the reviewer asks for becomes required. A verdict without the table, or with a required leg that did not pass, is
+   `request-changes`.
+2. **The promotion pull request** (`integration` -> `main`, once a day) brings no content of its own, so it gets a
+   merge re-review by a reviewer independent of the authors of the day's pull requests where possible, and at least
+   of whoever opened the promotion, with these checks:
+   - a. **Head and base:** its head is the branch `integration` of this repository at the commit the verdict names,
+     and its base is `main`.
+   - b. **Tree:** `git merge-tree --write-tree origin/main <head>` gives exactly the tree of the head
+     (`git rev-parse <head>^{tree}`), so the promotion adds nothing that `integration` does not hold; a hotfix on
+     `main` that `integration` lacks is brought into `integration` first (ADR 0034, decision 6).
+   - c. **Contents:** `git log --first-parent --format='%H %s' origin/main..<head>` lists only squash commits of pull
+     requests merged into `integration`, each subject ending with its pull request number. The re-review lists those
+     pull requests.
+   - d. **Verdicts:** each of those pull requests had an `approve` or `approve-with-follow-ups` marker for the head that
+     was merged, with the table of worker legs of item 1, and its follow-ups are recorded on its Jira issue.
+   - e. **Footer:** the body lists the pull requests and ends with `Refs:` and their Jira keys.
+
+   The marker names the promotion's head. A new commit on `integration` changes that head and needs a new merge
+   re-review. The full matrix of the merge group decides the merge; if it fails, the procedure of ADR 0034
+   (decision 7) applies and the promotion is reviewed again once `integration` holds the fix or the revert.
+3. **Hotfix pull requests into `main`** stay possible. They get a full verdict as in §2 to §4 and run the full matrix
+   on their own run and in their merge group, as before.
+
+**Unchanged:** the independence of the reviewer, the marker, the re-review after an update from the target branch
+(amendment of 2026-11-10; for a pull request into `integration`, read `integration` where it says `main`), the `Refs`
+footer, and the release gate of ADR 0012, which for a merge commit on `main` checks the promotion's verdict, and for
+each commit that a promotion brings the verdict of its pull request.
+
+**Trade-off.** GitHub enforces only the fast tier for `integration`. That the required worker legs ran and passed
+rests on the verdict, posted from the owner's account like every verdict, not on a check that GitHub can verify.

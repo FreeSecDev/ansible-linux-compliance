@@ -967,3 +967,14 @@ returns both parts of one read; `loads()` still returns the entries.
   so the extra `value` and `value_source` keys of `control_state` `list` change no plan.
 - **A stale record over-reports.** A deviation that stays in the register after the host was changed by hand flags
   the rule until the next enabled remediation run corrects the register, which is the safe direction.
+
+## Amendment 2026-11-11: a push to `main` runs the fast tier (FREES-215)
+
+The amendment of 2026-10-30 says that a push to `main` always runs the full matrix, and that a cross-topic
+interaction is caught by every push to `main` and every night. Since [ADR 0034](0034-daily-integration-branch.md) a
+push to `main` runs the fast tier of `ci.yml`, without the Molecule jobs: `main` advances only through the merge
+queue, and the merge group's run, which `ci-gate` accepts only with the full matrix, ran on exactly the commit that
+`main` then points to. The nightly `schedule` and `workflow_dispatch` still run the full matrix. A pull request into
+`integration` runs no Molecule job on GitHub at all; its affected legs run on a Docker host before the merge, and the
+full matrix runs once a day in the merge group of the promotion into `main`, where cross-topic interactions are now
+caught, before `main` moves.

@@ -35,5 +35,6 @@
 | [0031](0031-fast-records-for-the-lifecycle-harness.md) | Fast records for the Molecule lifecycle harness | proposed |
 | [0032](0032-operator-control-community-modules-and-value-overrides.md) | Operator control: community modules, and value overrides reported as deviations | accepted |
 | [0033](0033-review-policy-independent-verdict-without-required-approval.md) | Review policy: an independent verdict on the pull request, without a required GitHub approval | accepted |
+| [0034](0034-daily-integration-branch.md) | Daily integration branch: the fast tier per pull request, the full matrix once a day | accepted |
 
 Proposed ADRs are accepted through the pull request that introduces their first implementation.

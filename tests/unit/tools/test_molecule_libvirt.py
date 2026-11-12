@@ -482,8 +482,13 @@ def test_ci_runs_every_scenario_of_each_driver_and_gates_on_it() -> None:
     lifecycle = cast("dict[str, object]", jobs["molecule-lifecycle"]["strategy"])
     assert lifecycle["matrix"] == "${{ fromJSON(needs.molecule-plan.outputs.matrix) }}"
     assert libvirt["matrix"] == "${{ fromJSON(needs.molecule-plan.outputs.libvirt) }}"
-    assert jobs["molecule-libvirt"]["needs"] == ["molecule-plan", "molecule-collections"]
+    assert jobs["molecule-libvirt"]["needs"] == [
+        "ci-tier",
+        "molecule-plan",
+        "molecule-collections",
+    ]
     assert jobs["molecule-lifecycle"]["needs"] == [
+        "ci-tier",
         "molecule-plan",
         "molecule-collections",
         "molecule-images",

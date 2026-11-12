@@ -25,6 +25,8 @@ an independent agent or a human.
 - The checklist in [references/pr-checklist.md](references/pr-checklist.md).
 - For a re-review after an update from `main`: the head named in the last verdict marker, and
   [references/re-review-after-main.md](references/re-review-after-main.md).
+- For a pull request into `integration` or the daily promotion into `main`:
+  [references/integration-flow.md](references/integration-flow.md) (ADR 0034).
 
 ## Outputs
 
@@ -52,7 +54,11 @@ an independent agent or a human.
 - A changelog fragment exists for every user-visible change.
 - Required CI is green, including the report artifact; a skipped required check is a failure.
 - Invoke `security-review` whenever its trigger list applies; its blocking findings block the merge.
-- The branch is rebased onto the latest `main`; merge is squash only and the branch is deleted automatically.
+- The branch is rebased onto the latest `integration` (a hotfix onto `main`). A pull request into `integration` is
+  squash merged; the merge queue merges the daily promotion and a hotfix into `main` with a merge commit.
+- A verdict on a pull request into `integration` lists every leg of `make affected-legs` with its result; a required
+  leg that did not pass on the reviewed head is a blocking finding. The promotion gets the merge re-review of
+  [references/integration-flow.md](references/integration-flow.md) (ADR 0033, amendment of 2026-11-11).
 - A push after a verdict needs a new verdict for the new head. When the push only brings in `main`, a re-review of
   that update replaces the full review (ADR 0033 §4, amendment of 2026-11-10): a rebase needs the range-diff check,
   and a merge of `main` always needs the merge re-review. Both check for semantic conflicts. The steps are in
@@ -75,7 +81,8 @@ an independent agent or a human.
 - Accepting a new interface without an ADR.
 - Missing documentation or changelog fragment because "it is small".
 - Tolerating a `# noqa` or skipped test with no justification.
-- Merging with a merge commit or without rebasing.
+- Merging a pull request into `integration` with a merge commit or without rebasing.
+- Accepting worker legs that ran on another head, or a table without results, as Molecule evidence.
 - Accepting a merge of `main` because the tree "only adds `main`", without comparing it to `git merge-tree`, or
   missing a semantic conflict that Git merged silently, such as a count, a shared name prefix or a threshold that
   both sides changed.
@@ -92,7 +99,7 @@ an independent agent or a human.
 
 ## Documentation requirements
 
-- Keep [references/pr-checklist.md](references/pr-checklist.md), [references/pull-request-template.md](references/pull-request-template.md) and [references/re-review-after-main.md](references/re-review-after-main.md) aligned with `AGENTS.md` and ADR 0033.
+- Keep [references/pr-checklist.md](references/pr-checklist.md), [references/pull-request-template.md](references/pull-request-template.md), [references/re-review-after-main.md](references/re-review-after-main.md) and [references/integration-flow.md](references/integration-flow.md) aligned with `AGENTS.md`, ADR 0033 and ADR 0034.
 - The pull request template file under `.github/` is derived from the reference template.
 - Record changes to review policy as an ADR.
 
@@ -101,7 +108,8 @@ an independent agent or a human.
 - A verdict for the current head is posted on the pull request by an independent reviewer. GitHub requires no
   approving review (ADR 0033); the verdict and a green `ci-gate` are the merge condition.
 - All blocking findings are fixed and re-verified.
-- The pull request is squash merged and its branch deleted.
+- The pull request is merged (squash into `integration`, through the queue into `main`) and its branch deleted;
+  `integration` itself is never deleted.
 - The Jira issue records the verdict, reviewer and pull request link.
 
 ## Interaction with other skills

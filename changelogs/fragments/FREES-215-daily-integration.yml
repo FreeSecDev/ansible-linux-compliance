@@ -1,0 +1,13 @@
+---
+trivial:
+  - >-
+    CI: the new job ci-tier decides the tier of a run. A pull request into the new branch integration, the daily
+    promotion pull request of integration into main and a push to main run the fast tier, every job but the five
+    Molecule jobs; every merge group, every other pull request into main, the schedule and a manual run run the full
+    matrix. ci-gate stays the one required check and accepts the fast tier only for those events and only with every
+    Molecule job skipped. The new docs job runs make docs, and the pr-body workflow also runs for pull requests into
+    integration (FREES-215, ADR 0034).
+  - >-
+    make affected-legs lists the Molecule legs that a branch runs on a Docker host before it merges into integration,
+    planned by the base revision's planner as in CI, with a fail-safe fallback to the full matrices
+    (tools/ci/affected_legs.py, FREES-215).
