@@ -10,8 +10,12 @@
 # parameter of the host. The tmpfs holds every parameter of the cases, preset to 9; for every case
 # the container empties the configuration directories and removes /etc/sysctl.conf and ufw's
 # configuration, copies the case in, resets the tree, runs one reader (systemd-sysctl, where the
-# image has it, or `sysctl --system`) and records the files of the tree as base64. The parser reads
-# the values back from those files, not from the readers' output.
+# image has it, or `sysctl --system`) under a timeout, through sysctl_trace.py for a case that
+# traces keys, and records the files of the tree as base64. The parser reads the values back from
+# those files and the traces, not from the readers' output.
+# The container runs with --security-opt apparmor=unconfined: Docker's default AppArmor profile
+# refuses every mount, so the oracle could not mount its private /proc/sys (owner decision of
+# 2026-11-10 on FREES-208, ADR 0029; only this container, every other option above unchanged).
 set -euo pipefail
 
 record="$1"
@@ -34,10 +38,11 @@ rm -rf "${work}"
 mkdir -p "${work}/cases" "${work}/raw/ubuntu" "${work}/raw/rhel_compatible"
 chmod a+rwx "${work}/raw/ubuntu" "${work}/raw/rhel_compatible"
 uv run --frozen python tools/molecule/sysctl_reader.py materialise "${cases}" "${work}/cases"
+cp "$(dirname "$0")/sysctl_trace.py" "${work}/cases/sysctl_trace.py"
 
 for platform in ubuntu rhel_compatible; do
   docker run --rm --network none --cap-drop ALL --cap-add SYS_ADMIN --cap-add SETFCAP \
-    --security-opt no-new-privileges -v "$(realpath "${work}/cases"):/cases:ro" \
+    --security-opt no-new-privileges --security-opt apparmor=unconfined -v "$(realpath "${work}/cases"):/cases:ro" \
     -v "$(realpath "${work}/raw/${platform}"):/raw" -v "$(realpath "${inside}"):/oracle.sh:ro" \
     "$(image_of "${platform}")" bash /oracle.sh
 done

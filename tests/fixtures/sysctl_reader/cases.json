@@ -1154,5 +1154,562 @@
         "text": "IPV6=yes\nIPT_SYSCTL=/etc/ufw/sysctl.conf\n"
       }
     ]
+  },
+  "fifo_named_conf": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/10-y.conf",
+        "text": "net.ipv4.conf.all.rp_filter = 1\n"
+      },
+      {
+        "path": "etc/sysctl.d/50-fifo.conf",
+        "fifo": true
+      },
+      {
+        "path": "etc/sysctl.d/80-z.conf",
+        "text": "net.ipv4.conf.all.rp_filter = 2\n"
+      }
+    ]
+  },
+  "link_to_a_fifo": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/10-y.conf",
+        "text": "net.ipv4.conf.all.rp_filter = 1\n"
+      },
+      {
+        "path": "etc/sysctl.d/50-link.conf",
+        "link": "/srv/sysctl-fifo"
+      },
+      {
+        "path": "srv/sysctl-fifo",
+        "fifo": true
+      },
+      {
+        "path": "etc/sysctl.d/80-z.conf",
+        "text": "net.ipv4.conf.all.rp_filter = 2\n"
+      }
+    ]
+  },
+  "link_to_dev_zero": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/10-y.conf",
+        "text": "net.ipv4.conf.all.rp_filter = 1\n"
+      },
+      {
+        "path": "etc/sysctl.d/50-zero.conf",
+        "link": "/dev/zero"
+      },
+      {
+        "path": "etc/sysctl.d/80-z.conf",
+        "text": "net.ipv4.conf.all.rp_filter = 2\n"
+      }
+    ]
+  },
+  "sysctl_conf_fifo": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/10-y.conf",
+        "text": "net.ipv4.conf.all.rp_filter = 1\n"
+      },
+      {
+        "path": "etc/sysctl.conf",
+        "fifo": true
+      }
+    ]
+  },
+  "sysctl_conf_link_to_dev_zero": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/10-y.conf",
+        "text": "net.ipv4.conf.all.rp_filter = 1\n"
+      },
+      {
+        "path": "etc/sysctl.conf",
+        "link": "/dev/zero"
+      }
+    ]
+  },
+  "companion_zero_before_the_rate": {
+    "keys": [
+      "kernel.perf_event_max_sample_rate",
+      "kernel.perf_cpu_time_max_percent"
+    ],
+    "trace": [
+      "kernel.perf_event_max_sample_rate",
+      "kernel.perf_cpu_time_max_percent"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/10-a.conf",
+        "text": "kernel.perf_cpu_time_max_percent = 0\n"
+      },
+      {
+        "path": "etc/sysctl.d/20-b.conf",
+        "text": "kernel.perf_event_max_sample_rate = 50000\n"
+      }
+    ]
+  },
+  "companion_zero_then_one_before_the_rate": {
+    "keys": [
+      "kernel.perf_event_max_sample_rate",
+      "kernel.perf_cpu_time_max_percent"
+    ],
+    "trace": [
+      "kernel.perf_event_max_sample_rate",
+      "kernel.perf_cpu_time_max_percent"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/10-a.conf",
+        "text": "kernel.perf_cpu_time_max_percent = 0\n"
+      },
+      {
+        "path": "etc/sysctl.d/20-b.conf",
+        "text": "kernel.perf_cpu_time_max_percent = 1\n"
+      },
+      {
+        "path": "etc/sysctl.d/30-c.conf",
+        "text": "kernel.perf_event_max_sample_rate = 50000\n"
+      }
+    ]
+  },
+  "companion_zero_after_the_rate": {
+    "keys": [
+      "kernel.perf_event_max_sample_rate",
+      "kernel.perf_cpu_time_max_percent"
+    ],
+    "trace": [
+      "kernel.perf_event_max_sample_rate",
+      "kernel.perf_cpu_time_max_percent"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/10-a.conf",
+        "text": "kernel.perf_event_max_sample_rate = 50000\n"
+      },
+      {
+        "path": "etc/sysctl.d/20-b.conf",
+        "text": "kernel.perf_cpu_time_max_percent = 0\n"
+      }
+    ]
+  },
+  "companion_zero_between_two_rates": {
+    "keys": [
+      "kernel.perf_event_max_sample_rate",
+      "kernel.perf_cpu_time_max_percent"
+    ],
+    "trace": [
+      "kernel.perf_event_max_sample_rate",
+      "kernel.perf_cpu_time_max_percent"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/10-a.conf",
+        "text": "kernel.perf_event_max_sample_rate = 50000\n"
+      },
+      {
+        "path": "etc/sysctl.d/20-b.conf",
+        "text": "kernel.perf_cpu_time_max_percent = 0\n"
+      },
+      {
+        "path": "etc/sysctl.d/30-c.conf",
+        "text": "kernel.perf_event_max_sample_rate = 50000\n"
+      }
+    ]
+  },
+  "companion_out_of_range_after_zero": {
+    "keys": [
+      "kernel.perf_event_max_sample_rate",
+      "kernel.perf_cpu_time_max_percent"
+    ],
+    "trace": [
+      "kernel.perf_event_max_sample_rate",
+      "kernel.perf_cpu_time_max_percent"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/10-a.conf",
+        "text": "kernel.perf_cpu_time_max_percent = 0\n"
+      },
+      {
+        "path": "etc/sysctl.d/20-b.conf",
+        "text": "kernel.perf_cpu_time_max_percent = 200\n"
+      },
+      {
+        "path": "etc/sysctl.d/30-c.conf",
+        "text": "kernel.perf_event_max_sample_rate = 50000\n"
+      }
+    ]
+  },
+  "companion_one_hundred_in_one_file": {
+    "keys": [
+      "kernel.perf_event_max_sample_rate",
+      "kernel.perf_cpu_time_max_percent"
+    ],
+    "trace": [
+      "kernel.perf_event_max_sample_rate",
+      "kernel.perf_cpu_time_max_percent"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/10-a.conf",
+        "text": "kernel.perf_cpu_time_max_percent = 100\nkernel.perf_event_max_sample_rate = 50000\nkernel.perf_cpu_time_max_percent = 1\n"
+      }
+    ]
+  },
+  "companion_moved_after_the_rate": {
+    "keys": [
+      "kernel.perf_event_max_sample_rate",
+      "kernel.perf_cpu_time_max_percent"
+    ],
+    "trace": [
+      "kernel.perf_event_max_sample_rate",
+      "kernel.perf_cpu_time_max_percent"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/10-a.conf",
+        "text": "kernel.perf_cpu_time_max_percent = 0\n"
+      },
+      {
+        "path": "etc/sysctl.d/20-b.conf",
+        "text": "kernel.perf_event_max_sample_rate = 50000\n"
+      },
+      {
+        "path": "etc/sysctl.d/30-c.conf",
+        "text": "kernel.perf_cpu_time_max_percent = 1\n"
+      }
+    ]
+  },
+  "companion_same_value_again": {
+    "keys": [
+      "kernel.perf_event_max_sample_rate",
+      "kernel.perf_cpu_time_max_percent"
+    ],
+    "trace": [
+      "kernel.perf_event_max_sample_rate",
+      "kernel.perf_cpu_time_max_percent"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/10-a.conf",
+        "text": "kernel.perf_cpu_time_max_percent = 0\n"
+      },
+      {
+        "path": "etc/sysctl.d/20-b.conf",
+        "text": "kernel.perf_event_max_sample_rate = 50000\n"
+      },
+      {
+        "path": "etc/sysctl.d/30-c.conf",
+        "text": "kernel.perf_cpu_time_max_percent = 0\n"
+      }
+    ]
+  },
+  "companion_two_globs_around_the_rate": {
+    "keys": [
+      "kernel.perf_event_max_sample_rate",
+      "kernel.perf_cpu_time_max_percent"
+    ],
+    "trace": [
+      "kernel.perf_event_max_sample_rate",
+      "kernel.perf_cpu_time_max_percent"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/10-a.conf",
+        "text": "kernel.perf_cpu_time_max_perc* = 0\n"
+      },
+      {
+        "path": "etc/sysctl.d/20-b.conf",
+        "text": "kernel.perf_event_max_sample_rate = 50000\n"
+      },
+      {
+        "path": "etc/sysctl.d/30-c.conf",
+        "text": "kernel.perf_cpu_time_max_p* = 1\n"
+      }
+    ]
+  },
+  "companion_glob_and_rate_glob": {
+    "keys": [
+      "kernel.perf_event_max_sample_rate",
+      "kernel.perf_cpu_time_max_percent"
+    ],
+    "trace": [
+      "kernel.perf_event_max_sample_rate",
+      "kernel.perf_cpu_time_max_percent"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/10-a.conf",
+        "text": "kernel.perf_cpu_time_max_perc* = 0\n"
+      },
+      {
+        "path": "etc/sysctl.d/20-b.conf",
+        "text": "kernel.perf_event_max_sample_r* = 50000\n"
+      },
+      {
+        "path": "etc/sysctl.d/30-c.conf",
+        "text": "kernel.perf_cpu_time_max_percent = 1\n"
+      }
+    ]
+  },
+  "companion_in_sysctl_conf": {
+    "keys": [
+      "kernel.perf_event_max_sample_rate",
+      "kernel.perf_cpu_time_max_percent"
+    ],
+    "trace": [
+      "kernel.perf_event_max_sample_rate",
+      "kernel.perf_cpu_time_max_percent"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/10-a.conf",
+        "text": "kernel.perf_event_max_sample_rate = 50000\n"
+      },
+      {
+        "path": "etc/sysctl.conf",
+        "text": "kernel.perf_cpu_time_max_percent = 0\nkernel.perf_event_max_sample_rate = 40000\n"
+      }
+    ]
+  },
+  "review3_second_dash": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter",
+      "net.ipv4.conf.default.rp_filter",
+      "net.ipv4.conf.eth0.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-rp-filter.conf",
+        "text": "# Managed by freesecdev.linux_compliance for x.\nnet.ipv4.conf.all.rp_filter = 1\n"
+      },
+      {
+        "path": "etc/sysctl.d/zz-site.conf",
+        "text": "--net.ipv4.conf.all.rp_filter = 0\n"
+      }
+    ]
+  },
+  "review3_second_dash_without_value": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter",
+      "net.ipv4.conf.default.rp_filter",
+      "net.ipv4.conf.eth0.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-rp-filter.conf",
+        "text": "# Managed by freesecdev.linux_compliance for x.\nnet.ipv4.conf.all.rp_filter = 1\n"
+      },
+      {
+        "path": "etc/sysctl.d/10-a.conf",
+        "text": "--net.ipv4.conf.all.rp_filter\n"
+      },
+      {
+        "path": "etc/sysctl.d/zz-site.conf",
+        "text": "net.ipv4.conf.*.rp_filter = 0\n"
+      }
+    ]
+  },
+  "review3_glob_double_slash": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter",
+      "net.ipv4.conf.default.rp_filter",
+      "net.ipv4.conf.eth0.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-rp-filter.conf",
+        "text": "# Managed by freesecdev.linux_compliance for x.\nnet.ipv4.conf.all.rp_filter = 1\n"
+      },
+      {
+        "path": "etc/sysctl.d/zz-site.conf",
+        "text": "net/ipv4//conf/*/rp_filter = 0\n"
+      }
+    ]
+  },
+  "review3_glob_leading_slash": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter",
+      "net.ipv4.conf.default.rp_filter",
+      "net.ipv4.conf.eth0.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-rp-filter.conf",
+        "text": "# Managed by freesecdev.linux_compliance for x.\nnet.ipv4.conf.all.rp_filter = 1\n"
+      },
+      {
+        "path": "etc/sysctl.d/zz-site.conf",
+        "text": "/net/ipv4/conf/*/rp_filter = 0\n"
+      }
+    ]
+  },
+  "review3_glob_dot_component": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter",
+      "net.ipv4.conf.default.rp_filter",
+      "net.ipv4.conf.eth0.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-rp-filter.conf",
+        "text": "# Managed by freesecdev.linux_compliance for x.\nnet.ipv4.conf.all.rp_filter = 1\n"
+      },
+      {
+        "path": "etc/sysctl.d/zz-site.conf",
+        "text": "net/ipv4/./conf/*/rp_filter = 0\n"
+      }
+    ]
+  },
+  "review3_pattern_name_on_a_directory": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter",
+      "net.ipv4.conf.default.rp_filter",
+      "net.ipv4.conf.eth0.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-rp-filter.conf",
+        "text": "# Managed by freesecdev.linux_compliance for x.\nnet.ipv4.conf.all.rp_filter = 1\n"
+      },
+      {
+        "path": "etc/sysctl.d/10-loose.conf",
+        "text": "net.ipv4.conf.all.rp_filter = 0\n"
+      },
+      {
+        "path": "etc/sysctl.d/[1]0-loose.conf",
+        "directory": true
+      }
+    ]
+  },
+  "review3_pattern_name_on_a_fifo": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter",
+      "net.ipv4.conf.default.rp_filter",
+      "net.ipv4.conf.eth0.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-rp-filter.conf",
+        "text": "# Managed by freesecdev.linux_compliance for x.\nnet.ipv4.conf.all.rp_filter = 1\n"
+      },
+      {
+        "path": "etc/sysctl.d/10-loose.conf",
+        "text": "net.ipv4.conf.all.rp_filter = 0\n"
+      },
+      {
+        "path": "etc/sysctl.d/[1]0-loose.conf",
+        "fifo": true
+      }
+    ]
+  },
+  "review3_c_space": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter",
+      "net.ipv4.conf.default.rp_filter",
+      "net.ipv4.conf.eth0.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-rp-filter.conf",
+        "text": "# Managed by freesecdev.linux_compliance for x.\nnet.ipv4.conf.all.rp_filter = 1\n"
+      },
+      {
+        "path": "etc/sysctl.d/zz-site.conf",
+        "text": "net.ipv4.conf.all.rp_filter = 1\u001f\nnet.ipv4.conf.default.rp_filter = 1\u0085\nnet.ipv4.conf.eth0.rp_filter = 1\u00a0\n"
+      }
+    ]
+  },
+  "review3_glob_negated_bracket": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter",
+      "net.ipv4.conf.default.rp_filter",
+      "net.ipv4.conf.eth0.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-rp-filter.conf",
+        "text": "# Managed by freesecdev.linux_compliance for x.\nnet.ipv4.conf.all.rp_filter = 1\n"
+      },
+      {
+        "path": "etc/sysctl.d/zz-site.conf",
+        "text": "net.ipv4.conf.[!]x]ll.rp_filter = 0\n"
+      }
+    ]
+  },
+  "review4_glob_unclosed_bracket": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter",
+      "net.ipv4.conf.default.rp_filter",
+      "net.ipv4.conf.eth0.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-rp-filter.conf",
+        "text": "# Managed by freesecdev.linux_compliance for x.\nnet.ipv4.conf.all.rp_filter = 1\n"
+      },
+      {
+        "path": "etc/sysctl.d/zz-site.conf",
+        "text": "net.ipv4.conf.[all.rp_filter = 0\nnet.ipv4.conf.default.rp_filter = 0\n"
+      }
+    ]
+  },
+  "review7_companion_zero_with_a_trailing_slash": {
+    "keys": [
+      "kernel.perf_event_max_sample_rate",
+      "kernel.perf_cpu_time_max_percent"
+    ],
+    "trace": [
+      "kernel.perf_event_max_sample_rate",
+      "kernel.perf_cpu_time_max_percent"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/10-a.conf",
+        "text": "kernel/perf_cpu_time_max_percent/ = 0\n"
+      },
+      {
+        "path": "etc/sysctl.d/20-b.conf",
+        "text": "kernel.perf_event_max_sample_rate = 50000\n"
+      }
+    ]
+  },
+  "review7_companion_zero_after_a_lone_cr": {
+    "keys": [
+      "kernel.perf_event_max_sample_rate",
+      "kernel.perf_cpu_time_max_percent"
+    ],
+    "trace": [
+      "kernel.perf_event_max_sample_rate",
+      "kernel.perf_cpu_time_max_percent"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/10-a.conf",
+        "text": "vm.swappiness = 10\rkernel.perf_cpu_time_max_percent = 0\n"
+      },
+      {
+        "path": "etc/sysctl.d/20-b.conf",
+        "text": "kernel.perf_event_max_sample_rate = 50000\n"
+      }
+    ]
   }
 }

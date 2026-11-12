@@ -1,0 +1,19 @@
+---
+bugfixes:
+  - >-
+    remediate - ``kernel.perf_event_max_sample_rate`` is now refused as ``overridden`` when ``systemd-sysctl`` would
+    write ``kernel.perf_cpu_time_max_percent`` as 0 or 100 through any glob that matches it, also when a later glob
+    sets it back: ``systemd-sysctl`` writes the companion once for every matching glob, and the sample rate in
+    between, which the kernel then refuses at boot, while the rule was reported ``applied`` or ``compliant``
+    (FREES-208, ADR 0029).
+trivial:
+  - >-
+    remediate - the sysctl render test now covers a configuration file read through a symbolic link whose target
+    changes between the read and the write, which refuses every rule as ``modified_since_read``, and the same link
+    unchanged, which leaves the rules ``applied`` (FREES-208).
+  - >-
+    test - the sysctl reader verdict table is regenerated with 28 more cases (100): the forms of the third to
+    eighth reviews of FREES-107, FIFOs and links to FIFOs and to ``/dev/zero``, under a timeout, and the order of
+    every write of the sample rate and its companion, recorded by a ``ptrace(2)`` tracer, against which the model is
+    tested. The generator's one container runs with ``--security-opt apparmor=unconfined`` by the owner's decision
+    of 2026-11-10 (FREES-208, ADR 0029).
