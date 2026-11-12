@@ -197,3 +197,56 @@ def test_the_stig_mapping_that_the_scc_branch_reads_ships_with_the_collection() 
     makefile = (root / "Makefile").read_text(encoding="utf-8")
     sources = makefile.split("\nCOLLECTION_SOURCES := ", 1)[1].split("\nTREE_SORT", 1)[0]
     assert "content/stig-mapping.json" in sources.split()
+
+
+def test_the_audit_result_publishes_the_deviations_of_the_scan() -> None:
+    main = tasks("scan.yml")
+    publish = next(
+        cast("dict[str, object]", task["ansible.builtin.set_fact"])
+        for task in main
+        if "linux_compliance_audited"
+        in cast("dict[str, object]", task.get("ansible.builtin.set_fact", {}))
+    )
+    audited = cast("dict[str, object]", publish["linux_compliance_audited"])
+    assert audited["deviations"] == "{{ __linux_compliance_audit_scan.deviations }}"
+
+
+def test_every_gate_entry_validates_the_deviation_gate_variable() -> None:
+    for name in ("scan.yml", "gate.yml", "evaluation.yml"):
+        assertion = cast("dict[str, object]", tasks(name)[0]["ansible.builtin.assert"])
+        assert "linux_compliance_audit_fail_on_deviation is boolean" in cast(
+            "list[str]", assertion["that"]
+        ), name
+
+
+def test_the_gate_records_and_enforces_the_deviation_count() -> None:
+    gate = tasks("gate.yml")
+    record = next(task for task in gate if "failure gate counts" in str(task.get("name")))
+    gate_vars = cast("dict[str, object]", record["vars"])
+    decision = cast("dict[str, object]", gate_vars["__linux_compliance_audit_gate"])
+    assert decision["fail_on_deviation"] == "{{ linux_compliance_audit_fail_on_deviation }}"
+    assert " ".join(str(decision["deviation"]).split()) == (
+        "{{ __linux_compliance_audit_gate_summary.deviation | int"
+        " if __linux_compliance_audit_gate_counted else none }}"
+    )
+    stop = gate[-1]
+    assert stop["name"] == "Audit | Stop on operator deviations when requested"
+    assertion = cast("dict[str, object]", stop["ansible.builtin.assert"])
+    assert assertion["that"] == ["(linux_compliance_audited.gate.deviation | int) == 0"]
+    assert stop["when"] == [
+        "linux_compliance_audit_fail_on_deviation",
+        "linux_compliance_audited.gate.counted",
+    ]
+    assert stop["tags"] == ["always"]
+
+
+def test_the_deviation_gate_is_off_by_default_and_documented_for_every_gate_entry() -> None:
+    defaults = yaml.safe_load((ROLE / "defaults" / "main.yml").read_text(encoding="utf-8"))
+    assert defaults["linux_compliance_audit_fail_on_deviation"] is False
+    specs = yaml.safe_load((ROLE / "meta" / "argument_specs.yml").read_text(encoding="utf-8"))
+    entries = cast("dict[str, dict[str, object]]", specs["argument_specs"])
+    for name in ("main", "evaluate.yml", "deferred.yml", "evaluate_deferred.yml", "enforce.yml"):
+        options = cast("dict[str, dict[str, object]]", entries[name]["options"])
+        option = options["linux_compliance_audit_fail_on_deviation"]
+        assert option["type"] == "bool", name
+        assert option["default"] is False, name

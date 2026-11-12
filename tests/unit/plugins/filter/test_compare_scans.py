@@ -220,12 +220,23 @@ def test_a_complete_comparison_reports_counts_rules_and_a_message() -> None:
         "newly_not_applicable": 0,
         "error": 0,
         "not_comparable": 0,
+        "deviated": 0,
     }
     assert result["regressions"] == [
         {
-            "baseline": {"evaluated_outcome": "pass", "outcome": "pass"},
+            "baseline": {
+                "deviation": None,
+                "evaluated_outcome": "pass",
+                "operator_deviation": False,
+                "outcome": "pass",
+            },
             "category": "regressed",
-            "post": {"evaluated_outcome": "fail", "outcome": "fail"},
+            "post": {
+                "deviation": None,
+                "evaluated_outcome": "fail",
+                "operator_deviation": False,
+                "outcome": "fail",
+            },
             "rule_id": rule("b"),
         }
     ]
@@ -527,10 +538,17 @@ def test_waived_mode_with_the_same_file_compares_evaluated_outcomes() -> None:
         for record in cast("list[dict[str, object]]", result["rules"])
     }
     assert records[rule("waived_now")]["baseline"] == {
+        "deviation": None,
         "evaluated_outcome": "fail",
+        "operator_deviation": False,
         "outcome": "fail",
     }
-    assert records[rule("waived_now")]["post"] == {"evaluated_outcome": "fail", "outcome": "waived"}
+    assert records[rule("waived_now")]["post"] == {
+        "deviation": None,
+        "evaluated_outcome": "fail",
+        "operator_deviation": False,
+        "outcome": "waived",
+    }
     post_summary = cast("dict[str, object]", cast("dict[str, object]", result["post"])["summary"])
     assert post_summary["waived"] == 2
     assert post_summary["pass"] == 1

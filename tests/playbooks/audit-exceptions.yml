@@ -229,6 +229,87 @@
               - linux_compliance_audited.gate.error == 1
             quiet: true
 
+- name: Audit exceptions | Operator deviations are counted and gated only on request
+  hosts: web01
+  gather_facts: false
+  vars_files:
+    - vars/audit-exceptions.yml
+  vars:
+    linux_compliance_exceptions_file: "{{ audit_exceptions_valid_file }}"
+    audit_deviation_values: >-
+      {{ {audit_exceptions_rule_passing: {'value_id': 'var_password_pam_minlen', 'profile_value': '14',
+                                          'effective_value': '8'},
+          audit_exceptions_rule_root_login: {'value_id': 'var_sshd_set_maxauthtries', 'profile_value': '4',
+                                             'effective_value': '6'}} }}
+  tasks:
+    - name: Build a synthetic audit result with a flagged pass and a flagged waivable failure
+      ansible.builtin.include_tasks: tasks/audit-deviation-synthetic.yml
+      vars:
+        audit_exceptions_outcomes: "{{ audit_exceptions_outcomes_waivable }}"
+
+    - name: Apply the exceptions and the gate with the audit role, without the deviation gate
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.audit
+        tasks_from: evaluate.yml
+
+    - name: Check that the deviations are counted on both results and recorded in the gate
+      ansible.builtin.assert:
+        that:
+          - linux_compliance_audited.scan_run.schema_version == '1.3'
+          - linux_compliance_audited.summary.deviation == 2
+          - linux_compliance_audited.summary.pass == 1
+          - linux_compliance_audited.exceptions.summary.deviation == 2
+          - linux_compliance_audited.exceptions.summary.waived == 2
+          - >-
+            linux_compliance_audited.exceptions.evaluation.scan_run.findings
+            | selectattr('rule_id', 'equalto', audit_exceptions_rule_root_login)
+            | map(attribute='flags') | first == ['operator_deviation']
+          - not linux_compliance_audited.gate.fail_on_deviation
+          - linux_compliance_audited.gate.deviation == 2
+        quiet: true
+
+    - name: Expect the deviation gate to fail the host
+      block:
+        - name: Apply the exceptions and the gate with the deviation gate on
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.audit
+            tasks_from: evaluate.yml
+          vars:
+            linux_compliance_audit_fail_on_deviation: true
+
+        - name: Fail because the deviation gate passed
+          ansible.builtin.fail:
+            msg: The deviation gate passed although two findings carry operator_deviation.
+      rescue:
+        - name: Check that the deviation gate failed the host on the waived pass too
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name is search('Stop on operator deviations when requested')
+              - ansible_failed_result.msg is search('2 finding\(s\) flagged operator_deviation')
+              - linux_compliance_audited.gate.fail_on_deviation
+              - linux_compliance_audited.gate.deviation == 2
+            quiet: true
+
+    - name: Refuse a deviation gate that is not a boolean
+      block:
+        - name: Apply the gate with a string
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.audit
+            tasks_from: evaluate.yml
+          vars:
+            linux_compliance_audit_fail_on_deviation: "true"
+
+        - name: Fail because the string was accepted
+          ansible.builtin.fail:
+            msg: AUDIT-DEVIATION-GATE-STRING-NOT-REFUSED
+      rescue:
+        - name: Check that the string was refused before the gate
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name is search('Validate the inputs of the evaluation')
+              - ansible_failed_result.assertion is search('linux_compliance_audit_fail_on_deviation is boolean')
+            quiet: true
+
 - name: Audit exceptions | Check mode without a scan skips the waivers and says so
   hosts: web01
   gather_facts: false

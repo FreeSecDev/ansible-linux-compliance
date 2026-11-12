@@ -21,9 +21,11 @@ author:
   - FreeSecDev contributors (@FreeSecDev)
 description:
   - Validates a scan run with the findings model and returns the number of findings per outcome,
-    the total, the run status and the off-platform marker (or null), in the same shape as the
-    C(summary) of
+    the total, the number of findings flagged C(operator_deviation), the run status and the
+    off-platform marker (or null), in the same shape as the C(summary) of
     M(freesecdev.linux_compliance.compliance_scan).
+  - A flagged finding is counted under its outcome and in V(deviation), so V(pass) stays the
+    scanner's count. A waiver keeps the flag, so a waived scan run counts the same deviations.
   - The audit role uses it to summarise the waived scan run that
     P(freesecdev.linux_compliance.apply_exceptions#filter) returns, next to the raw summary.
   - The summary never states compliance. A run that did not complete has only C(error) findings.
@@ -45,7 +47,7 @@ RETURN = r"""
 _value:
   description:
     - One count per outcome (V(pass), V(fail), V(notapplicable), V(notchecked), V(error),
-      V(waived) and V(disabled)), V(total) and V(run_status).
+      V(waived) and V(disabled)), V(total), V(deviation), V(run_status) and V(off_platform).
   type: dict
 """
 
@@ -57,8 +59,9 @@ def scan_summary(scan_run: object) -> dict[str, object]:
         scan_run: The scan run mapping or JSON text.
 
     Returns:
-        The count per outcome, the total, the run status and the off-platform marker
-        of the run or ``None``.
+        The count per outcome, the total, the number of findings flagged
+        ``operator_deviation``, the run status and the off-platform marker of the run
+        or ``None``.
 
     Raises:
         ExceptionsError: If the value is not a valid scan run.
@@ -69,6 +72,7 @@ def scan_summary(scan_run: object) -> dict[str, object]:
         tally[finding.outcome.value] += 1
     counts: dict[str, object] = dict(tally)
     counts["total"] = len(run.findings)
+    counts["deviation"] = sum(1 for finding in run.findings if finding.deviation is not None)
     counts["run_status"] = run.status.value
     counts["off_platform"] = None if run.off_platform is None else run.off_platform.to_dict()
     return counts

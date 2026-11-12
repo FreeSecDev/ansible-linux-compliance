@@ -4,6 +4,7 @@
     that:
       - linux_compliance_audit_fail_on_noncompliant is boolean
       - linux_compliance_audit_fail_on_noncompliant_after_waivers is boolean
+      - linux_compliance_audit_fail_on_deviation is boolean
       - >-
         linux_compliance_exceptions_file is none or
         (linux_compliance_exceptions_file is string and linux_compliance_exceptions_file is match('^/'))

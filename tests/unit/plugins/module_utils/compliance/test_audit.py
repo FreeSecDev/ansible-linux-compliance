@@ -15,6 +15,7 @@ import pytest
 
 from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance import (
     audit,
+    audit_result,
     model,
     openscap,
     process,
@@ -131,6 +132,7 @@ class Harness:
         shutil.copyfile(SYNTHETIC, self.datastream)
         self.datastream.chmod(0o644)
         self.output_root = root / "evidence"
+        self.state_dir = root / "state"
         self.runner = FakeRunner()
         self.registry = scanner.BackendRegistry()
         clock = moments()
@@ -162,6 +164,7 @@ class Harness:
             "owner_uid": UID,
             "registry": self.registry,
             "clock": lambda: START,
+            "state_dir": str(self.state_dir),
         }
         values.update(keywords)
         return audit.Auditor(**values)
@@ -561,6 +564,7 @@ def test_a_timeout_is_never_compliant(harness: Harness) -> None:
         "waived": 0,
         "disabled": 0,
         "total": 2,
+        "deviation": 0,
         "run_status": "timed_out",
         "off_platform": None,
     }
@@ -1323,7 +1327,7 @@ def test_the_planned_scan_is_described_without_side_effects(harness: Harness) ->
 
 
 def test_summarize_without_a_run_is_none() -> None:
-    assert audit.summarize(None) is None
+    assert audit_result.summarize(None) is None
 
 
 def host_params(**overrides: object) -> dict[str, object]:

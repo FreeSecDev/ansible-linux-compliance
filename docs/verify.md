@@ -29,7 +29,7 @@ non-zero.
 
 | Order | Play | Entry point | What it does |
 |---|---|---|---|
-| 1 | Refuse settings that would hide regressions before any host is audited | `verify` `preflight.yml` | Fails unless `linux_compliance_audit_fail_on_noncompliant` is unset or `false` |
+| 1 | Refuse settings that would hide regressions before any host is audited | `verify` `preflight.yml` | Fails unless `linux_compliance_audit_fail_on_noncompliant` and `linux_compliance_audit_fail_on_deviation` are unset or `false` |
 | 2 | Audit hosts against a compliance profile (`audit.yml`) | `discover`, `audit` | Baseline audit; publishes `linux_compliance_audited` |
 | 3 | Report exceptions that no audited host needed (`audit.yml`) | `audit` `stale.yml` on `localhost` | Stale-exceptions report of the baseline |
 | 4 | Record the audit before remediation as the baseline | `verify` `baseline.yml` | Copies `linux_compliance_audited` to `linux_compliance_baseline` and marks it as recorded |
@@ -55,6 +55,10 @@ has a failing rule, before the verify role could report its regressions and new 
 but the regressions would never be printed. The `preflight.yml` entry point therefore fails every host whose value is
 not unset or the boolean `false` (a string fails too), before anything is audited or remediated. The gate of the run
 is the verify role. `remediate.yml` and `verify.yml` both run it first.
+
+`linux_compliance_audit_fail_on_deviation: true` is refused the same way: it would fail every host with an operator
+deviation in the audit after remediation, before the verify role reports what changed. The verify role reports every
+deviated rule instead (below).
 
 ## Recording the baseline
 
@@ -124,6 +128,7 @@ this order and the first match wins:
 
 | Order | Condition (evaluated outcomes) | Category |
 |---|---|---|
+| 0 | `pass` after, and the later finding carries the flag `operator_deviation`, whatever came before | `deviated` |
 | 1 | `pass` before, missing after | `regressed` |
 | 2 | Missing or `notapplicable` before, `fail` after | `newly_failing` |
 | 3 | Any other rule missing from one of the runs | `error` |
@@ -137,6 +142,11 @@ this order and the first match wins:
 
 Consequences:
 
+- **A pass under an operator deviation is never an improvement.** When the later finding carries `operator_deviation`
+  (findings model schema 1.3, [audit](audit.md#operator-deviations-adr-0032)), the rule passes only under a value that
+  a remediation override made looser than the profile's (ADR 0032). It is `deviated`, so a `fail` that passes after a
+  looser override is not `improved`, and a rule that passed before is not `unchanged`. A flagged `fail` (or `waived`)
+  is classified like any other `fail`. Every rule record shows `operator_deviation` and `deviation` of both sides.
 - **Only `fail` to `pass` is an improvement.** `error` to `pass` is `error`: a check that was broken and works now
   proves nothing about the host. `notchecked` or `disabled` to `pass` is `not_comparable`.
 - **A waiver is never an improvement.** `fail` to `waived` is `unchanged` in both modes, because the rule still fails.
@@ -159,8 +169,8 @@ Consequences:
 ### Incomplete comparisons
 
 When either scan did not complete (`failed`, `timed_out`, or `not_run` in check mode without a scan), the comparison
-is `incomplete`. `counts`, `rules`, `regressions`, `regression_detected`, `new_failures`, `new_failure_detected` and
-`passed_now_not_applicable` are null, `incomplete_reasons` names the
+is `incomplete`. `counts`, `rules`, `regressions`, `regression_detected`, `new_failures`, `new_failure_detected`,
+`passed_now_not_applicable`, `deviations` and `deviation_detected` are null, `incomplete_reasons` names the
 side and its status, and the message says that no improvement and no regression is reported and that the absence of
 regressions is not established. The role then fails the host, whatever `linux_compliance_verify_fail_on_regression`
 and `linux_compliance_verify_fail_on_new_failures` say. Through `remediate.yml` this path is rarely reached, because the audit role already fails a host whose scan did
@@ -175,14 +185,15 @@ not complete.
 | `status`, `complete`, `incomplete_reasons` | `complete` or `incomplete`, and why |
 | `mode`, `exceptions_sha256` | The mode, and in waived mode the SHA-256 of the exceptions file both audits applied |
 | `identity` | Host, benchmark, profile, content version and digest, and scanner shared by both runs; null when a scan is missing |
-| `baseline`, `post` | `run_id`, `run_status`, `started_at`, `finished_at` and `summary` (count per outcome of the compared scan run) |
+| `baseline`, `post` | `run_id`, `run_status`, `started_at`, `finished_at` and `summary` (count per outcome of the compared scan run, and `deviation`, its findings flagged `operator_deviation`) |
 | `counts` | One count per category |
-| `regressions` | The regressed rules, each with `rule_id`, `category`, and `baseline` and `post` (`outcome`, `evaluated_outcome`) |
+| `regressions` | The regressed rules, each with `rule_id`, `category`, and `baseline` and `post` (`outcome`, `evaluated_outcome`, `operator_deviation` and `deviation`, the XCCDF value, the profile value and the value in force or null) |
 | `rules` | Every rule in the same shape |
 | `regression_detected` | Whether at least one rule regressed |
 | `new_failures`, `new_failure_detected` | The newly failing rules, and whether there is at least one |
 | `passed_now_not_applicable` | The rules that passed in the baseline and are `notapplicable` afterwards |
-| `message` | A summary that starts with `REGRESSION:` and/or `NEW FAILURE:`, with `No regression and no new failure:` only when there is neither, or with `Verification incomplete:`; it never claims compliance |
+| `deviations`, `deviation_detected` | The deviated rules, and whether there is at least one |
+| `message` | A summary that starts with `REGRESSION:` and/or `NEW FAILURE:`, then `DEVIATION:` when a rule is deviated, with `No regression and no new failure:` only when there is neither, or with `Verification incomplete:`; it never claims compliance |
 | `gate` | `fail_on_regression`, `fail_on_new_failures` and `failed`, the decision of the role |
 
 ## Regressions and new failures are always reported
@@ -194,7 +205,12 @@ Regressions and new failures are reported whether or not they fail the host. The
 - `WARNING: NEW FAILURE on <host>: N rule(s) were not applicable or missing in the baseline and fail now.` with every
   rule;
 - `WARNING: N rule(s) on <host> passed in the baseline and are not applicable now; ...` with every rule;
+- `WARNING: DEVIATION on <host>: N rule(s) pass only under a value that an operator override made looser than the
+  profile value; ...` with every rule and its XCCDF value;
 - a warning that lists the rules in the `error` category.
+
+A deviation does not fail the host in the verify role: the operator chose the value, and the audit role can fail on it
+with `linux_compliance_audit_fail_on_deviation` in a run without remediation.
 
 With the defaults `linux_compliance_verify_fail_on_regression: true` and
 `linux_compliance_verify_fail_on_new_failures: true` the host then fails. With `false` it passes, and the rules stay
@@ -220,7 +236,7 @@ role under `--skip-tags always`, so a skipped verification can never look like a
 |---|---|
 | `main` | Compare `linux_compliance_audited` with `linux_compliance_baseline`, publish `linux_compliance_verified`, enforce the gates |
 | `baseline.yml` | Record `linux_compliance_audited` as `linux_compliance_baseline` and mark it, between the first audit and the remediation |
-| `preflight.yml` | Refuse `linux_compliance_audit_fail_on_noncompliant` before anything is audited |
+| `preflight.yml` | Refuse `linux_compliance_audit_fail_on_noncompliant` and `linux_compliance_audit_fail_on_deviation` before anything is audited |
 
 ## Trust
 
@@ -244,8 +260,11 @@ refuses an extra variable that sets the marker, so `remediate.yml` is not affect
   `notapplicable` to fail) with their lists and message, a mismatched host, benchmark, profile, content version, content digest and scanner, the same run twice, a
   later scan that started before the baseline finished, a scan that did not complete on either side and check mode
   without a scan, an `error` that becomes `pass` (not an improvement), waived mode with the same file and with a
-  different file, waived results that do not belong to their raw run, and malformed audit results. The filter has 100%
-  line and branch coverage.
+  different file, waived results that do not belong to their raw run, and malformed audit results.
+  `tests/unit/plugins/filter/test_compare_scans_deviations.py` covers a flagged pass after every baseline outcome and
+  after a missing rule (`deviated`), a flagged `fail` classified as any `fail`, a flag in the baseline only, the order of
+  the message leads, a waived flagged failure in waived mode and an incomplete comparison. The filter has 100% line
+  and branch coverage.
 - `make test-verify` (part of `make ci` and of the CI job `test-playbooks-evidence`) runs the role without `oscap` on the local inventory
   host `web01`, with synthetic `linux_compliance_audited` facts and the audit role's `evaluate.yml` entry point for
   the waived results, and the per-checkout `ANSIBLE_HOME`. `tests/playbooks/verify.yml` checks an
@@ -254,8 +273,10 @@ refuses an extra variable that sets the marker, so `remediate.yml` is not affect
   and profile mismatch and the same run twice, a waiver applied only after remediation that is `unchanged` in raw mode
   and refused in waived mode, a waived comparison with the same file, and a file edited between the audits that is
   refused by its digest. It also checks that a baseline is compared only once, and that the three applicability
-  changes fail the host by default through the new-failure gate and pass with it off. The Makefile requires the
-  `WARNING: REGRESSION`, `WARNING: NEW FAILURE` and not-applicable warning lines in the output.
+  changes fail the host by default through the new-failure gate and pass with it off, and that a rule whose later
+  finding passes under an operator deviation (a schema 1.3 scan run) is `deviated`, not `improved`, and does not fail
+  the host. The Makefile requires the `WARNING: REGRESSION`, `WARNING: NEW FAILURE`, `WARNING: DEVIATION` and
+  not-applicable warning lines in the output.
 - `tests/playbooks/verify-forged.yml` (inventory `tests/playbooks/inventory/verify-forged.yml`) passes an all-`fail`
   baseline against an all-`pass` audit, without `baseline.yml`, as a host variable, a group variable and a play
   variable, once with a matching marker planted as a host variable, an inventory `ansible_facts` and a play variable
@@ -263,7 +284,8 @@ refuses an extra variable that sets the marker, so `remediate.yml` is not affect
 - `tests/playbooks/verify-baseline-override.yml` runs twice, with an extra variable `linux_compliance_baseline` and with
   an extra variable `ansible_facts` that sets the marker, and requires that `baseline.yml` refuses both.
 - `tests/playbooks/verify-preflight.yml` requires that `preflight.yml` refuses
-  `linux_compliance_audit_fail_on_noncompliant` as `true` and as the string `"false"`, and accepts it unset and `false`.
+  `linux_compliance_audit_fail_on_noncompliant` and `linux_compliance_audit_fail_on_deviation` as `true` and as the
+  string `"false"`, and accepts them unset and `false`.
 - `tests/playbooks/verify-skip-always.yml` requires that the guard fails the role under `--skip-tags always`.
 
 Not covered yet: `playbooks/remediate.yml` end to end with a real scan, remediation and second scan on a managed host.

@@ -48,14 +48,15 @@ Defined in `meta/argument_specs.yml` and `defaults/main.yml`, which must agree.
 |---|---|
 | `main` | Compare `linux_compliance_audited` with `linux_compliance_baseline` and publish `linux_compliance_verified` |
 | `baseline.yml` | Record `linux_compliance_audited` as `linux_compliance_baseline` before remediation, and mark it as recorded |
-| `preflight.yml` | Refuse `linux_compliance_audit_fail_on_noncompliant`, which would hide regressions, before anything is audited |
+| `preflight.yml` | Refuse `linux_compliance_audit_fail_on_noncompliant` and `linux_compliance_audit_fail_on_deviation`, which would hide regressions, before anything is audited |
 
 ## Result
 
 The fact `linux_compliance_verified` holds `status`, `complete`, `incomplete_reasons`, `mode`, `exceptions_sha256`,
 `identity`, `baseline` and `post` (run identifiers, times and summaries), `counts` per category, `regressions`,
-`new_failures`, `passed_now_not_applicable`, `rules`, `regression_detected`, `new_failure_detected`, `message` and
-`gate` (`fail_on_regression`, `fail_on_new_failures`, `failed`).
+`new_failures`, `passed_now_not_applicable`, `deviations` (rules that pass only under an operator deviation, category
+`deviated`), `rules`, `regression_detected`, `new_failure_detected`, `deviation_detected`, `message` and `gate`
+(`fail_on_regression`, `fail_on_new_failures`, `failed`).
 
 ## Running
 

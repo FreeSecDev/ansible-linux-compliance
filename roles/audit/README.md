@@ -37,20 +37,25 @@ when the output directory does not exist, check mode does not create it and the 
    a mapping of another DISA release fails the host before any scan
    ([audit guide](../../docs/audit.md#scc-toggles-and-control-families)).
 5. Check that host facts were gathered.
-6. Run `compliance_scan` with `fail_on_incomplete: false`, so the result is always registered.
-7. Set the fact `linux_compliance_audited` with the raw result.
+6. Run `compliance_scan` with `fail_on_incomplete: false`, so the result is always registered. The module reads the
+   deviation register of the remediation ledger first and flags the findings of its rules `operator_deviation`
+   (ADR 0032, [audit guide](../../docs/audit.md#operator-deviations-adr-0032)); a register it cannot trust fails the host
+   before the scan.
+7. Set the fact `linux_compliance_audited` with the raw result and `deviations`.
 8. Apply the exceptions file to a completed scan run and add `linux_compliance_audited.exceptions`; in check mode
    without a scan, report that waivers were not applied. A scan start in the future fails the host.
 9. Fail when the scan did not complete (`run_status` `failed` or `timed_out`).
 10. Record `linux_compliance_audited.gate` and fail on failed or errored rules when
     `linux_compliance_audit_fail_on_noncompliant` is true, counting the raw result unless
     `linux_compliance_audit_fail_on_noncompliant_after_waivers` is true. `error` always counts.
+11. Fail on findings flagged `operator_deviation` when `linux_compliance_audit_fail_on_deviation` is true, counted on the
+    same result.
 
 `tasks/main.yml` imports `scan.yml` (which imports `exceptions_file.yml`, `toggles.yml` and `exceptions_apply.yml`) and
 `gate.yml`. More entry points exist,
 named with their suffix because `tasks_from` must end in `.yml`:
 
-- `evaluate.yml` runs steps 2, 8, 9 and 10 on an existing `linux_compliance_audited` fact without scanning.
+- `evaluate.yml` runs steps 2, 8, 9, 10 and 11 on an existing `linux_compliance_audited` fact without scanning.
 - `deferred.yml` runs `main` without its result gates and `evaluate_deferred.yml` runs `evaluate.yml` without them;
   both record `linux_compliance_audited.gate` as `{deferred: true, enforced: false}`.
 - `enforce.yml` enforces the gates that one of them deferred: it records the decision with `deferred: true` and
@@ -73,6 +78,7 @@ Defined in `meta/argument_specs.yml` and `defaults/main.yml`, which must agree.
 | `linux_compliance_audit_profile` | `str` | `"cis_level1_server"` | ComplianceAsCode profile short identifier, without the XCCDF prefix. Must equal the profile the `discover` role verified. A profile is never substituted silently. |
 | `linux_compliance_audit_fail_on_noncompliant` | `bool` | `false` | Fail the play when at least one rule is `fail` or `error`, counted on the raw result by default, so a waiver never passes it. A scan that did not complete always fails. |
 | `linux_compliance_audit_fail_on_noncompliant_after_waivers` | `bool` | `false` | Count the waived result instead of the raw result in that gate. `error` always counts. Without applied waivers the raw result is counted. |
+| `linux_compliance_audit_fail_on_deviation` | `bool` | `false` | Fail the play when the gate counts at least one finding flagged `operator_deviation`: a rule whose value in force a remediation override made looser than the profile's (ADR 0032), whatever the scanner's outcome. Independent of `linux_compliance_audit_fail_on_noncompliant`. |
 | `linux_compliance_exceptions_file` | `str` | `null` | Absolute path, on the controller, of the exceptions file. `null` applies no exceptions. The same for every host of the play. Shared with the `verify` role, so it has no role prefix. |
 | `linux_compliance_audit_backend` | `str` | `"openscap"` | Scanner backend: `openscap` (the profile of the `discover` role) or `scc` (the DISA STIG benchmark that SCC installed; ADR 0019). |
 | `linux_compliance_audit_scc_content_path` | `str` | `null` | With `scc`: the pinned stream as SCC installed it, below `/opt/scc/Resources/Content/SCAP12_Content`. |

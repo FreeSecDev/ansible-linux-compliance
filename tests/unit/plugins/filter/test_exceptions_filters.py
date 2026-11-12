@@ -317,8 +317,27 @@ def test_scan_summary_counts_every_outcome(form: str) -> None:
         "off_platform": None,
         "run_status": "completed",
         "total": 2,
+        "deviation": 0,
         "waived": 0,
     }
+
+
+def test_scan_summary_counts_operator_deviations_also_after_waivers() -> None:
+    deviation = model.Deviation("var_password_pam_minlen", "14", "8")
+    run = replace(
+        scan_run(),
+        findings=tuple(
+            replace(item, flags=(model.ResultFlag.OPERATOR_DEVIATION,), deviation=deviation)
+            for item in scan_run().findings
+        ),
+    )
+    summary = scan_summary.scan_summary(model.dumps(run))
+    assert summary["deviation"] == 2
+    assert summary["fail"] == 2
+    evaluation = apply_exceptions.apply_exceptions(run.to_dict(), exceptions_text(), "web01", [])
+    waived = scan_summary.scan_summary(evaluation["scan_run"])
+    assert waived["waived"] == 1
+    assert waived["deviation"] == 2
 
 
 def test_scan_summary_counts_the_waived_run() -> None:

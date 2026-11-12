@@ -182,3 +182,28 @@
   run_once: true
   tags:
     - always
+
+- name: Evidence | Report the target hosts whose audit carries operator deviations
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: the audit of {{ __linux_compliance_evidence_deviated | length }} target host(s) flagged findings
+      operator_deviation: rules whose value in force a remediation override made looser than the profile's
+      (ADR 0032). Findings per host:
+      {{ __linux_compliance_evidence_deviated | map(attribute='inventory_hostname')
+         | ansible.builtin.zip(__linux_compliance_evidence_deviated
+                               | map(attribute='linux_compliance_audited.summary.deviation'))
+         | map('join', ': ') | join(', ') }}.
+      Their bundles carry the flagged findings in scan-run.json, and a report never counts them as passing.
+  vars:
+    __linux_compliance_evidence_deviated: >-
+      {{ linux_compliance_evidence_summary_hosts | unique | sort | map('extract', hostvars)
+         | selectattr('linux_compliance_audited', 'defined')
+         | selectattr('linux_compliance_audited', 'mapping')
+         | selectattr('linux_compliance_audited.summary', 'mapping')
+         | selectattr('linux_compliance_audited.summary.deviation', 'defined')
+         | selectattr('linux_compliance_audited.summary.deviation', 'integer')
+         | selectattr('linux_compliance_audited.summary.deviation', 'gt', 0) | list }}
+  when: __linux_compliance_evidence_deviated | length > 0
+  run_once: true
+  tags:
+    - always

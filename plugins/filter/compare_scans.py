@@ -25,8 +25,8 @@ author:
 description:
   - Takes two audit results in the shape of the C(linux_compliance_audited) fact of the audit
     role, the baseline and a later audit, and classifies every rule as C(improved), C(regressed),
-    C(unchanged), C(newly_applicable), C(newly_failing), C(newly_not_applicable), C(error) or
-    C(not_comparable).
+    C(unchanged), C(newly_applicable), C(newly_failing), C(newly_not_applicable), C(error),
+    C(not_comparable) or C(deviated).
   - Both audits must describe the same host, benchmark, content version and digest, profile and
     scanner, must be two different runs, and the later run must start after the baseline
     finished. Any mismatch fails the task; nothing is compared.
@@ -40,6 +40,11 @@ description:
     C(newly_failing); one that was C(notapplicable) and passes afterwards is C(newly_applicable).
   - Any other transition from or to C(error), and any other rule missing from one of the runs, is
     C(error), never C(improved).
+  - A rule whose later finding carries the flag C(operator_deviation) (findings model schema 1.3,
+    ADR 0032) and whose evaluated outcome is C(pass) is C(deviated), whatever the baseline. It
+    passes only under a value that an operator override made looser than the profile's, so it
+    is never C(improved), C(unchanged) or C(newly_applicable). A flagged C(fail) is classified
+    as any other C(fail). Every rule record shows the flag and the deviation of each side.
   - When either run did not complete (C(failed), C(timed_out), or C(not_run) in check mode), the
     comparison is C(incomplete). It then reports no counts, no rules, no regressions and no new
     failures, only the reasons, so it cannot be read as an improvement or as the absence of
@@ -96,9 +101,13 @@ _value:
       V(finished_at) and V(summary) (the count per outcome of the compared scan run).
     - V(counts), one count per category; V(regressions), the regressed rules; V(new_failures),
       the newly failing rules; V(passed_now_not_applicable), the rules that passed in the baseline
-      and are not applicable afterwards; V(rules), every rule with its V(category) and its
-      V(baseline) and V(post) V(outcome) and V(evaluated_outcome); V(regression_detected) and
-      V(new_failure_detected). All of them are C(none) when the comparison is incomplete.
+      and are not applicable afterwards; V(deviations), the deviated rules; V(rules), every rule
+      with its V(category) and its V(baseline) and V(post) V(outcome), V(evaluated_outcome),
+      V(operator_deviation) and V(deviation) (the XCCDF value, the profile value and the value in
+      force, or C(none)); V(regression_detected), V(new_failure_detected) and
+      V(deviation_detected). All of them are C(none) when the comparison is incomplete.
+    - The V(summary) of each side also counts V(deviation), the findings flagged
+      C(operator_deviation).
     - V(message), a summary that starts with the status and never claims compliance.
   type: dict
 """
@@ -121,6 +130,7 @@ NEWLY_FAILING: Final[str] = "newly_failing"
 NEWLY_NOT_APPLICABLE: Final[str] = "newly_not_applicable"
 ERROR: Final[str] = "error"
 NOT_COMPARABLE: Final[str] = "not_comparable"
+DEVIATED: Final[str] = "deviated"
 CATEGORIES: Final[tuple[str, ...]] = (
     IMPROVED,
     REGRESSED,
@@ -130,6 +140,7 @@ CATEGORIES: Final[tuple[str, ...]] = (
     NEWLY_NOT_APPLICABLE,
     ERROR,
     NOT_COMPARABLE,
+    DEVIATED,
 )
 STILL_PASSING: Final[frozenset[model.Outcome]] = frozenset(
     {model.Outcome.PASS, model.Outcome.NOTAPPLICABLE}
@@ -313,7 +324,14 @@ def classify(baseline: model.Finding | None, post: model.Finding | None) -> str:
     The evaluated outcome is compared, so a waiver is never an improvement. The first matching
     rule wins, so a passing rule that errors or disappears afterwards is a regression, and a rule
     that was not applicable or missing in the baseline and fails afterwards is newly failing.
+    A later pass under an operator deviation is deviated before any other rule applies.
     """
+    if (
+        post is not None
+        and post.deviation is not None
+        and post.evaluated_outcome is model.Outcome.PASS
+    ):
+        return DEVIATED
     if baseline is None or post is None:
         return _classify_missing(baseline, post)
     before = baseline.evaluated_outcome
@@ -335,7 +353,9 @@ def _outcomes(finding: model.Finding | None) -> dict[str, object] | None:
     if finding is None:
         return None
     return {
+        "deviation": None if finding.deviation is None else finding.deviation.to_dict(),
         "evaluated_outcome": finding.evaluated_outcome.value,
+        "operator_deviation": model.ResultFlag.OPERATOR_DEVIATION in finding.flags,
         "outcome": finding.outcome.value,
     }
 
@@ -347,6 +367,7 @@ def _summary(run: model.ScanRun | None) -> dict[str, object] | None:
     for finding in run.findings:
         tally[finding.outcome.value] = cast("int", tally[finding.outcome.value]) + 1
     tally["total"] = len(run.findings)
+    tally["deviation"] = sum(1 for finding in run.findings if finding.deviation is not None)
     tally["run_status"] = run.status.value
     return tally
 
@@ -387,7 +408,11 @@ def _listed(rule_ids: list[str]) -> str:
 
 
 def _complete_message(
-    mode: str, counts: dict[str, int], regressed: list[str], newly_failing: list[str]
+    mode: str,
+    counts: dict[str, int],
+    regressed: list[str],
+    newly_failing: list[str],
+    deviated: list[str],
 ) -> str:
     figures = ", ".join(f"{counts[category]} {category}" for category in CATEGORIES)
     leads: list[str] = []
@@ -401,7 +426,12 @@ def _complete_message(
             f"NEW FAILURE: {counts[NEWLY_FAILING]} rule(s) were not applicable or missing in the "
             f"baseline and fail now: {_listed(newly_failing)}. "
         )
-    if not leads:
+    if deviated:
+        leads.append(
+            f"DEVIATION: {counts[DEVIATED]} rule(s) pass only under a value that an operator "
+            f"override made looser than the profile's: {_listed(deviated)}. "
+        )
+    if not regressed and not newly_failing:
         leads.append(
             "No regression and no new failure: no rule that passed in the baseline stopped "
             "passing, and no rule started to fail. "
@@ -432,6 +462,7 @@ def _figures(baseline: model.ScanRun, post: model.ScanRun, mode: str) -> dict[st
         counts[cast("str", record["category"])] += 1
     regressions = [record for record in rules if record["category"] == REGRESSED]
     new_failures = [record for record in rules if record["category"] == NEWLY_FAILING]
+    deviations = [record for record in rules if record["category"] == DEVIATED]
     passed_now_not_applicable = [
         record
         for record in rules
@@ -440,7 +471,15 @@ def _figures(baseline: model.ScanRun, post: model.ScanRun, mode: str) -> dict[st
     ]
     return {
         "counts": counts,
-        "message": _complete_message(mode, counts, _rule_ids(regressions), _rule_ids(new_failures)),
+        "deviation_detected": bool(deviations),
+        "deviations": deviations,
+        "message": _complete_message(
+            mode,
+            counts,
+            _rule_ids(regressions),
+            _rule_ids(new_failures),
+            _rule_ids(deviations),
+        ),
         "new_failure_detected": bool(new_failures),
         "new_failures": new_failures,
         "passed_now_not_applicable": passed_now_not_applicable,
@@ -500,6 +539,8 @@ def compare_scans(
         document.update(
             {
                 "counts": None,
+                "deviation_detected": None,
+                "deviations": None,
                 "message": (
                     f"Verification incomplete: {'; '.join(reasons)}. No improvement and no "
                     "regression is reported, and the absence of regressions is not established. "

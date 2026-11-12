@@ -24,6 +24,7 @@ SCAP datastream with `oscap` ([audit guide](../audit.md), [ADR 0004](../adr/0004
 | Integrity of the scan result | A wrong `pass` hides a non-compliant host; findings feed reports and exceptions |
 | Availability of the audit | A hung audit blocks the play and leaves the host unassessed |
 | Evidence directory | Proof of what was scanned, with which content and tailoring |
+| Deviation register of the ledger | Names the rules whose value in force an operator override made looser than the profile's; the audit flags their findings from it |
 
 ### Trust boundaries and entry points
 
@@ -34,6 +35,7 @@ SCAP datastream with `oscap` ([audit guide](../audit.md), [ADR 0004](../adr/0004
 | The file system around `content_path`, including symlinks on the way to it | Whoever owns or can write those directories and links | Untrusted unless root-owned and not writable by others |
 | Scanner output in the run directory | `oscap` | Untrusted input to the parser (hostile XML, oversized files, symlinks) |
 | `/usr/bin/oscap` and its libraries | The distribution package manager | Trusted: root-owned binary in a trusted directory ([ADR 0004](../adr/0004-audited-process-execution.md)) |
+| `/var/lib/freesecdev/linux_compliance/state.json` (the ledger and its deviation register) | The remediate role, as root | Trusted only when the file and its directory pass the ledger's checks: root-owned, mode `0600` in a `0700` directory, no symbolic link, strict JSON of a supported schema |
 
 ### T-AUDIT-1: the datastream is replaced by a FIFO or symlink
 
@@ -109,6 +111,27 @@ The former SCE-only rules are `notchecked`. The text below records the situation
   the allow-list of check systems (OVAL and OCIL only) makes fail closed. The transform and the refusal are covered
   by `tests/unit/tools/test_script_checks.py`, `test_catalog.py`, `test_audit_content.py` and the golden test
   `test_content_golden_scripts.py`.
+
+### T-AUDIT-4: a deviation is hidden from the audit
+
+- **Asset:** integrity of the scan result. A host whose value an operator override made looser than the profile's must
+  never look compliant (ADR 0032); a check that does not test the value still passes, and only the flag
+  `operator_deviation` tells the report otherwise.
+- **Attacker:** someone who can write the ledger or its directory, or who can make the audit skip the register.
+- **Failure:** the deviation register is emptied, edited or replaced, so the audit stamps nothing and a weakened host
+  scans as a plain `pass`.
+- **Mitigation (FREES-203):** `compliance_scan` reads the register through the same checks the remediate role uses
+  (`ledger.Ledger`, `fileio`): the directory and the file must be owned by root without group or world access, no
+  component may be a symbolic link, and the document must be strict JSON of ledger schema 1 or 2 with no unknown key.
+  A ledger that fails any check stops the audit with `deviation_source_invalid` before anything is scanned; it is never
+  read as "no deviations". A missing ledger is no deviations, because a host that was never remediated has none. With
+  the `scc` backend a non-empty register is refused (`deviation_backend_unsupported`), so a deviation is never lost
+  between rule namespaces. A stale record over-reports until the next remediation run removes it.
+- **Residual:** only root can change the register, and whoever is root on the managed host can rewrite it
+  consistently, or remove the ledger altogether, and hide a deviation; root can equally change the host after the
+  scan. The audit does not
+  judge the value again, so a value that the host changed after the remediation run is not detected until the next
+  run judges it.
 
 ## CI-only SCC image
 

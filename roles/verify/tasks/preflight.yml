@@ -19,3 +19,19 @@
     quiet: true
   tags:
     - always
+
+- name: Verify | Refuse the audit deviation gate before a remediation run audits any host
+  ansible.builtin.assert:
+    that:
+      - linux_compliance_audit_fail_on_deviation | default(false) is boolean
+      - not (linux_compliance_audit_fail_on_deviation | default(false))
+    fail_msg: >-
+      linux_compliance_audit_fail_on_deviation is
+      {{ linux_compliance_audit_fail_on_deviation | default('unset') }} for {{ inventory_hostname }}.
+      With playbooks/remediate.yml and playbooks/verify.yml it would fail every host with an operator
+      deviation in the audit after remediation, before the verify role can report its regressions, new
+      failures and deviations. Leave it unset or pass -e '{"linux_compliance_audit_fail_on_deviation": false}';
+      the verify role reports every deviated rule. Nothing was audited or remediated.
+    quiet: true
+  tags:
+    - always

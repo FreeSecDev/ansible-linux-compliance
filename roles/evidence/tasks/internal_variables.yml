@@ -6,6 +6,9 @@
         query('ansible.builtin.varnames', '^__linux_compliance_evidence_collected$') == [] or
         '__linux_compliance_evidence_collected' in (hostvars[inventory_hostname] | list)
       - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_evidence_deviated$') == [] or
+        '__linux_compliance_evidence_deviated' in (hostvars[inventory_hostname] | list)
+      - >-
         query('ansible.builtin.varnames', '^__linux_compliance_evidence_dir$') == [] or
         '__linux_compliance_evidence_dir' in (hostvars[inventory_hostname] | list)
       - >-
@@ -148,6 +151,7 @@
       - __linux_compliance_evidence_uid == '__linux_compliance_unset__'
       - __linux_compliance_evidence_written == '__linux_compliance_unset__'
       - __linux_compliance_evidence_collected == '__linux_compliance_unset__'
+      - __linux_compliance_evidence_deviated == '__linux_compliance_unset__'
       - __linux_compliance_evidence_host_observed == '__linux_compliance_unset__'
       - __linux_compliance_evidence_marked == '__linux_compliance_unset__'
       - __linux_compliance_evidence_marker == '__linux_compliance_unset__'
@@ -170,6 +174,7 @@
     quiet: true
   vars:
     __linux_compliance_evidence_collected: __linux_compliance_unset__
+    __linux_compliance_evidence_deviated: __linux_compliance_unset__
     __linux_compliance_evidence_host_observed: __linux_compliance_unset__
     __linux_compliance_evidence_marked: __linux_compliance_unset__
     __linux_compliance_evidence_marker: __linux_compliance_unset__
@@ -220,6 +225,7 @@
       - __linux_compliance_evidence_uid == '__linux_compliance_unset_again__'
       - __linux_compliance_evidence_written == '__linux_compliance_unset_again__'
       - __linux_compliance_evidence_collected == '__linux_compliance_unset_again__'
+      - __linux_compliance_evidence_deviated == '__linux_compliance_unset_again__'
       - __linux_compliance_evidence_host_observed == '__linux_compliance_unset_again__'
       - __linux_compliance_evidence_marked == '__linux_compliance_unset_again__'
       - __linux_compliance_evidence_marker == '__linux_compliance_unset_again__'
@@ -238,6 +244,7 @@
     quiet: true
   vars:
     __linux_compliance_evidence_collected: __linux_compliance_unset_again__
+    __linux_compliance_evidence_deviated: __linux_compliance_unset_again__
     __linux_compliance_evidence_host_observed: __linux_compliance_unset_again__
     __linux_compliance_evidence_marked: __linux_compliance_unset_again__
     __linux_compliance_evidence_marker: __linux_compliance_unset_again__

@@ -160,6 +160,7 @@ _MANIFEST_KEYS: Final[tuple[str, ...]] = (
     "schema_version",
 )
 _GATE_KEYS: Final[tuple[str, ...]] = ("decision", "deferred", "enforced")
+_DEVIATION_GATE_KEYS: Final[tuple[str, ...]] = ("deviation", "fail_on_deviation")
 _DECISION_KEYS: Final[tuple[str, ...]] = (
     "after_waivers",
     "basis",
@@ -496,17 +497,21 @@ class ExceptionsRecord:
         )
 
 
+def _gate_count(where: str, value: object, *, counted: bool) -> None:
+    if not counted:
+        if value is not None:
+            _fail(f"{where} must be null when the gate counted nothing")
+    elif isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        _fail(f"{where} must be a non-negative integer")
+
+
 def _gate_counts(record: GateRecord) -> None:
     for where, value in (
         ("gate fail", record.fail),
         ("gate error", record.error),
         ("gate waived", record.waived),
     ):
-        if not record.counted:
-            if value is not None:
-                _fail(f"{where} must be null when the gate counted nothing")
-        elif isinstance(value, bool) or not isinstance(value, int) or value < 0:
-            _fail(f"{where} must be a non-negative integer")
+        _gate_count(where, value, counted=record.counted)
 
 
 @dataclass(frozen=True)
@@ -580,7 +585,12 @@ class GateRecord:
 
     @classmethod
     def from_audit(cls, value: object) -> GateRecord:
-        """Build the record from ``linux_compliance_audited.gate``."""
+        """Build the record from ``linux_compliance_audited.gate``.
+
+        The deviation gate of the audit role (``deviation`` and ``fail_on_deviation``,
+        ADR 0032) is validated when the record has it, and is not part of the manifest
+        of schema 1.0: the bundled ``scan-run.json`` carries every flagged finding.
+        """
         if value is None:
             _fail(
                 "linux_compliance_audited has no gate record; collect the evidence after the "
@@ -593,8 +603,14 @@ class GateRecord:
                 "enforce.yml entry point of the audit role before collecting "
                 "(playbooks/evidence.yml does)"
             )
-        data = _mapping(value, where, (*_DECISION_KEYS, "deferred", "enforced"))
-        return cls.from_values(data["deferred"], data["enforced"], data)
+        given = _mapping(value, where)
+        extra = _DEVIATION_GATE_KEYS if set(_DEVIATION_GATE_KEYS) & set(given) else ()
+        data = _mapping(value, where, (*_DECISION_KEYS, "deferred", "enforced", *extra))
+        record = cls.from_values(data["deferred"], data["enforced"], data)
+        if extra:
+            _flag(data["fail_on_deviation"], "gate fail_on_deviation")
+            _gate_count("gate deviation", data["deviation"], counted=record.counted)
+        return record
 
     @classmethod
     def from_values(

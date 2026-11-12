@@ -6,11 +6,11 @@ process itself and never imports a concrete backend: content is verified with
 (the OpenSCAP backend runs ``oscap xccdf eval`` through :mod:`process` only), and
 the result is a :class:`model.ScanRun` (ADR 0013).
 
-An audit has two steps. :func:`plan` validates every input, verifies the datastream
-against its pinned SHA-256, resolves the profile and the disabled rules and inspects
-the output directory without creating anything. :func:`execute` then creates the
-run directory, writes the tailoring file for disabled rules, runs the backend and
-stores the evidence.
+An audit has two steps. :func:`plan` validates every input, reads the deviation
+register (:mod:`audit_result`), verifies the datastream against its pinned SHA-256,
+resolves the profile and the disabled rules and inspects the output directory without
+creating anything. :func:`execute` then creates the run directory, writes the
+tailoring file for disabled rules, runs the backend and stores the evidence.
 
 Check mode runs the same read-only scan, because operators expect real findings
 from ``--check``, but keeps nothing: :meth:`Auditor.preview` scans into a private
@@ -68,8 +68,10 @@ from pathlib import Path
 from typing import TYPE_CHECKING, BinaryIO, Final, NoReturn, cast
 
 from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance import (
+    audit_result,
     backends,
     catalog,
+    ledger,
     model,
     placement,
     process,
@@ -145,6 +147,8 @@ ERROR_DIGEST_MISMATCH: Final[str] = "digest_mismatch"
 ERROR_INVALID_CONTENT: Final[str] = "invalid_content"
 ERROR_SCRIPT_CHECK: Final[str] = catalog.ERROR_SCRIPT_CHECK
 ERROR_HOST_MISMATCH: Final[str] = "host_mismatch"
+ERROR_DEVIATIONS: Final[str] = audit_result.ERROR_DEVIATIONS
+ERROR_DEVIATION_BACKEND: Final[str] = audit_result.ERROR_DEVIATION_BACKEND
 CONTENT_DIRECTORY_NAME: Final[str] = "content"
 PREVIEW_PREFIX: Final[str] = ".check-"
 MAX_DISCARD_DEPTH: Final[int] = 10
@@ -630,6 +634,7 @@ class AuditPlan:
             or the tailored profile when rules are disabled.
         run_dir: The run directory that will be created.
         output_root_exists: Whether the output root exists already.
+        deviations: The rules of the deviation register, which the findings carry.
     """
 
     job: AuditJob
@@ -640,6 +645,7 @@ class AuditPlan:
     evaluated_profile_id: str
     run_dir: str
     output_root_exists: bool
+    deviations: tuple[audit_result.RecordedDeviation, ...] = ()
 
     @property
     def tailored(self) -> bool:
@@ -796,7 +802,9 @@ def _scanned_rules(job: AuditJob, rules: tuple[catalog.Rule, ...]) -> tuple[tupl
     return enabled, evaluated
 
 
-def plan(job: AuditJob, *, owner_uid: int = ROOT_UID) -> AuditPlan:
+def plan(
+    job: AuditJob, *, owner_uid: int = ROOT_UID, state_dir: str = ledger.LEDGER_DIRECTORY
+) -> AuditPlan:
     """Validate an audit against the host without writing anything.
 
     Resolves the real path of the datastream and vets it and the way to it with
@@ -809,18 +817,26 @@ def plan(job: AuditJob, *, owner_uid: int = ROOT_UID) -> AuditPlan:
 
     Args:
         job: The validated job.
-        owner_uid: Expected owner of the output root, and the only owner besides
-            root that the datastream and its directories may have. Keyword-only
-            and root by default; only tests change it.
+        owner_uid: Expected owner of the output root and of the ledger, and the
+            only owner besides root that the datastream and its directories may
+            have. Keyword-only and root by default; only tests change it.
+        state_dir: Directory of the ledger whose deviation register is read
+            (:func:`audit_result.registered`). Keyword-only; only tests change it.
 
     Raises:
         AuditError: For every problem, with a stable ``error_type``. A backend in
             :data:`OS_RELEASE_BACKENDS` also needs the host's ``/etc/os-release``
             (or ``/usr/lib/os-release`` when that is missing) to report the asserted
-            distribution and version (``host_mismatch``).
+            distribution and version (``host_mismatch``). A deviation register that
+            cannot be trusted is ``deviation_source_invalid``.
     """
     if job.backend in OS_RELEASE_BACKENDS:
         check_host_release(job.host, resolve_os_release(OS_RELEASE_PATH, OS_RELEASE_FALLBACK_PATH))
+    try:
+        reader = ledger.Ledger(state_dir=state_dir, owner_uid=owner_uid).deviations
+        recorded = audit_result.registered(reader, job.backend, state_dir)
+    except audit_result.RegisterError as error:
+        raise AuditError(error.error_type, str(error)) from error
     content, benchmark, rules = _verified_profile(job, owner_uid=owner_uid)
     pattern = _LONG_CONTENT_NAME if job.backend in LONG_CONTENT_NAME_BACKENDS else _CONTENT_NAME
     if re.fullmatch(pattern, Path(content).name) is None:
@@ -833,7 +849,7 @@ def plan(job: AuditJob, *, owner_uid: int = ROOT_UID) -> AuditPlan:
     run_dir = str(Path(job.output_root) / job.run_id)
     if exists and _lstat(Path(run_dir)) is not None:
         raise AuditError(ERROR_OUTPUT_EXISTS, f"the run directory already exists: {_safe(run_dir)}")
-    return AuditPlan(job, content, benchmark, rules, expected, evaluated, run_dir, exists)
+    return AuditPlan(job, content, benchmark, rules, expected, evaluated, run_dir, exists, recorded)
 
 
 def xml_escape(value: str) -> str:
@@ -1168,7 +1184,9 @@ def finalize_run(audit_plan: AuditPlan, run: model.ScanRun) -> model.ScanRun:
     of the profile is accounted for exactly once. For a backend in
     :data:`POST_SCAN_DISABLE_BACKENDS` the disabled rules were scanned, and their
     findings are replaced in the same way, the scanner's result kept as evidence.
-    Every finding of a rule with a control placement then carries it.
+    Every finding of a rule with a control placement then carries it, and every
+    finding of a rule of the deviation register whose outcome allows it the flag
+    ``operator_deviation`` (:func:`audit_result.stamp`).
     """
     toggles = {rule.rule_id: rule for rule in audit_plan.job.disabled_rules}
     by_id = {rule.rule_id: rule for rule in audit_plan.rules}
@@ -1203,9 +1221,12 @@ def finalize_run(audit_plan: AuditPlan, run: model.ScanRun) -> model.ScanRun:
         profile_id=audit_plan.job.profile_id,
         status=status,
         error_message=None if message is None else _truncate(message),
-        findings=tuple(
-            replace(item, control=placed.get(item.rule_id, item.control))
-            for item in (*findings, *added)
+        findings=audit_result.stamp(
+            tuple(
+                replace(item, control=placed.get(item.rule_id, item.control))
+                for item in (*findings, *added)
+            ),
+            audit_plan.deviations,
         ),
     )
 
@@ -1258,26 +1279,6 @@ def _run_backend(
         raise AuditError(ERROR_INVALID_REQUEST, str(error), str(run_dir)) from error
 
 
-def summarize(run: model.ScanRun | None) -> dict[str, object] | None:
-    """Count the findings of a run by outcome, with the run status first.
-
-    The summary never states compliance (AGENTS.md rule 9): it holds ``run_status``, the
-    number of findings per outcome, the total and ``off_platform``, the off-platform
-    marker of the run or ``None``. A run that did not complete has only ``error``
-    findings, so it can never look compliant.
-    """
-    if run is None:
-        return None
-    counts: dict[str, object] = {outcome.value: 0 for outcome in model.Outcome}
-    for finding in run.findings:
-        key = finding.outcome.value
-        counts[key] = cast("int", counts[key]) + 1
-    counts["total"] = len(run.findings)
-    counts["run_status"] = run.status.value
-    counts["off_platform"] = None if run.off_platform is None else run.off_platform.to_dict()
-    return counts
-
-
 def report(
     audit_plan: AuditPlan,
     run: model.ScanRun | None,
@@ -1287,21 +1288,16 @@ def report(
 ) -> dict[str, object]:
     """Return the module result for an audit.
 
-    Args:
-        audit_plan: The plan of the audit.
-        run: The scan run, or ``None`` when no scanner ran.
-        kept: The executed audit whose evidence was kept, or ``None`` (check mode,
-            or no scan).
-        content: The private copy of the datastream that the scanner read, or
-            ``None`` when no scanner ran.
-        message: Human-readable summary returned as ``msg``.
-
+    ``run`` and ``content`` are ``None`` when no scanner ran, and ``kept`` is the
+    executed audit whose evidence was kept, or ``None`` (check mode, or no scan).
     ``changed`` is always false: an audit never changes the configuration of the
-    host. Evidence files are reported in ``evidence`` and ``evidence_written``.
+    host. Evidence files are reported in ``evidence`` and ``evidence_written``, and the
+    rules of the deviation register in ``deviations`` (:func:`audit_result.describe`).
     """
     return {
         "changed": False,
         "content": None if content is None else content.to_dict(),
+        "deviations": audit_result.describe(audit_plan.deviations, run),
         "disabled_rules": [rule.to_dict() for rule in audit_plan.job.disabled_rules],
         "evidence": {
             "directory": None if kept is None else audit_plan.run_dir,
@@ -1314,7 +1310,7 @@ def report(
         "run_id": audit_plan.job.run_id,
         "run_status": RUN_STATUS_NOT_RUN if run is None else run.status.value,
         "scan_run": None if run is None else run.to_dict(),
-        "summary": summarize(run),
+        "summary": audit_result.summarize(run),
     }
 
 
@@ -1356,11 +1352,12 @@ def discard_preview(path: Path) -> None:
 class Auditor:
     """Plans and executes audits.
 
-    ``owner_uid``, ``registry`` and ``clock`` are seams for unit tests and are
-    keyword-only. Production code constructs ``Auditor()``: the output root must
-    then be owned by root, the backends come from :func:`backends.default_registry`
-    and the time from the system clock. The repository guard bans the
-    ``owner_uid``, ``registry`` and ``clock`` keywords in plugin code.
+    ``owner_uid``, ``registry``, ``clock`` and ``state_dir`` are seams for unit tests
+    and are keyword-only. Production code constructs ``Auditor()``: the output root
+    must then be owned by root, the backends come from :func:`backends.default_registry`,
+    the time from the system clock and the deviation register from the ledger in
+    :data:`ledger.LEDGER_DIRECTORY`. The repository guard bans these keywords in plugin
+    code.
     """
 
     def __init__(
@@ -1369,9 +1366,11 @@ class Auditor:
         owner_uid: int = ROOT_UID,
         registry: scanner.BackendRegistry | None = None,
         clock: Callable[[], datetime] | None = None,
+        state_dir: str = ledger.LEDGER_DIRECTORY,
     ) -> None:
         """Create an auditor."""
         self._owner_uid = owner_uid
+        self._state_dir = state_dir
         self._registry = backends.default_registry() if registry is None else registry
         self._clock = _utc_now if clock is None else clock
 
@@ -1476,7 +1475,7 @@ class Auditor:
         if job.backend not in names:
             message = f"unknown scanner backend {_safe(job.backend)}; known: {', '.join(names)}"
             raise AuditError(ERROR_UNKNOWN_BACKEND, message)
-        planned = plan(job, owner_uid=self._owner_uid)
+        planned = plan(job, owner_uid=self._owner_uid, state_dir=self._state_dir)
         if check_mode and not planned.output_root_exists:
             message = (
                 f"check mode: output_dir {job.output_root} does not exist and check mode does "

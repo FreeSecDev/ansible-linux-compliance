@@ -1023,7 +1023,33 @@ GATE_CASES: list[tuple[object, str]] = [
     (gate_of(enabled="yes"), "gate enabled must be a boolean"),
     (gate_of(fail=-1), "gate fail must be a non-negative integer"),
     (gate_of(counted=False), "must be null when the gate counted nothing"),
+    (gate_of(deviation=0), "missing keys: fail_on_deviation"),
+    (gate_of(fail_on_deviation=False), "missing keys: deviation"),
+    (gate_of(deviation=0, fail_on_deviation="no"), "gate fail_on_deviation must be a boolean"),
+    (gate_of(deviation=-1, fail_on_deviation=False), "gate deviation must be a non-negative"),
+    (gate_of(deviation=True, fail_on_deviation=False), "gate deviation must be a non-negative"),
+    (
+        gate_of(
+            counted=False, fail=None, error=None, waived=None, deviation=0, fail_on_deviation=False
+        ),
+        "gate deviation must be null when the gate counted nothing",
+    ),
 ]
+
+
+def test_the_deviation_gate_of_the_audit_role_is_accepted_and_not_in_the_manifest() -> None:
+    fact = audited()
+    fact["gate"] = gate_of(deviation=2, fail_on_deviation=False)
+    document = manifest_of(bundle(fact))
+    assert document["schema_version"] == evidence.BUNDLE_SCHEMA_VERSION
+    gate = cast("dict[str, dict[str, object]]", document["gate"])
+    assert "deviation" not in gate["decision"]
+    assert "fail_on_deviation" not in gate["decision"]
+    incomplete = audited()
+    incomplete["gate"] = gate_of(
+        counted=False, fail=None, error=None, waived=None, deviation=None, fail_on_deviation=True
+    )
+    assert evidence.plan_bundle(incomplete, HOST, DISABLED).gate.counted is False
 
 
 @pytest.mark.parametrize(("gate", "message"), GATE_CASES)

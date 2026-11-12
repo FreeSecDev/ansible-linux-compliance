@@ -117,7 +117,9 @@ EVIDENCE_REPORT_CHECK := .sections.compliance.status == "available" and .section
 	and .sections.exceptions.summary.by_status.stale == 1 and .sections.exceptions.summary.by_status.in_effect == 2 \
 	and .sections.exceptions.exceptions_file.verified \
 	and (.sections.exceptions.exceptions_file.path | endswith("/exceptions/exceptions-valid.yml")) \
-	and (.overview.error | length) == 0
+	and (.overview.error | length) == 0 and .overview.deviation == 1 \
+	and ([.sections.compliance.deviations[] | [.outcome, .value_id, .profile_value, .effective_value]] \
+		== [["pass", "var_password_pam_minlen", "14", "8"]])
 EVIDENCE_GATE_CHECK := .sections.compliance.status == "available" \
 	and ([.sections.compliance.items[].format] | sort) == ["exceptions_evaluation", "scan_run"] \
 	and ([.sections.compliance.groups[].summary.run_status] | sort) == ["completed", "failed"] \
@@ -823,6 +825,7 @@ test-verify: require-uv collection-link
 	grep -q 'WARNING: REGRESSION on web01: 1 rule(s) passed in the baseline and no longer pass' '$(VERIFY_DIR)/verify.log'
 	grep -q 'WARNING: NEW FAILURE on web01: 1 rule(s) were not applicable or missing in the baseline and fail now' '$(VERIFY_DIR)/verify.log'
 	grep -q 'passed in the baseline and are not applicable now' '$(VERIFY_DIR)/verify.log'
+	grep -q 'WARNING: DEVIATION on web01: 1 rule(s) pass only under a value' '$(VERIFY_DIR)/verify.log'
 	$(VERIFY_PLAYBOOK) -i tests/playbooks/inventory/verify-forged.yml tests/playbooks/verify-forged.yml | tee -a '$(VERIFY_DIR)/verify.log'
 	$(VERIFY_PLAYBOOK) -e '{"linux_compliance_baseline": {"run_id": "stale-baseline"}}' \
 		-e verify_expected_task='Check that the baseline is the audit that just ran' tests/playbooks/verify-baseline-override.yml

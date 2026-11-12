@@ -55,6 +55,22 @@ description:
     (ADR 0019, amendment of FREES-170).
   - O(control_placement) places findings under the control families of the collection, for
     example the DISA rules of SCC through the ComplianceAsCode rules that check the same STIG ID.
+  - Before anything is created, the module reads the deviation register of the remediation ledger
+    C(/var/lib/freesecdev/linux_compliance/state.json) (ADR 0032). It lists the rules whose value in
+    force an operator override made looser than the profile's. The finding of such a rule gets the
+    flag C(operator_deviation) and a C(deviation) object with the XCCDF value, the profile value
+    and the value in force, when its outcome is C(pass) or C(fail); the scanner's outcome is never
+    changed, and the scan run then has findings model schema C(1.3). A recorded rule whose outcome
+    cannot carry the flag (C(error), C(notchecked), C(notapplicable), C(disabled)) or that the
+    profile does not select is listed in RV(deviations.unflagged). The value is not judged again,
+    because the remediation judged it with the reader of its family.
+  - A missing ledger has no deviations. A ledger that is corrupt or unsafe (not owned by root,
+    group or world writable, a symbolic link, an unsupported schema) stops the module with
+    C(deviation_source_invalid) before anything is scanned; inspect it with
+    M(freesecdev.linux_compliance.control_state). A stale record over-reports until the next
+    remediation run corrects it.
+  - With O(backend=scc) the module stops with C(deviation_backend_unsupported) while the register
+    holds any record, because the DISA rules of SCC are not the rules the register names.
 author:
   - FreeSecDev contributors (@FreeSecDev)
 options:
@@ -387,8 +403,11 @@ run_status:
   sample: completed
 summary:
   description:
-    - Number of findings per outcome, the total, the run status and C(off_platform), the
-      off-platform marker of the scan run or null. Null when no scan ran.
+    - Number of findings per outcome, the total, the run status, C(deviation) and
+      C(off_platform), the off-platform marker of the scan run or null. Null when no scan ran.
+    - C(deviation) is the number of findings flagged C(operator_deviation). They are also counted
+      under their outcome, so C(pass) stays the scanner's count; a report never counts a flagged
+      pass as a pass.
     - It never states compliance. A run that did not complete has only C(error) findings.
   returned: success
   type: dict
@@ -402,7 +421,39 @@ summary:
     waived: 0
     disabled: 1
     total: 3
+    deviation: 0
     off_platform: null
+deviations:
+  description:
+    - The rules of the deviation register of the ledger (ADR 0032), read before the scan.
+  returned: success
+  type: dict
+  contains:
+    recorded:
+      description: Number of rules in the register.
+      type: int
+    flagged:
+      description:
+        - The recorded rules whose finding carries C(operator_deviation), with C(rule_id),
+          C(outcome) (C(pass) or C(fail)), C(value_id), C(profile_value) and C(effective_value).
+      type: list
+      elements: dict
+    unflagged:
+      description:
+        - The other recorded rules, in the same shape. C(outcome) is the outcome of the finding
+          (C(error), C(notchecked), C(notapplicable) or C(disabled)), which never counts as a
+          pass, or null when the run has no finding of the rule or no scan ran.
+      type: list
+      elements: dict
+  sample:
+    recorded: 1
+    flagged:
+      - rule_id: xccdf_org.ssgproject.content_rule_accounts_password_pam_minlen
+        outcome: pass
+        value_id: var_password_pam_minlen
+        profile_value: "14"
+        effective_value: "8"
+    unflagged: []
 scan_run:
   description:
     - The normalized scan run (findings model schema 1.0, ADR 0013), with its provenance
@@ -413,6 +464,8 @@ scan_run:
     - A scan run with O(control_placement) has schema 1.2; every finding then has C(control), the
       placement or null, and C(off_platform) is on the run and every finding exactly when the run
       is off-platform.
+    - A scan run in which a finding carries C(operator_deviation) has schema 1.3; every finding
+      then has C(control) and C(deviation), each an object or null.
     - Findings are sorted by rule identifier. Null when no scan ran.
   returned: success
   type: dict
@@ -534,7 +587,8 @@ error_type:
       C(unknown_backend), C(invalid_request), C(evidence_write_failed), C(cleanup_failed),
       C(scan_incomplete),
       C(digest_mismatch), C(profile_not_found), C(unsupported_content), C(invalid_content),
-      C(script_check_content) or C(host_mismatch).
+      C(script_check_content), C(host_mismatch), C(deviation_source_invalid) or
+      C(deviation_backend_unsupported).
     - C(script_check_content) means that the datastream, or its private copy, holds a check or
       an embedded script that would make the scanner run a script of the content (such as a
       Script Check Engine check), or an XCCDF fix element (remediation code of the content).
@@ -634,6 +688,7 @@ def main() -> None:
             evidence_written=result["evidence_written"],
             evidence=result["evidence"],
             content=result["content"],
+            deviations=result["deviations"],
             disabled_rules=result["disabled_rules"],
             planned=result["planned"],
             run_id=result["run_id"],
@@ -647,6 +702,7 @@ def main() -> None:
         evidence_written=result["evidence_written"],
         evidence=result["evidence"],
         content=result["content"],
+        deviations=result["deviations"],
         disabled_rules=result["disabled_rules"],
         planned=result["planned"],
         run_id=result["run_id"],

@@ -67,6 +67,62 @@
               - ansible_failed_result.msg is search('already compared once')
             quiet: true
 
+- name: Verify | A pass under an operator deviation is deviated, never an improvement
+  hosts: web01
+  gather_facts: false
+  vars_files:
+    - vars/audit-exceptions.yml
+    - vars/verify.yml
+  vars:
+    verify_deviation:
+      value_id: var_sshd_set_maxauthtries
+      profile_value: "4"
+      effective_value: "6"
+    verify_deviated_findings: >-
+      {{ (verify_outcomes_improved | rejectattr('rule_id', 'equalto', audit_exceptions_rule_root_login)
+          | map('ansible.builtin.combine', audit_exceptions_finding_base, {'control': none, 'deviation': none})
+          | list)
+         + (verify_outcomes_improved | selectattr('rule_id', 'equalto', audit_exceptions_rule_root_login)
+            | map('ansible.builtin.combine', audit_exceptions_finding_base,
+                  {'control': none, 'deviation': verify_deviation, 'flags': ['operator_deviation']})
+            | list) }}
+  tasks:
+    - name: Build a baseline and a later audit whose improved rule passes only under a deviation
+      ansible.builtin.include_tasks: tasks/verify-pair.yml
+      vars:
+        verify_baseline_outcomes: "{{ verify_outcomes_baseline }}"
+        verify_post_outcomes: "{{ verify_outcomes_improved }}"
+        verify_post_overrides:
+          schema_version: "1.3"
+          findings: "{{ verify_deviated_findings | sort(attribute='rule_id') }}"
+
+    - name: Compare them with the verify role
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.verify
+
+    - name: Check that the rule is deviated and reported, and that nothing failed the host
+      vars:
+        verified: "{{ linux_compliance_verified }}"
+        categories: "{{ verified.rules | items2dict(key_name='rule_id', value_name='category') }}"
+      ansible.builtin.assert:
+        that:
+          - verified.complete
+          - linux_compliance_audited.scan_run.schema_version == '1.3'
+          - verified.post.summary.deviation == 1
+          - verified.baseline.summary.deviation == 0
+          - verified.counts.improved == 0
+          - verified.counts.deviated == 1
+          - categories[audit_exceptions_rule_root_login] == 'deviated'
+          - verified.deviation_detected
+          - verified.deviations | map(attribute='rule_id') | list == [audit_exceptions_rule_root_login]
+          - verified.deviations[0].post.operator_deviation
+          - verified.deviations[0].post.deviation == verify_deviation
+          - >-
+            verified.message is search('^DEVIATION: 1 rule\(s\) pass only under a value')
+          - not verified.regression_detected
+          - not verified.gate.failed
+        quiet: true
+
 - name: Verify | A regression fails the host by default and is always reported
   hosts: web01
   gather_facts: false

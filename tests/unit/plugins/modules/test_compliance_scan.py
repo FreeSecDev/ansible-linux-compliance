@@ -15,6 +15,7 @@ from ansible.module_utils.testing import patch_module_args
 
 from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance import (
     audit,
+    ledger,
     model,
     openscap,
     process,
@@ -82,7 +83,7 @@ class FakeRunner:
 
 
 @pytest.fixture
-def runner(monkeypatch: pytest.MonkeyPatch) -> FakeRunner:
+def runner(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> FakeRunner:
     fake = FakeRunner()
     registry = scanner.BackendRegistry()
     registry.register("openscap", lambda settings: openscap.OpenScapBackend(settings, runner=fake))
@@ -94,6 +95,7 @@ def runner(monkeypatch: pytest.MonkeyPatch) -> FakeRunner:
             owner_uid=UID,
             registry=registry,
             clock=lambda: datetime.fromisoformat("2026-10-25T09:00:00+00:00"),
+            state_dir=str(tmp_path / "state"),
         ),
     )
     return fake
@@ -400,3 +402,64 @@ def test_running_the_file_as_a_script_runs_main(
     result = json.loads(capsys.readouterr().out)
     assert result["error_type"] == "unsafe_content_dir"
     assert result["evidence_written"] is False
+
+
+def record_deviation(content: Path) -> Path:
+    state = content.parent.parent / "state"
+    ledger.Ledger(state_dir=str(state), owner_uid=UID).record_deviation(
+        ledger.DeviationRecord(
+            rule_id=ALPHA,
+            value_id="var_password_pam_minlen",
+            profile_value="14",
+            effective_value="8",
+            recorded_at="2026-11-11T08:00:00Z",
+            collection_version="0.1.0",
+        )
+    )
+    return state
+
+
+def test_a_recorded_deviation_flags_the_finding_and_is_returned(
+    capsys: pytest.CaptureFixture[str], runner: FakeRunner, content: Path
+) -> None:
+    runner.results = {ALPHA: "pass", BETA: "fail"}
+    record_deviation(content)
+    code, result = run(capsys, arguments(content))
+    assert code == 0
+    assert result["summary"]["deviation"] == 1
+    assert result["summary"]["pass"] == 1
+    assert result["scan_run"]["schema_version"] == model.DEVIATION_SCHEMA_VERSION
+    expected = {
+        "effective_value": "8",
+        "outcome": "pass",
+        "profile_value": "14",
+        "rule_id": ALPHA,
+        "value_id": "var_password_pam_minlen",
+    }
+    assert result["deviations"] == {"flagged": [expected], "recorded": 1, "unflagged": []}
+
+
+def test_an_incomplete_scan_returns_the_deviations_unflagged(
+    capsys: pytest.CaptureFixture[str], runner: FakeRunner, content: Path
+) -> None:
+    runner.timed_out = True
+    record_deviation(content)
+    code, result = run(capsys, arguments(content))
+    assert code == 1
+    assert result["error_type"] == "scan_incomplete"
+    assert result["deviations"]["flagged"] == []
+    assert [item["outcome"] for item in result["deviations"]["unflagged"]] == ["error"]
+
+
+def test_a_corrupt_ledger_fails_before_the_scan(
+    capsys: pytest.CaptureFixture[str], runner: FakeRunner, content: Path
+) -> None:
+    state = record_deviation(content)
+    (state / ledger.LEDGER_FILENAME).write_bytes(b"not json")
+    code, result = run(capsys, arguments(content))
+    assert code == 1
+    assert result["error_type"] == "deviation_source_invalid"
+    assert result["evidence_written"] is False
+    assert "control_state" in result["msg"]
+    assert runner.calls == 0
+    assert not (content.parent.parent / "evidence").exists()

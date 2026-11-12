@@ -36,6 +36,7 @@
       ansible.builtin.include_tasks: tasks/evidence-fixture.yml
       vars:
         evidence_fixture_run_id: "synthetic-{{ inventory_hostname }}"
+        evidence_fixture_deviations: "{{ evidence_deviations if inventory_hostname == 'web01' else {} }}"
 
     - name: Apply the exceptions with the audit role
       ansible.builtin.include_role:
@@ -119,6 +120,21 @@
         label: "{{ item.path }}"
       delegate_to: localhost
       register: evidence_contents
+
+    - name: Check that the bundled scan run carries the operator deviation of web01 only
+      ansible.builtin.assert:
+        that:
+          - evidence_raw_run.schema_version == ('1.3' if inventory_hostname == 'web01' else '1.0')
+          - >-
+            evidence_raw_run.findings | selectattr('flags', 'contains', 'operator_deviation')
+            | map(attribute='rule_id') | list
+            == ([audit_exceptions_rule_passing] if inventory_hostname == 'web01' else [])
+          - linux_compliance_audited.summary.deviation == (1 if inventory_hostname == 'web01' else 0)
+        quiet: true
+      vars:
+        evidence_raw_run: >-
+          {{ (evidence_contents.results | selectattr('item.path', 'equalto', evidence_bundle_dir ~ '/raw/scan-run.json')
+              | first).content | b64decode | from_json }}
 
     - name: Check that no planted secret reached the bundle
       ansible.builtin.assert:
